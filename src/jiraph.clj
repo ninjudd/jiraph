@@ -25,7 +25,7 @@
             (:id vertex) vertex 
             :no-overwrite true)))
 
-(defn delete-vertex! [id]
+(defn delete-vertex! [graph id]
   (db-delete (graph :vertices-db) id))
 
 (defn vertex [graph id]
@@ -50,7 +50,7 @@
             (edge-key edge) edge 
             :no-overwrite true)))
 
-(defn delete-edge! [from-id to-id type]
+(defn delete-edge! [graph from-id to-id type]
   (db-delete (graph :edges-db) (list from-id type to-id)))
 
 (defn- edges* [graph start-key]
