@@ -73,21 +73,21 @@
               key (merge edge attrs))
       nil)))
 
-(defclass Walk :graph :focus-id :steps :nodes)
+(defclass Walk :graph :focus-id :steps :nodes :node-ids)
 (defclass Step :source :edge :node)
 
 (defn walk-node [walk id]
   (or (get-in walk [:nodes id])
       (get-node (walk :graph) id)))
 
-(defn walk-step
-  ([walk edge]
-     (apply walk-step walk (map edge '(:to-id :from-id :type))))
-  ([walk from-id to-id type]
-     (get-in walk [:steps to-id from-id type])))
+(defn walk-step [walk from-id to-id type]
+  (get-in walk [:steps to-id from-id type]))
 
-(defn walked? [walk edge]
-  (not (nil? (walk-step walk edge))))
+(defn edge-walked? [walk edge]
+  (not (nil? (get-in walk [:steps (edge :to-id) (edge :from-id) (edge :type)]))))
+
+(defn node-walked? [walk node]
+  (not (nil? (get-in walk [:nodes (node :id)]))))
 
 (defn follow [walk from-id step]
   (let [graph (walk :graph)]
@@ -101,20 +101,24 @@
   (let [node (get-node graph focus-id)]
     (if (nil? node)
       nil
-      (loop [walk      (Walk [graph focus-id {} {focus-id node}])
+      (loop [walk      (Walk [graph focus-id {} {focus-id node} [focus-id]])
              to-follow (queue (follow walk focus-id nil))]
         (if (empty? to-follow)
           walk
-          (let [step    (first to-follow)
-                edge    (step :edge)
-                node    (step :node)
-                from-id (edge :from-id)
-                to-id   (edge :to-id)
-                type    (edge :type)
+          (let [step      (first to-follow)
+                edge      (step :edge)
+                node      (step :node)
+                from-id   (edge :from-id)
+                to-id     (edge :to-id)
+                type      (edge :type)
                 to-follow (pop to-follow)]
-            (if (walked? walk edge)
+            (if (edge-walked? walk edge)
               (recur walk to-follow)
-              (recur (-> walk
-                         (assoc-in [:steps to-id from-id type] step)
-                         (assoc-in [:nodes to-id] node))
-                     (into to-follow (follow walk to-id step))))))))))
+              (let [walk      (assoc-in walk [:steps to-id from-id type] step)
+                    to-follow (into to-follow (follow walk to-id step))]
+                (if (node-walked? walk node)
+                  (recur walk to-follow)
+                  (recur (-> walk
+                             (assoc-in [:nodes to-id] node)
+                             (update-in [:node-ids] conj to-id))
+                         to-follow))))))))))
