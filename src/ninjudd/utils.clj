@@ -20,6 +20,12 @@
                          (apply struct-map struct# args#))]
          (with-meta instance# {:type type#})))))
 
+(defn take-rand [vec]
+  (let [i (rand-int (count vec))]
+    (vec i)))
+
 (defn queue 
   ([]    clojure.lang.PersistentQueue/EMPTY)
-  ([seq] (into clojure.lang.PersistentQueue/EMPTY seq)))
+  ([seq] (if (sequential? seq)
+           (into (queue) seq)
+           (conj (queue) seq))))

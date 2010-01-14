@@ -17,7 +17,8 @@
   (let [node (Node args)]
     (db-put (graph :nodes-db) 
             (:id node) node 
-            :no-overwrite true)))
+            :no-overwrite true)
+    node))
 
 (defn delete-node! [graph id]
   (db-delete (graph :nodes-db) id))
@@ -42,7 +43,8 @@
   (let [edge (Edge args)]
     (db-put (graph :edges-db)
             (edge-key edge) edge 
-            :no-overwrite true)))
+            :no-overwrite true)
+    edge))
 
 (defn delete-edge! [graph from-id to-id type]
   (db-delete (graph :edges-db) (list from-id type to-id)))
@@ -90,12 +92,17 @@
   (not (nil? (get-in walk [:nodes (node :id)]))))
 
 (defn follow [walk from-id step]
-  (let [graph (walk :graph)]
+  (let [graph (walk :graph)
+        edges (get-edges graph from-id)]
     (map (fn [edge]
            (let [to-id (edge :to-id)
                  node  (walk-node walk to-id)]
              (Step [step edge node])))
-         (get-edges graph from-id))))
+         edges)))
+
+(defn step-back? [step]
+  (= (get-in step [:edge :to-id])
+     (get-in step [:source :edge :from-id])))
 
 (defn full-walk [graph focus-id]
   (let [node (get-node graph focus-id)]
@@ -112,7 +119,7 @@
                 to-id     (edge :to-id)
                 type      (edge :type)
                 to-follow (pop to-follow)]
-            (if (edge-walked? walk edge)
+            (if (or (step-back? step) (edge-walked? walk edge))
               (recur walk to-follow)
               (let [walk      (assoc-in walk [:steps to-id from-id type] step)
                     to-follow (into to-follow (follow walk to-id step))]
