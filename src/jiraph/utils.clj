@@ -1,4 +1,28 @@
-(ns ninjudd.utils)
+(ns jiraph.utils
+  (:use clojure.contrib.math))
+
+(defn assoc-or [map key value]
+  (if (map key)
+    map
+    (assoc map key value)))
+
+(defmacro verify [x exception & body]
+  `(if ~x
+     (do ~@body)
+     (throw (if (string? ~exception)
+              (Exception. ~exception)
+              ~exception))))
+
+(defn find-index [pred vec]
+  (let [n (count vec)]
+    (loop [i 0]
+      (when-not (= n i)
+        (if (pred (nth vec i))
+          i
+          (recur (inc i)))))))
+
+(defn remove-nth [vec index]
+  (concat (subvec vec 0 index) (subvec vec (inc index) (count vec))))
 
 (defmacro let-if [test then-bindings else-bindings & body]
   `(if ~test
@@ -24,8 +48,22 @@
   (let [i (rand-int (count vec))]
     (vec i)))
 
-(defn queue 
+(defn queue
   ([]    clojure.lang.PersistentQueue/EMPTY)
   ([seq] (if (sequential? seq)
            (into (queue) seq)
            (conj (queue) seq))))
+
+(defn slice [n coll]
+  (loop [num    n
+         slices []
+         items  (vec coll)]
+    (if (empty? items)
+      slices
+      (let [size (ceil (/ (count items) num))]
+        (recur (dec num) (conj slices (subvec items 0 size)) (subvec items size))))))
+
+(defn pcollect [f coll]
+  (let [n    (.. Runtime getRuntime availableProcessors)
+        rets (map #(future (map f %)) (slice n coll))]
+    (mapcat #(deref %) rets)))
