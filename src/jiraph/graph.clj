@@ -20,7 +20,7 @@
   (let [node (apply make-node graph args)]
     (db-add graph :nodes (:id node) node)))
 
-(defn delete-node! [graph id]
+(defn delete-node! [graph id]  
   (db-delete graph :nodes id))
 
 (defn get-node [graph id]

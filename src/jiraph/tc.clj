@@ -20,18 +20,18 @@
         (assoc :edges (tc-open (str path "/edges") flags)))))
 
 (defn db-set [env name key val]
-  (let [key #^bytes ((env :key-fn) key)
-        val #^bytes ((env :val-fn) val)
-        db  #^HDB (env name)]
-    (.put db key val))
-  val)
+  (if (let [key #^bytes ((env :key-fn) key)
+            val #^bytes ((env :val-fn) val)
+            db  #^HDB (env name)]
+        (.put db key val))
+    val))
 
 (defn db-add [env name key val]
-  (let [key #^bytes ((env :key-fn) key)
-        val #^bytes ((env :val-fn) val)
-        db  #^HDB (env name)]
-    (.putkeep db key val))
-  val)
+  (if (let [key #^bytes ((env :key-fn) key)
+            val #^bytes ((env :val-fn) val)
+            db  #^HDB (env name)]
+        (.putkeep db key val))
+    val))
 
 (defn db-get [env name key]
   (let [key #^bytes ((env :key-fn) key)
