@@ -1,0 +1,145 @@
+<project name="clojure-protobuf" default="package">
+
+  <property name="repository.clojure" value="http://clojure.googlecode.com/files"/>
+  <property name="dep.clojure" value="clojure-1.1.0"/>
+  <property name="clojure.jar" value="lib/clojure.jar"/>
+
+  <property name="repository.contrib" value="http://clojure-contrib.googlecode.com/files"/>
+  <property name="dep.contrib" value="clojure-contrib-1.1.0"/>
+  <property name="clojure-contrib.jar" value="lib/clojure-contrib.jar"/>
+
+  <property name="repository.tokyocabinet" value="http://1978th.net/tokyocabinet"/>
+  <property name="dep.tokyocabinet" value="tokyocabinet-1.4.42"/>
+  <property name="tokyocabinet" value="lib/${dep.tokyocabinet}"/>
+
+  <property name="repository.jtokyocabinet" value="${repository.tokyocabinet}/javapkg"/>
+  <property name="dep.jtokyocabinet" value="tokyocabinet-java-1.22"/>
+  <property name="jtokyocabinet" value="lib/${dep.jtokyocabinet}"/>
+  <property name="tokyocabinet.jar" value="lib/tokyocabinet.jar"/>
+
+  <condition property="configure" value="">
+    <not><available file="${tokyocabinet}/Makefile"/></not>
+  </condition>
+
+  <condition property="jconfigure" value="${configure}">
+    <not><available file="${jtokyocabinet}/Makefile"/></not>
+  </condition>
+
+  <property environment="env"/>
+  <condition property="env.JAVA_HOME" value="/Library/Java/Home">
+    <and>
+      <not><isset property="env.JAVA_HOME"/></not>
+      <os family="unix"/>
+      <os family="mac"/>
+    </and>
+  </condition>
+
+  <target name="init">
+    <mkdir dir="lib"/>
+    <mkdir dir="classes"/>
+  </target>
+
+  <target name="clean">
+    <delete>
+      <fileset dir="." includes="*.jar"/>
+    </delete>
+    <delete dir="lib"/>
+    <delete dir="classes"/>
+  </target>
+
+  <available file="${tokyocabinet}" property="has_tokyocabinet"/>
+  <target name="fetch_tokyocabinet" depends="init" unless="has_tokyocabinet">
+    <get src="${repository.tokyocabinet}/${dep.tokyocabinet}.tar.gz"
+         dest="lib/${dep.tokyocabinet}.tar.gz" usetimestamp="true"/>
+    <gunzip src="lib/${dep.tokyocabinet}.tar.gz"/>
+    <untar src="lib/${dep.tokyocabinet}.tar" dest="lib"/>
+    <delete file="lib/${dep.tokyocabinet}.tar"/>
+  </target>
+
+  <target name="config_tokyocabinet" depends="fetch_tokyocabinet" if="configure">
+    <chmod file="${tokyocabinet}/configure" perm="+x"/>
+    <exec dir="${tokyocabinet}" executable="./configure">
+      <arg line="${configure}"/>
+    </exec>
+  </target>
+
+  <target name="make_tokyocabinet" depends="config_tokyocabinet">
+    <exec dir="${tokyocabinet}" executable="make" failonerror="true"/>
+  </target>
+
+  <target name="install_tokyocabinet" depends="make_tokyocabinet">
+    <exec dir="${tokyocabinet}" executable="make" failonerror="true">
+      <arg value="install"/>
+    </exec>
+  </target>
+
+  <available file="${jtokyocabinet}" property="has_jtokyocabinet"/>
+  <target name="fetch_jtokyocabinet" depends="init" unless="has_jtokyocabinet">
+    <get src="${repository.jtokyocabinet}/${dep.jtokyocabinet}.tar.gz"
+         dest="lib/${dep.jtokyocabinet}.tar.gz" usetimestamp="true"/>
+    <gunzip src="lib/${dep.jtokyocabinet}.tar.gz"/>
+    <untar src="lib/${dep.jtokyocabinet}.tar" dest="lib"/>
+    <delete file="lib/${dep.jtokyocabinet}.tar"/>
+  </target>
+
+  <target name="config_jtokyocabinet" depends="fetch_jtokyocabinet" if="jconfigure">
+    <chmod file="${jtokyocabinet}/configure" perm="+x"/>
+    <exec dir="${jtokyocabinet}" executable="./configure">
+      <env key="JAVA_HOME" value="${env.JAVA_HOME}"/>
+      <arg line="${jconfigure}"/>
+    </exec>
+  </target>
+  
+  <available file="${tokyocabinet.jar}" property="has_tokyocabinet_jar"/>
+  <target name="make_jtokyocabinet" depends="config_jtokyocabinet" unless="has_tokyocabinet_jar">
+    <exec dir="${jtokyocabinet}" executable="make" failonerror="true"/>
+    <copy file="${jtokyocabinet}/tokyocabinet.jar" todir="lib"/>
+  </target>
+
+  <target name="install_jtokyocabinet" depends="make_jtokyocabinet">
+    <exec dir="${jtokyocabinet}" executable="make" failonerror="true">
+      <arg value="install"/>
+    </exec>
+  </target>
+
+  <target name="install" depends="install_tokyocabinet,install_jtokyocabinet"/>
+
+  <available file="${clojure.jar}" property="has_clojure"/>
+  <target name="fetch_clojure" depends="init" unless="has_clojure">
+    <get src="${repository.clojure}/${dep.clojure}.zip"
+         dest="lib/${dep.clojure}.zip" usetimestamp="true"/>
+    <unzip src="lib/${dep.clojure}.zip" dest="lib"/>
+    <copy file="lib/${dep.clojure}/clojure.jar" todir="lib"/>
+  </target>
+
+  <available file="${clojure-contrib.jar}" property="has_contrib"/>
+  <target name="fetch_contrib" depends="init" unless="has_contrib">
+    <get src="${repository.contrib}/${dep.contrib}.zip"
+         dest="lib/${dep.contrib}.zip" usetimestamp="true"/>
+    <unzip src="lib/${dep.contrib}.zip" dest="lib"/>
+    <copy file="lib/${dep.contrib}/clojure-contrib.jar" todir="lib"/>
+  </target>
+
+  <path id="classpath">
+    <pathelement location="${clojure.jar}"/>
+    <pathelement location="${clojure-contrib.jar}"/>
+    <pathelement location="${tokyocabinet.jar}"/>
+    <pathelement location="src"/>
+    <pathelement location="classes"/>
+  </path>
+
+  <target name="compile" depends="init,fetch_clojure,fetch_contrib,make_tokyocabinet,make_jtokyocabinet">
+    <java classname="clojure.lang.Compile" classpathref="classpath" fork="true">
+      <sysproperty key="java.library.path" value="${jtokyocabinet}"/>
+      <sysproperty key="clojure.compile.path" value="classes"/>
+      <arg value="jiraph.utils"/>
+      <arg value="jiraph.tc"/>
+<!--       <arg value="jiraph.graph"/> -->
+<!--       <arg value="jiraph.walk"/> -->
+    </java>
+  </target>
+
+  <target name="package" depends="compile">
+    <jar destfile="jiraph.jar" basedir="classes"/>
+  </target>
+</project>
