@@ -4,8 +4,9 @@
   (:use protobuf)
   (:use jiraph.tc))
 
-(defn open-graph [path node-proto edge-list-proto]
-  (db-open path :node-proto node-proto :edge-list-proto edge-list-proto :val-fn protobuf-bytes))
+(defn open-graph [path & args]
+  (let [opts (args-map args)]
+    (db-open path (assoc opts :val-fn protobuf-bytes))))
 
 (defn make-node [graph & args]
   (apply protobuf (graph :node-proto) args))

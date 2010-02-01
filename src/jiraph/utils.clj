@@ -1,6 +1,12 @@
 (ns jiraph.utils
   (:use clojure.contrib.math))
 
+(defn args-map [args] ; based on cupboard.utils
+  (cond
+    (map? args) args
+    (and (sequential? args) (= (count args) 1)) (args-map (first args))
+    :else (apply hash-map args)))
+
 (defn assoc-or [map key value]
   (if (map key)
     map

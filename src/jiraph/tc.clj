@@ -4,20 +4,38 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- tc-open [path flags]
-  (let [db #^HDB (HDB.)]
-    (if (.open db path flags)
-      db
-      (println path "open error:" (HDB/errmsg (.ecode db))))))
+(defn- open [path opts]
+  (let [db     #^HDB (HDB.)
+        bnum   (or (opts :bnum) 0)
+        apow   (or (opts :apow) -1)
+        fpow   (or (opts :fpow) -1)
+        tflags (bit-or
+                (if (opts :large) HDB/TLARGE 0) 
+                (condp = (opts :compress)
+                  :deflate HDB/TDEFLATE
+                  :bzip    HDB/TBZIP
+                  :tcbs    HDB/TTCBS
+                  nil      0))
+        oflags (reduce bit-or
+                 (list (if (opts :create)   HDB/OCREAT  0)
+                       (if (opts :truncate) HDB/OTRUNC  0)
+                       (if (opts :readonly) HDB/OREADER HDB/OWRITER)
+                       (if (opts :tsync)    HDB/OTSYNC  0)
+                       (if (opts :nolock)   HDB/ONOLCK  0)
+                       (if (opts :noblock)  HDB/OLCKNB  0)))]
+    (when-not (.tune db bnum apow fpow tflags)
+      (println path "tune error:" (HDB/errmsg (.ecode db))))
+    (when-not (.open db path oflags)
+      (println path "open error:" (HDB/errmsg (.ecode db))))
+    db))
 
 (defn db-open [path & args]
-  (let [opts   (apply hash-map args)
-        flags  (bit-or HDB/OWRITER HDB/OCREAT)]
+  (let [opts (args-map args)]
     (-> opts
         (assoc-or :key-fn #(.getBytes (str %)))
         (assoc-or :val-fn #(.getBytes (str %)))
-        (assoc :nodes (tc-open (str path "/nodes") flags))
-        (assoc :edges (tc-open (str path "/edges") flags)))))
+        (assoc :nodes (open (str path "/nodes") (merge opts (opts :node-opts))))
+        (assoc :edges (open (str path "/edges") (merge opts (opts :edge-opts)))))))
 
 (defn db-set [env name key val]
   (if (let [key #^bytes ((env :key-fn) key)
