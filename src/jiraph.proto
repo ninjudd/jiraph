@@ -1,6 +1,6 @@
 package jiraph;
 
-option java_package = "clojure.jiraph";
+option java_package = "jiraph";
 option java_outer_classname = "Protos";
 
 message Node {

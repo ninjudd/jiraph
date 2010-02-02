@@ -8,6 +8,9 @@
   <property name="dep.contrib" value="clojure-contrib-1.1.0"/>
   <property name="clojure-contrib.jar" value="lib/clojure-contrib.jar"/>
 
+  <property name="repository.clojure-protobuf" value="git://github.com/ninjudd/clojure-protobuf.git"/>
+  <property name="clojure-protobuf.jar" value="lib/clojure-protobuf.jar"/>
+
   <property name="repository.tokyocabinet" value="http://1978th.net/tokyocabinet"/>
   <property name="dep.tokyocabinet" value="tokyocabinet-1.4.42"/>
   <property name="tokyocabinet" value="lib/${dep.tokyocabinet}"/>
@@ -120,22 +123,34 @@
     <copy file="lib/${dep.contrib}/clojure-contrib.jar" todir="lib"/>
   </target>
 
+  <available file="${clojure-protobuf.jar}" property="has_protobuf"/>
+  <target name="build_protobuf" depends="fetch_clojure" unless="has_protobuf">
+    <exec dir="lib" executable="git" failonerror="true">
+      <arg line="clone ${repository.clojure-protobuf}"/>
+    </exec>
+    <exec dir="lib/clojure-protobuf" executable="ant" failonerror="true">
+      <arg line="package -Dconfig=${configure} -Dclojure.jar=${clojure.jar}"/>
+    </exec>
+    <copy file="lib/clojure-protobuf/clojure-protobuf.jar" todir="lib"/>
+  </target>
+
   <path id="classpath">
     <pathelement location="${clojure.jar}"/>
     <pathelement location="${clojure-contrib.jar}"/>
     <pathelement location="${tokyocabinet.jar}"/>
+    <pathelement location="${clojure-protobuf.jar}"/>
     <pathelement location="src"/>
     <pathelement location="classes"/>
   </path>
 
-  <target name="compile" depends="init,fetch_clojure,fetch_contrib,make_tokyocabinet,make_jtokyocabinet">
+  <target name="compile" depends="fetch_clojure,fetch_contrib,make_tokyocabinet,make_jtokyocabinet,build_protobuf">
     <java classname="clojure.lang.Compile" classpathref="classpath" fork="true">
       <sysproperty key="java.library.path" value="${jtokyocabinet}"/>
       <sysproperty key="clojure.compile.path" value="classes"/>
       <arg value="jiraph.utils"/>
       <arg value="jiraph.tc"/>
-<!--       <arg value="jiraph.graph"/> -->
-<!--       <arg value="jiraph.walk"/> -->
+      <arg value="jiraph.graph"/>
+      <arg value="jiraph.walk"/>
     </java>
   </target>
 
