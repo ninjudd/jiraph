@@ -10,7 +10,7 @@
         apow   (or (opts :apow) -1)
         fpow   (or (opts :fpow) -1)
         tflags (bit-or
-                (if (opts :large) HDB/TLARGE 0) 
+                (if (opts :large) HDB/TLARGE 0)
                 (condp = (opts :compress)
                   :deflate HDB/TDEFLATE
                   :bzip    HDB/TBZIP

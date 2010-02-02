@@ -1,25 +1,29 @@
 (ns jiraph.bdb
   (:use [clojure.contrib java-utils])
   (:use jiraph.utils)
-  (:import [com.sleepycat.je Environment EnvironmentConfig Transaction Database DatabaseConfig DatabaseEntry LockMode]
+  (:import [com.sleepycat.je Environment EnvironmentConfig ReplicatedEnvironment ReplicationConfig]
+           [com.sleepycat.je Transaction Database DatabaseConfig DatabaseEntry LockMode]
            [com.sleepycat.collections CurrentTransaction]))
 
 (set! *warn-on-reflection* true)
 (def *disable-transactions* false)
 
-(defn- open-env [path]
-  (let [config (doto (EnvironmentConfig.)
-                 (.setAllowCreate true)
-                 (.setTransactional (not *disable-transactions*))
-                 (.setSharedCache true)
-                 (.setLockTimeout (long (* 1000 500))))]
+(defn- open-env [path opts]
+  (let [config (EnvironmentConfig.)]
+    (if (opts :create) (.setAllowCreate config true))
+    (if (opts :disable-transactions)
+      (.setDeferredWrite config true)
+      (.setTransactional config true))
+    (if (opts :shared-cache) (.setSharedCache config true))
+    (if (opts :lock-timeout) (.setLockTimeout (long (opts :lock-timeout))))
     (Environment. (file path) config)))
 
-(defn- open-db [#^Environment env name]
-  (let [config (doto (DatabaseConfig.)
-                 (.setAllowCreate true)
-                 (.setTransactional (not *disable-transactions*))
-                 (.setDeferredWrite *disable-transactions*))]
+(defn- open-db [#^Environment env name opts]
+  (let [config (DatabaseConfig.)]
+    (if (opts :create) (.setAllowCreate config true))
+    (if (opts :disable-transactions)
+      (.setDeferredWrite true)
+      (.setTransactional true))
     (.openDatabase env nil name config)))
 
 (defn- current-txn [env]
@@ -28,15 +32,14 @@
 
 (defn db-open [path & args]
   (let [opts  (apply hash-map args)
-        env   (open-env path)
+        env   (open-env path opts)
         txn   (when-not *disable-transactions* (CurrentTransaction/getInstance env))]
     (-> opts
         (assoc-or :key-fn #(.getBytes (str %)))
-        (assoc-or :val-fn #(.getBytes (str %)))        
+        (assoc-or :val-fn #(.getBytes (str %)))
         (assoc :env env)
-        
-        (assoc :nodes (open-db env "nodes"))
-        (assoc :edges (open-db env "edges")))))
+        (assoc :nodes (open-db env "nodes" (merge opts (opts :node-opts))))
+        (assoc :edges (open-db env "edges" (merge opts (opts :edge-opts)))))))
 
 (defn db-sync [env]
   (let [env #^Environment (env :env)]
