@@ -1,29 +1,28 @@
-(ns jiraph.bdb
+(ns jiraph.je
   (:use [clojure.contrib java-utils])
   (:use jiraph.utils)
-  (:import [com.sleepycat.je Environment EnvironmentConfig ReplicatedEnvironment ReplicationConfig]
-           [com.sleepycat.je Transaction Database DatabaseConfig DatabaseEntry LockMode]
+  (:import [com.sleepycat.je Environment EnvironmentConfig Transaction]
+           [com.sleepycat.je Database DatabaseConfig DatabaseEntry LockMode]
+           [com.sleepycat.je.rep ReplicatedEnvironment ReplicationConfig]
            [com.sleepycat.collections CurrentTransaction]))
 
 (set! *warn-on-reflection* true)
-(def *disable-transactions* false)
 
 (defn- open-env [path opts]
-  (let [config (EnvironmentConfig.)]
+  (let [config #^EnvironmentConfig (EnvironmentConfig.)]
+    (if (opts :create) (.setAllowCreate config true))
+    (when-not (opts :disable-transactions)
+      (.setTransactional config true))
+    (if (opts :shared-cache) (.setSharedCache config true))
+    (if (opts :lock-timeout) (.setLockTimeout config (long (opts :lock-timeout))))
+    (Environment. (file path) config)))
+
+(defn- open-db [#^Environment env name opts]
+  (let [config #^DatabaseConfig (DatabaseConfig.)]
     (if (opts :create) (.setAllowCreate config true))
     (if (opts :disable-transactions)
       (.setDeferredWrite config true)
       (.setTransactional config true))
-    (if (opts :shared-cache) (.setSharedCache config true))
-    (if (opts :lock-timeout) (.setLockTimeout (long (opts :lock-timeout))))
-    (Environment. (file path) config)))
-
-(defn- open-db [#^Environment env name opts]
-  (let [config (DatabaseConfig.)]
-    (if (opts :create) (.setAllowCreate config true))
-    (if (opts :disable-transactions)
-      (.setDeferredWrite true)
-      (.setTransactional true))
     (.openDatabase env nil name config)))
 
 (defn- current-txn [env]
@@ -33,7 +32,7 @@
 (defn db-open [path & args]
   (let [opts  (apply hash-map args)
         env   (open-env path opts)
-        txn   (when-not *disable-transactions* (CurrentTransaction/getInstance env))]
+        txn   (when-not (opts :disable-transactions) (CurrentTransaction/getInstance env))]
     (-> opts
         (assoc-or :key-fn #(.getBytes (str %)))
         (assoc-or :val-fn #(.getBytes (str %)))

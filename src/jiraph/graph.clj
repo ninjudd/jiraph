@@ -2,7 +2,7 @@
   (:use jiraph.utils)
   (:use clojure.contrib.java-utils)
   (:use protobuf)
-  (:use jiraph.tc))
+  (:use jiraph.je))
 
 (defn open-graph [path & args]
   (let [opts (args-map args)]

@@ -11,6 +11,10 @@
   <property name="repository.clojure-protobuf" value="git://github.com/ninjudd/clojure-protobuf.git"/>
   <property name="clojure-protobuf.jar" value="lib/clojure-protobuf.jar"/>
 
+  <property name="repository.je" value="http://download.oracle.com/berkeley-db"/>
+  <property name="dep.je" value="je-4.0.92"/>
+  <property name="je.jar" value="lib/${dep.je}.jar"/>
+
   <property name="repository.tokyocabinet" value="http://1978th.net/tokyocabinet"/>
   <property name="dep.tokyocabinet" value="tokyocabinet-1.4.42"/>
   <property name="tokyocabinet" value="lib/${dep.tokyocabinet}"/>
@@ -105,6 +109,16 @@
     </exec>
   </target>
 
+  <available file="${je.jar}" property="has_je"/>
+  <target name="fetch_je" depends="init" unless="has_je">
+    <get src="${repository.je}/${dep.je}.tar.gz"
+         dest="lib/${dep.je}.tar.gz" usetimestamp="true"/>
+    <gunzip src="lib/${dep.je}.tar.gz"/>
+    <untar src="lib/${dep.je}.tar" dest="lib"/>
+    <delete file="lib/${dep.je}.tar"/>
+    <copy file="lib/${dep.je}/lib/${dep.je}.jar" todir="lib"/>
+  </target>
+
   <target name="install" depends="install_tokyocabinet,install_jtokyocabinet"/>
 
   <available file="${clojure.jar}" property="has_clojure"/>
@@ -139,16 +153,18 @@
     <pathelement location="${clojure-contrib.jar}"/>
     <pathelement location="${tokyocabinet.jar}"/>
     <pathelement location="${clojure-protobuf.jar}"/>
+    <pathelement location="${je.jar}"/>
     <pathelement location="src"/>
     <pathelement location="classes"/>
   </path>
-
-  <target name="compile" depends="fetch_clojure,fetch_contrib,make_tokyocabinet,make_jtokyocabinet,build_protobuf">
+<!-- copy_tokyocabinet,make_jtokyocabinet -->
+  <target name="compile" depends="fetch_clojure,fetch_contrib,fetch_je,build_protobuf">
     <java classname="clojure.lang.Compile" classpathref="classpath" fork="true">
       <sysproperty key="java.library.path" value="${jtokyocabinet}"/>
       <sysproperty key="clojure.compile.path" value="classes"/>
       <arg value="jiraph.utils"/>
-      <arg value="jiraph.tc"/>
+<!--       <arg value="jiraph.tc"/> -->
+      <arg value="jiraph.je"/>
       <arg value="jiraph.graph"/>
       <arg value="jiraph.walk"/>
     </java>
