@@ -88,7 +88,7 @@
   </target>
 
   <available file="${jtokyocabinet}/Makefile" property="configured_jtokyocabinet"/>
-  <target name="config_jtokyocabinet" depends="fetch_jtokyocabinet" unless="configured_tokyocabinet">
+  <target name="config_jtokyocabinet" depends="fetch_jtokyocabinet" unless="configured_jtokyocabinet">
     <chmod file="${jtokyocabinet}/configure" perm="+x"/>
     <exec dir="${jtokyocabinet}" executable="./configure">
       <env key="JAVA_HOME" value="${env.JAVA_HOME}"/>
