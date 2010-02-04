@@ -78,9 +78,6 @@
     </exec>
   </target>
 
-  <target name="install_tokyocabinet" depends="make_tokyocabinet">
-  </target>
-
   <available file="${jtokyocabinet}" property="has_jtokyocabinet"/>
   <target name="fetch_jtokyocabinet" depends="init" unless="has_jtokyocabinet">
     <get src="${repository.jtokyocabinet}/${dep.jtokyocabinet}.tar.gz"
@@ -123,6 +120,9 @@
     <exec executable="cp">      
       <arg line="-Rf ${basedir}/lib/install/ ${install_prefix}"/>
     </exec>
+    <exec dir="lib/clojure-protobuf" executable="ant" failonerror="true">
+      <arg line="install -Dinstall_prefix=${install_prefix}"/>
+    </exec>
   </target>
 
   <available file="${clojure.jar}" property="has_clojure"/>
@@ -141,13 +141,18 @@
     <copy file="lib/${dep.contrib}/clojure-contrib.jar" todir="lib"/>
   </target>
 
-  <available file="${clojure-protobuf.jar}" property="has_protobuf"/>
-  <target name="build_protobuf" depends="fetch_clojure" unless="has_protobuf">
+  <available file="lib/clojure-protobuf" property="has_protobuf"/>
+  <target name="fetch_protobuf" depends="init" unless="has_protobuf">
     <exec dir="lib" executable="git" failonerror="true">
       <arg line="clone ${repository.clojure-protobuf}"/>
     </exec>
+  </target>
+
+  <available file="${clojure-protobuf.jar}" property="has_protobuf_jar"/>
+  <target name="build_protobuf" depends="fetch_clojure" unless="has_protobuf_jar">
+    <antcall target="fetch_protobuf"/>
     <exec dir="lib/clojure-protobuf" executable="ant" failonerror="true">
-      <arg line="package -Dconfig=${configure} -Dclojure.jar=${clojure.jar}"/>
+      <arg line="package -Dclojure.jar=${basedir}/${clojure.jar}"/>
     </exec>
     <copy file="lib/clojure-protobuf/clojure-protobuf.jar" todir="lib"/>
   </target>
