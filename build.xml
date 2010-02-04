@@ -117,7 +117,7 @@
 
   <target name="install" depends="make_tokyocabinet,make_jtokyocabinet">
     <echo message="Installing to ${install_prefix}/"/>
-    <exec executable="cp">      
+    <exec executable="cp" failonerror="true">
       <arg line="-Rf ${basedir}/lib/install/ ${install_prefix}"/>
     </exec>
     <exec dir="lib/clojure-protobuf" executable="ant" failonerror="true">
