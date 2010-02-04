@@ -39,34 +39,38 @@
   (= (get-in step [:edge :to-id])
      (get-in step [:source :edge :from-id])))
 
-(defn follow [walk step]
-  (let [edges (get-edges (walk :graph) (step :id) :tree)]
-    (map (fn [edge]
-           (let [id   (edge :to-id)
-                 node (or (get-in walk [:nodes id])
-                          (get-node (walk :graph) id))]
-             (Step [id step edge node])))
-         edges)))
+(defn lookup-node [walk id]
+  (or (get-in walk [:nodes id])
+      (get-node (walk :graph) id)))
 
 (defn assoc-step [walk step]
-  (let [node    (step :node)
-        edge    (step :edge)
-        from-id (edge :from-id)
-        to-id   (edge :to-id)
-        type    (edge :type)]
-    (-> walk
-        (assoc-in  [:steps to-id from-id] step)
-        (update-in [:to-follow] into (follow walk step))
-        (assoc-node node))))
+  (if (or (step-back? step) (step-walked? walk step))
+    walk
+    (let [node    (step :node)
+          edge    (step :edge)
+          from-id (edge :from-id)
+          to-id   (edge :to-id)
+          type    (edge :type)]
+      (-> walk
+          (assoc-in  [:steps to-id from-id] step)
+          (update-in [:to-follow] conj step)
+          (assoc-node node)))))
+
+(defn follow [walk step]
+  (let [edges (get-edges (walk :graph) (step :id) :tree)]
+    (map
+     (fn [edge]
+       (let [id (edge :to-id)]
+         (Step [id step edge (lookup-node walk id)])))
+     edges)))
 
 (defn walk [graph focus-id limit]
   (loop [walk (empty-walk graph focus-id)]
     (let [step (-> walk :to-follow first)
-          walk (update-in walk [:to-follow] pop)]      
+          walk (update-in walk [:to-follow] pop)]    
       (if (nil? step)
         walk
         (if (< limit (walk :node-count))
           walk
-          (if (or (step-back? step) (step-walked? walk step))
-            (recur walk)
-            (recur (assoc-step walk step))))))))
+          (recur
+           (reduce assoc-step walk (follow walk step))))))))

@@ -157,14 +157,13 @@
     <pathelement location="src"/>
     <pathelement location="classes"/>
   </path>
-<!-- copy_tokyocabinet,make_jtokyocabinet -->
-  <target name="compile" depends="fetch_clojure,fetch_contrib,fetch_je,build_protobuf">
+
+  <target name="compile" depends="fetch_clojure,fetch_contrib,make_tokyocabinet,make_jtokyocabinet,build_protobuf">
     <java classname="clojure.lang.Compile" classpathref="classpath" fork="true">
       <sysproperty key="java.library.path" value="${jtokyocabinet}"/>
       <sysproperty key="clojure.compile.path" value="classes"/>
       <arg value="jiraph.utils"/>
-<!--       <arg value="jiraph.tc"/> -->
-      <arg value="jiraph.je"/>
+      <arg value="jiraph.tc"/>
       <arg value="jiraph.graph"/>
       <arg value="jiraph.walk"/>
     </java>

@@ -30,9 +30,9 @@
     (if txn (.getTransaction txn))))
 
 (defn db-open [path & args]
-  (let [opts  (apply hash-map args)
-        env   (open-env path opts)
-        txn   (when-not (opts :disable-transactions) (CurrentTransaction/getInstance env))]
+  (let [opts (args-map args)
+        env  (open-env path opts)
+        txn  (when-not (opts :disable-transactions) (CurrentTransaction/getInstance env))]
     (-> opts
         (assoc-or :key-fn #(.getBytes (str %)))
         (assoc-or :val-fn #(.getBytes (str %)))
