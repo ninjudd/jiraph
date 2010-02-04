@@ -24,13 +24,7 @@
   <property name="jtokyocabinet" value="lib/${dep.jtokyocabinet}"/>
   <property name="tokyocabinet.jar" value="lib/tokyocabinet.jar"/>
 
-  <condition property="configure" value="">
-    <not><available file="${tokyocabinet}/Makefile"/></not>
-  </condition>
-
-  <condition property="jconfigure" value="${configure}">
-    <not><available file="${jtokyocabinet}/Makefile"/></not>
-  </condition>
+  <property name="install_prefix" value="/usr/local"/>
 
   <property environment="env"/>
   <condition property="env.JAVA_HOME" value="/Library/Java/Home">
@@ -44,6 +38,11 @@
   <target name="init">
     <mkdir dir="lib"/>
     <mkdir dir="classes"/>
+  </target>
+
+  <target name="distclean">
+    <delete file="${tokyocabinet}/Makefile"/>
+    <delete file="${jtokyocabinet}/Makefile"/>
   </target>
 
   <target name="clean">
@@ -63,21 +62,23 @@
     <delete file="lib/${dep.tokyocabinet}.tar"/>
   </target>
 
-  <target name="config_tokyocabinet" depends="fetch_tokyocabinet" if="configure">
+  <available file="${tokyocabinet}/Makefile" property="configured_tokyocabinet"/>
+  <target name="config_tokyocabinet" depends="fetch_tokyocabinet" unless="configured_tokyocabinet">
     <chmod file="${tokyocabinet}/configure" perm="+x"/>
     <exec dir="${tokyocabinet}" executable="./configure">
-      <arg line="${configure}"/>
+      <arg value="--prefix=${basedir}/lib/install"/>
     </exec>
   </target>
 
-  <target name="make_tokyocabinet" depends="config_tokyocabinet">
+  <available file="lib/install/lib/libtokyocabinet.a" property="has_libtokyocabinet"/>
+  <target name="make_tokyocabinet" depends="config_tokyocabinet" unless="has_libtokyocabinet">
     <exec dir="${tokyocabinet}" executable="make" failonerror="true"/>
-  </target>
-
-  <target name="install_tokyocabinet" depends="make_tokyocabinet">
     <exec dir="${tokyocabinet}" executable="make" failonerror="true">
       <arg value="install"/>
     </exec>
+  </target>
+
+  <target name="install_tokyocabinet" depends="make_tokyocabinet">
   </target>
 
   <available file="${jtokyocabinet}" property="has_jtokyocabinet"/>
@@ -89,24 +90,22 @@
     <delete file="lib/${dep.jtokyocabinet}.tar"/>
   </target>
 
-  <target name="config_jtokyocabinet" depends="fetch_jtokyocabinet" if="jconfigure">
+  <available file="${jtokyocabinet}/Makefile" property="configured_jtokyocabinet"/>
+  <target name="config_jtokyocabinet" depends="fetch_jtokyocabinet" unless="configured_tokyocabinet">
     <chmod file="${jtokyocabinet}/configure" perm="+x"/>
     <exec dir="${jtokyocabinet}" executable="./configure">
       <env key="JAVA_HOME" value="${env.JAVA_HOME}"/>
-      <arg line="${jconfigure}"/>
+      <arg value="--prefix=${basedir}/lib/install"/>
     </exec>
   </target>
   
   <available file="${tokyocabinet.jar}" property="has_tokyocabinet_jar"/>
   <target name="make_jtokyocabinet" depends="config_jtokyocabinet" unless="has_tokyocabinet_jar">
     <exec dir="${jtokyocabinet}" executable="make" failonerror="true"/>
-    <copy file="${jtokyocabinet}/tokyocabinet.jar" todir="lib"/>
-  </target>
-
-  <target name="install_jtokyocabinet" depends="make_jtokyocabinet">
-    <exec dir="${jtokyocabinet}" executable="make" failonerror="true">
+    <exec dir="${jtokyocabinet}" executable="make" failonerror="true">      
       <arg value="install"/>
     </exec>
+    <copy file="${jtokyocabinet}/tokyocabinet.jar" todir="lib"/>
   </target>
 
   <available file="${je.jar}" property="has_je"/>
@@ -119,7 +118,12 @@
     <copy file="lib/${dep.je}/lib/${dep.je}.jar" todir="lib"/>
   </target>
 
-  <target name="install" depends="install_tokyocabinet,install_jtokyocabinet"/>
+  <target name="install" depends="make_tokyocabinet,make_jtokyocabinet">
+    <echo message="Installing to ${install_prefix}/"/>
+    <exec executable="cp">      
+      <arg line="-Rf ${basedir}/lib/install/ ${install_prefix}"/>
+    </exec>
+  </target>
 
   <available file="${clojure.jar}" property="has_clojure"/>
   <target name="fetch_clojure" depends="init" unless="has_clojure">
