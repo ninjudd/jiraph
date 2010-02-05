@@ -4,6 +4,8 @@
 
 (set! *warn-on-reflection* true)
 
+(defclass DB :tables :opts :key-fn :val-fn :node-proto :edge-list-proto)
+
 (defn- open [path opts]
   (let [db     #^HDB (HDB.)
         bnum   (or (opts :bnum) 0)
@@ -16,9 +18,8 @@
                   :bzip    HDB/TBZIP
                   :tcbs    HDB/TTCBS
                   nil      0))
-        oflags (reduce bit-or
-                 (list (if (opts :create)   HDB/OCREAT  0)
-                       (if (opts :truncate) HDB/OTRUNC  0)
+        oflags (reduce bit-or HDB/OCREAT
+                 (list (if (opts :truncate) HDB/OTRUNC  0)
                        (if (opts :readonly) HDB/OREADER HDB/OWRITER)
                        (if (opts :tsync)    HDB/OTSYNC  0)
                        (if (opts :nolock)   HDB/ONOLCK  0)
@@ -29,45 +30,54 @@
       (println path "open error:" (HDB/errmsg (.ecode db))))
     db))
 
-(defn db-open [path & args]
-  (let [opts (args-map args)]
-    (-> opts
-        (assoc-or :key-fn #(.getBytes (str %)))
-        (assoc-or :val-fn #(.getBytes (str %)))
-        (assoc :nodes (open (str path "/nodes") (merge opts (opts :node-opts))))
-        (assoc :edges (open (str path "/edges") (merge opts (opts :edge-opts)))))))
+(defn- db-table [env table]
+  (or (table @(env :tables))
+      (dosync
+       (let [opts (env :opts)
+             db   (open (str (opts :path) "/" (name table)) opts)]
+         (alter (env :tables) assoc table db)
+         db))))
 
-(defn db-set [env name key val]
+(defn db-open [args]
+  (let [opts (args-map args)]
+    (DB :tables (ref {})
+        :opts   opts
+        :key-fn (or (opts :key-fn) #(.getBytes (str %)))
+        :val-fn (or (opts :val-fn) #(.getBytes (str %)))
+        :node-proto (opts :node-proto)
+        :edge-list-proto (opts :edge-list-proto))))
+
+(defn db-set [env table key val]
   (if (let [key #^bytes ((env :key-fn) key)
             val #^bytes ((env :val-fn) val)
-            db  #^HDB (env name)]
+            db  #^HDB (db-table env table)]
         (.put db key val))
     val))
 
-(defn db-add [env name key val]
+(defn db-add [env table key val]
   (if (let [key #^bytes ((env :key-fn) key)
             val #^bytes ((env :val-fn) val)
-            db  #^HDB (env name)]
+            db  #^HDB (db-table env table)]
         (.putkeep db key val))
     val))
 
-(defn db-get [env name key]
+(defn db-get [env table key]
   (let [key #^bytes ((env :key-fn) key)
-        db  #^HDB (env name)]
+        db  #^HDB (db-table env table)]
     (.get db key)))
 
-(defn db-update [env name key fn]
-  (let [db  #^HDB (env name)]
+(defn db-update [env table key fn]
+  (let [db #^HDB (db-table env table)]
     (.tranbegin db)
-    (let [old #^bytes (db-get env name key)
+    (let [old #^bytes (db-get env table key)
           new (fn old)]
       (if (nil? new)
         (.tranabort db)
-        (do (db-set env name key new)
+        (do (db-set env table key new)
             (.trancommit db)))
       new)))
 
-(defn db-delete [env name key]
+(defn db-delete [env table key]
   (let [key #^bytes ((env :key-fn) key)
-        db  #^HDB (env name)]
+        db  #^HDB (db-table env table)]
     (.out db key)))

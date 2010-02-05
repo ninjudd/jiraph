@@ -4,9 +4,9 @@
   (:use protobuf)
   (:use jiraph.tc))
 
-(defn open-graph [path & args]
+(defn open-graph [& args]
   (let [opts (args-map args)]
-    (db-open path (assoc opts :val-fn protobuf-bytes))))
+    (db-open (assoc opts :val-fn protobuf-bytes))))
 
 (defn make-node [graph & args]
   (apply protobuf (graph :node-proto) args))
@@ -45,7 +45,7 @@
           (merge node attrs))))))
 
 (defn get-edges [graph from-id type]
-  (let [val (db-get graph :edges [from-id type])]
+  (let [val (db-get graph type from-id)]
     (:edges (make-edge-list graph val))))
 
 (defn- edge-index [edges to-id]
@@ -57,7 +57,7 @@
     (edges index)))
 
 (defn update-edge! [graph from-id to-id type update]
-  (db-update graph :edges [from-id type]
+  (db-update graph type from-id
     (fn [val]
       (let [edge-list (make-edge-list graph val)
             edges     (or (edge-list :edges) [])

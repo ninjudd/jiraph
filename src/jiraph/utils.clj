@@ -1,6 +1,10 @@
 (ns jiraph.utils
   (:use clojure.contrib.math))
 
+(defn tap [f obj]
+  (f obj)
+  obj)
+
 (defn args-map [args] ; based on cupboard.utils
   (cond
     (map? args) args
