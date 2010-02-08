@@ -2,75 +2,66 @@
   (:use jiraph.graph)
   (:use jiraph.utils))
 
-(defclass Walk :graph :focus-id :steps :nodes :node-ids :node-count :to-follow)
-(defclass Step :id :source :edge :node)
+(defclass Walk :graph :focus-id :steps :nodes :include? :ids :count :to-follow)
+(defclass Step :source :from-id :to-id :layer :edge)
+
+(defn lookup-node [walk layer id]
+  (or (@(walk :nodes) [id layer])
+      (let [node (get-node (walk :graph) layer id)]
+        (swap! (walk :nodes) assoc! [id layer] node)
+        node)))
+
+(defn walked? [walk step]
+  (not (nil? (get-in walk [:steps (step :to-id) (step :from-id) (step :layer)]))))
+
+(defn back? [step]
+  (= (step :to-id)
+     (get-in step [:source :from-id])))
+
+(defn add-node [walk id]
+  (if (get-in walk [:include? id])
+    walk
+    (-> walk
+        (update-in [:ids] conj id)
+        (update-in [:count] inc)
+        (update-in [:include?] assoc id true))))
 
 (defn empty-walk [graph focus-id]
-  (let [node (get-node graph focus-id)
-        edge {:to-id focus-id :type :initial}
-        step (Step [focus-id nil edge node])]
-    (Walk :graph      graph
-          :focus-id   focus-id
-          :steps      {}
-          :nodes      {}
-          :node-ids   []
-          :node-count 0
-          :to-follow  (queue step))))
-
-(defn node-walked? [walk node]
-  (not (nil? (get-in walk [:nodes (node :id)]))))
-
-(defn edge-walked? [walk edge]
-  (not (nil? (get-in walk [:steps (edge :to-id) (edge :from-id) (edge :type)]))))
-
-(defn step-walked? [walk step]
-  (edge-walked? walk (step :edge)))
-
-(defn assoc-node [walk node]
-  (if (node-walked? walk node)
-    walk
-    (let [id (node :id)]
-      (-> walk
-          (assoc-in  [:nodes id] node)
-          (update-in [:node-ids] conj id)
-          (update-in [:node-count] inc)))))
-
-(defn step-back? [step]
-  (= (get-in step [:edge :to-id])
-     (get-in step [:source :edge :from-id])))
-
-(defn lookup-node [walk id]
-  (or (get-in walk [:nodes id])
-      (get-node (walk :graph) id)))
+  (let [step (Step :to-id focus-id)]
+    (Walk :graph     graph
+          :focus-id  focus-id
+          :steps     {}
+          :nodes     (atom {})
+          :include?  {}
+          :ids       []
+          :count     0
+          :to-follow (queue step))))
 
 (defn assoc-step [walk step]
-  (if (or (step-back? step) (step-walked? walk step))
+  (if (or (back? step) (walked? walk step))
     walk
-    (let [node    (step :node)
-          edge    (step :edge)
-          from-id (edge :from-id)
-          to-id   (edge :to-id)
-          type    (edge :type)]
+    (let [to-id (step :to-id)]
       (-> walk
-          (assoc-in  [:steps to-id from-id] step)
-          (update-in [:to-follow] conj step)
-          (assoc-node node)))))
+          (add-node to-id)
+          (assoc-in  [:steps to-id (step :from-id) (step :layer)] step)
+          (update-in [:to-follow] conj step)))))
 
-(defn follow [walk step]
-  (let [edges (get-edges (walk :graph) (step :id) :tree)]
-    (map
-     (fn [edge]
-       (let [id (edge :to-id)]
-         (Step [id step edge (lookup-node walk id)])))
-     edges)))
+(defn follow [walk layer step]
+  (let [from-id (step :to-id)
+        node    (lookup-node walk layer from-id)
+        edges   (if node (node :edges) [])
+        make-step
+        (fn [edge]
+          (let [to-id (edge :to-id)]
+            (Step [step from-id to-id layer edge])))]
+    (reduce assoc-step walk
+      (map make-step edges))))
 
 (defn walk [graph focus-id limit]
   (loop [walk (empty-walk graph focus-id)]
     (let [step (-> walk :to-follow first)
-          walk (update-in walk [:to-follow] pop)]    
-      (if (nil? step)
-        walk
-        (if (< limit (walk :node-count))
-          walk
-          (recur
-           (reduce assoc-step walk (follow walk step))))))))
+          walk (update-in walk [:to-follow] pop)]     
+      (if (or (nil? step) (< limit (walk :count)))
+        (do (println (count (walk :to-follow)))
+            walk)
+        (recur (follow walk :tree step))))))

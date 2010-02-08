@@ -16,6 +16,11 @@
     map
     (assoc map key value)))
 
+(defn assoc-if [map test & args]
+  (if test
+    (apply assoc map args)
+    map))
+
 (defmacro verify [x exception & body]
   `(if ~x
      (do ~@body)
@@ -34,12 +39,11 @@
 (defn remove-nth [vec index]
   (concat (subvec vec 0 index) (subvec vec (inc index) (count vec))))
 
-(defmacro let-if [test then-bindings else-bindings & body]
+(defmacro let-if [test bindings & body]
   `(if ~test
-     (let ~then-bindings
+     (let ~bindings
        ~@body)
-     (let ~else-bindings
-       ~@body)))
+     ~@body))
 
 (defmacro defclass [class & fields]
   `(let [type#   (keyword (name (quote ~class)))

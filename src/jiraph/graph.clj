@@ -4,98 +4,77 @@
   (:use protobuf)
   (:use jiraph.tc))
 
+(defmacro defgraph [sym & args]
+  (let [layer? #(and (list? %) (= 'layer (first %)))
+        layers (filter layer? args)
+        opts   (eval (apply hash-map (remove layer? args)))
+        open-layer
+        (fn [graph [_ layer & args]]
+          (let [opts (merge opts (apply hash-map args))]
+            (assoc graph layer
+              (db-open (-> opts
+                           (assoc :path (str (opts :path) "/" (name layer)))
+                           (assoc-if (opts :proto)
+                             :dump protobuf-bytes
+                             :load (partial protobuf (opts :proto))))))))]
+    `(def ~sym
+       ~(reduce open-layer {} layers))))
+
 (defn open-graph [& args]
   (let [opts (args-map args)]
     (db-open (assoc opts :val-fn protobuf-bytes))))
 
-(defn make-node [graph & args]
-  (apply protobuf (graph :node-proto) args))
+(defn make-node [layer & args]
+  (if (:proto layer)
+    (apply protobuf (:proto layer) args)
+    (apply hash-map args)))
 
-(defn make-edge-list [graph val]
-  (let [proto (graph :edge-list-proto)]
-    (if val
-      (protobuf proto val)
-      (protobuf proto))))
+(defn add-node! [graph layer id & args]
+  (let [layer (graph layer)
+        node  (apply make-node layer :id id args)]
+    (db-add layer id node)))
 
-(defn add-node! [graph & args]
-  (let [node (apply make-node graph args)]
-    (db-add graph :nodes (:id node) node)))
+(defn delete-node! [graph layer id]
+  (db-delete (graph layer) id))
 
-(defn delete-node! [graph id]  
-  (db-delete graph :nodes id))
+(defn get-node [graph layer id]
+  (db-get (graph layer) id))
 
-(defn get-node [graph id]
-  (let [val (db-get graph :nodes id)]
-    (if val (make-node graph val))))
+(defn update-node! [graph layer id update & args]
+  (db-update (graph layer) id
+    (fn [old]
+      (if (fn? update) (apply update old args) update))))
 
-(defn update-node! [graph id update]
-  (db-update graph :nodes id
-    (fn [val]
-      (let [old-node (if val (make-node graph val))
-            new-node (if (fn? update) (update old-node) update)]
-        (if new-node
-          (verify (= id (new-node :id)) "cannot change id with update-node!"
-            new-node))))))
-
-(defn assoc-node! [graph & args]
-  (let [attrs (apply hash-map args)]
-    (update-node! graph (:id attrs)
+(defn assoc-node! [graph layer id & args]
+  (let [layer (graph layer)]
+    (update-node! layer id
       (fn [node]
         (if node
-          (merge node attrs))))))
+          (merge node (apply hash-map args)))))))
 
-(defn get-edges [graph from-id type]
-  (let [val (db-get graph type from-id)]
-    (:edges (make-edge-list graph val))))
+(defn append-node!
+  "this is more efficient than update-node! or assoc-node! because appending a protobuf to
+   another merges them and appends repeated elements."
+  [graph layer id & args]
+  (let [layer (graph layer)]
+    (verify (:proto layer) "cannot append unless you are using protocol buffers"
+      (db-append layer id (apply make-node layer args)))))
 
-(defn- edge-index [edges to-id]
-  (find-index #(= to-id (:to-id %)) edges))
+(defn add-edge [node & args]
+  (let [edges (or (node :edges) [])
+        edge  (apply hash-map args)]
+    (assoc node :edges (conj edges edge))))
 
-(defn get-edge [graph from-id to-id type]
-  (let [edges (get-edges graph from-id type)
-        index (edge-index edges to-id)]
-    (edges index)))
+(defn add-edge! [graph layer id & args]
+  (let [edge (apply hash-map args)]
+    (if (:proto (graph layer))
+      (append-node! graph layer id :edges [edge])
+      (update-node! graph layer id add-edge args))
+    edge))
 
-(defn update-edge! [graph from-id to-id type update]
-  (db-update graph type from-id
-    (fn [val]
-      (let [edge-list (make-edge-list graph val)
-            edges     (or (edge-list :edges) [])
-            index     (edge-index edges to-id)
-            old-edge  (if index (edges index))
-            new-edge  (if (fn? update) (update old-edge) update)]
-        (assoc edge-list :edges
-               (if (nil? new-edge)
-                 ; remove the old edge
-                 (remove-nth edges index)
-                 (verify (and (= from-id (new-edge :from-id)) (= type (new-edge :type)))
-                         "cannot change from-id or type with update-edge!"
-                   (if (nil? old-edge)
-                     ; add a new edge to the end of the list
-                     (conj edges new-edge)
-                     (let [new-to-id (new-edge :to-id)]
-                       (verify (or (= to-id new-to-id) (nil? (edge-index edges new-to-id)))
-                               "cannot create duplicate to-id with update-edge!"
-                         ; replace the old edge with the new edge
-                         (assoc edges index new-edge)))))))))))
+(defn remove-edges [node pred]
+  (let [edges (or (node :edges) [])]
+    (assoc node :edges (remove pred edges))))
 
-(defn add-edge! [graph & args]
-  (let [attrs   (apply hash-map args)
-        from-id (attrs :from-id)
-        to-id   (attrs :to-id)
-        type    (attrs :type)]
-    (update-edge! graph from-id to-id type
-      (fn [edge]
-        (verify (nil? edge) "edge already exists"
-          attrs)))))
-
-(defn delete-edge! [graph from-id to-id type]
-  (update-edge! graph from-id to-id type nil))
-
-(defn assoc-edge! [graph & args]
-  (let [attrs   (apply hash-map args)
-        from-id (attrs :from-id)
-        to-id   (attrs :to-id)
-        type    (attrs :type)]
-    (update-edge! graph from-id to-id type
-      #(merge % attrs))))
+(defn get-edges [graph layer id]
+  (or (:edges (get-node graph layer id)) []))
