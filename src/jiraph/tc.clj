@@ -7,7 +7,7 @@
 (def default-opts
      {:key  #(.getBytes (str %))
       :dump #(.getBytes (pr-str %))
-      :load #(read-string (str %))})
+      :load #(read-string (String. #^bytes %))})
 
 (defn- tflags [opts]
   (bit-or
@@ -62,7 +62,7 @@
 
 (defn db-get [env key]
   (let [db  #^HDB (env :db)
-        key #^bytes ((env :key) key)  
+        key #^bytes ((env :key) key)
         val #^bytes (.get db key)]
     (if val ((env :load) val))))
 

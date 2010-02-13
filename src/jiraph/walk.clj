@@ -2,7 +2,6 @@
   (:use jiraph.graph)
   (:use jiraph.utils))
 
-(defclass Walk :graph :focus-id :steps :nodes :include? :ids :count :to-follow)
 (defclass Step :source :from-id :to-id :layer :edge)
 
 (defn lookup-node [walk layer id]
@@ -22,20 +21,29 @@
   (if (get-in walk [:include? id])
     walk
     (-> walk
-        (update-in [:ids] conj id)
-        (update-in [:count] inc)
-        (update-in [:include?] assoc id true))))
+        (update-in! [:ids] conj! id)
+        (update-in! [:count] inc)
+        (assoc-in!  [:include? id] true))))
 
 (defn empty-walk [graph focus-id]
   (let [step (Step :to-id focus-id)]
-    (Walk :graph     graph
-          :focus-id  focus-id
-          :steps     {}
-          :nodes     (atom {})
-          :include?  {}
-          :ids       []
-          :count     0
-          :to-follow (queue step))))
+    (transient
+     (hash-map :graph     graph
+               :focus-id  focus-id
+               :steps     (transient {})
+               :nodes     (atom (transient {}))
+               :include?  (transient {})
+               :ids       (transient [])
+               :count     0
+               :to-follow (queue step)))))
+
+(defn persist-walk! [walk]
+  (persistent!
+   (-> walk
+       (update-in! [:steps] persistent!)
+       (update-in! [:nodes] swap! persistent!)
+       (update-in! [:include?] persistent!)
+       (update-in! [:ids] persistent!))))
 
 (defn assoc-step [walk step]
   (if (or (back? step) (walked? walk step))
@@ -43,8 +51,8 @@
     (let [to-id (step :to-id)]
       (-> walk
           (add-node to-id)
-          (assoc-in  [:steps to-id (step :from-id) (step :layer)] step)
-          (update-in [:to-follow] conj step)))))
+          (assoc-in!  [:steps to-id (step :from-id) (step :layer)] step)
+          (update-in! [:to-follow] conj step)))))
 
 (defn follow [walk layer step]
   (let [from-id (step :to-id)
@@ -60,8 +68,7 @@
 (defn walk [graph focus-id limit]
   (loop [walk (empty-walk graph focus-id)]
     (let [step (-> walk :to-follow first)
-          walk (update-in walk [:to-follow] pop)]     
+          walk (update-in! walk [:to-follow] pop)]
       (if (or (nil? step) (< limit (walk :count)))
-        (do (println (count (walk :to-follow)))
-            walk)
+        (persist-walk! walk)
         (recur (follow walk :tree step))))))

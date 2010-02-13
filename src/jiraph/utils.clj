@@ -81,3 +81,25 @@
   (let [n    (.. Runtime getRuntime availableProcessors)
         rets (map #(future (map f %)) (slice n coll))]
     (mapcat #(deref %) rets)))
+
+(defn assoc-in!
+  "Associates a value in a nested associative structure, where ks is a sequence of keys
+  and v is the new value and returns a new nested structure. The associative structure
+  can have transients in it, but if any levels do not exist, non-transient hash-maps will
+  be created."
+  [m [k & ks :as keys] v]
+  (let [assoc (if (instance? clojure.lang.ITransientCollection m) assoc! assoc)]
+    (if ks
+      (assoc m k (assoc-in! (get m k) ks v))
+      (assoc m k v))))
+
+(defn update-in!
+  "'Updates' a value in a nested associative structure, where ks is a sequence of keys and
+  f is a function that will take the old value and any supplied args and return the new
+  value, and returns a new nested structure. The associative structure can have transients
+  in it, but if any levels do not exist, non-transient hash-maps will be created."
+  [m [k & ks] f & args]
+  (let [assoc (if (instance? clojure.lang.ITransientCollection m) assoc! assoc)]
+    (if ks
+      (assoc m k (apply update-in! (get m k) ks f args))
+      (assoc m k (apply f (get m k) args)))))

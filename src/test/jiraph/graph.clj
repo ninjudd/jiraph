@@ -3,12 +3,11 @@
   (:use test.utils)
   (:use protobuf)
   (:use clojure.test))
- 
+
 (use-fixtures :each setup-db-path)
 
-(defprotobuf Node     clojure.jiraph.Protos Node)
-(defprotobuf Edge     clojure.jiraph.Protos Edge)
-(defprotobuf EdgeList clojure.jiraph.Protos EdgeList)
+(defprotobuf Node jiraph.Protos Node)
+(defprotobuf Edge jiraph.Protos Edge)
 
 (defn upcase-data [map]
   (let [data #^String (map :data)]
@@ -37,7 +36,7 @@
 
              (delete-node! g 1)
              (is (= nil (get-node g 1)))
-             
+
              )
     (testing "edges"
              (add-edge! g :from-id 1 :to-id 2 :type "friend")
@@ -52,7 +51,7 @@
                    edge  (first edges)]
                (is (= 1 (count edges)))
                (is (= edge {:from-id 1, :to-id 5, :type "enemy"})))
-             
+
              (assoc-edge! g :from-id 1 :to-id 5 :type "enemy" :data "baz")
              (let [edges (get-edges g 1 "enemy")
                    edge  (first edges)]

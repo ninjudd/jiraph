@@ -10,13 +10,15 @@
         opts   (eval (apply hash-map (remove layer? args)))
         open-layer
         (fn [graph [_ layer & args]]
-          (let [opts (merge opts (apply hash-map args))]
+          (let [opts  (merge opts (apply hash-map args))
+                proto (protodef (opts :proto))]
             (assoc graph layer
               (db-open (-> opts
                            (assoc :path (str (opts :path) "/" (name layer)))
-                           (assoc-if (opts :proto)
+                           (assoc :proto proto)
+                           (assoc-if proto
                              :dump protobuf-bytes
-                             :load (partial protobuf (opts :proto))))))))]
+                             :load (partial protobuf proto)))))))]
     `(def ~sym
        ~(reduce open-layer {} layers))))
 
