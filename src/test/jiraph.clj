@@ -1,5 +1,5 @@
-(ns test.jiraph.graph
-  (:use jiraph.graph)
+(ns test.jiraph
+  (:use jiraph)
   (:use test.utils)
   (:use protobuf)
   (:use clojure.test))

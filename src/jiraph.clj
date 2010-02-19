@@ -1,4 +1,4 @@
-(ns jiraph.graph
+(ns jiraph
   (:use jiraph.utils)
   (:use clojure.contrib.java-utils)
   (:use protobuf)

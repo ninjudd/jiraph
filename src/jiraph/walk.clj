@@ -1,8 +1,8 @@
 (ns jiraph.walk
-  (:use jiraph.graph)
+  (:use jiraph)
   (:use jiraph.utils))
 
-(defclass Step :source :from-id :to-id :layer :edge)
+(defclass Step :source :from-id :id :layer :edge)
 
 (defn lookup-node [walk layer id]
   (or (@(walk :nodes) [id layer])
@@ -11,24 +11,29 @@
         node)))
 
 (defn walked? [walk step]
-  (not (nil? (get-in walk [:steps (step :to-id) (step :from-id) (step :layer)]))))
+  (not (nil? (get-in walk [:steps (step :id) (step :from-id) (step :layer)]))))
 
 (defn back? [step]
-  (= (step :to-id)
+  (= (step :id)
      (get-in step [:source :from-id])))
 
-(defn follow? [walk step]
+(defn- follow? [walk step]
   (if-let [follow? (walk :follow?)]
     (follow? step)
     true))
 
-(defn add? [walk step]
+(defn- add? [walk step]
   (if-let [add? (walk :follow?)]
     (add? step)
     true))
 
+(defn- init-step [step opts]
+  (if-let [init (opts :init)]
+    (init step)
+    step))
+
 (defn add-node [walk step]
-  (let [id (step :to-id)]
+  (let [id (step :id)]
     (if (or (get-in walk [:include? id]) (not (add? walk step)))
       walk
       (-> walk
@@ -37,7 +42,7 @@
           (assoc-in!  [:include? id] true)))))
 
 (defn empty-walk [graph focus-id opts]
-  (let [step (Step :to-id focus-id)]
+  (let [step (init-step (Step :id focus-id) opts)]
     (transient
      (assoc opts
             :graph     graph
@@ -62,7 +67,7 @@
     walk
     (-> walk
         (add-node step)
-        (assoc-in!  [:steps (step :to-id) (step :from-id) (step :layer)] step)
+        (assoc-in!  [:steps (step :id) (step :from-id) (step :layer)] step)
         (update-in! [:to-follow] conj step))))
 
 (defn layers [walk step]
@@ -71,15 +76,18 @@
       (layers step)
       layers)))
 
+(defn- make-step [walk from-step layer edge]
+  (let [from-id (from-step :id)
+        to-id   (edge :to-id)
+        to-step (Step [from-step from-id to-id layer edge])]
+    (if-let [reduce (walk :reduce)]
+      (reduce from-step to-step)
+      to-step)))
+
 (defn- layer-steps [walk step layer]
-  (let [from-id (step :to-id)
-        node    (lookup-node walk layer from-id)
-        edges   (if node (node :edges) [])
-        make-step
-        (fn [edge]
-          (let [to-id (edge :to-id)]
-            (Step [step from-id to-id layer edge])))]
-    (map make-step edges)))
+  (let [node  (lookup-node walk layer (step :id))
+        edges (if node (node :edges) [])]
+    (map (partial make-step walk step layer) edges)))
 
 (defn follow [walk step]
   (reduce assoc-step walk
@@ -101,4 +109,5 @@
 ;;       :follow? (fn [step])
 ;;       :add?    (fn [step])
 ;;       :layers  (fn [step])
+;;       :reduce  (fn [prev-step step])
 ;; )
