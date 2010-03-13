@@ -4,10 +4,12 @@
 
 (set! *warn-on-reflection* true)
 
+(def in-transaction? false)
+
 (def default-opts
      {:key  #(.getBytes (str %))
       :dump #(.getBytes (pr-str %))
-      :load #(read-string (String. #^bytes %))})
+      :load #(read-append (String. #^bytes %))})
 
 (defn- tflags [opts]
   (bit-or
@@ -19,8 +21,9 @@
      nil      0)))
 
 (defn- oflags [opts]
-  (reduce bit-or HDB/OCREAT
-          (list (if (opts :truncate) HDB/OTRUNC  0)
+  (reduce bit-or 0
+          (list (if (opts :create)   HDB/OCREAT  0)
+                (if (opts :truncate) HDB/OTRUNC  0)
                 (if (opts :readonly) HDB/OREADER HDB/OWRITER)
                 (if (opts :tsync)    HDB/OTSYNC  0)
                 (if (opts :nolock)   HDB/ONOLCK  0)
@@ -37,47 +40,68 @@
       (println path "tune:" (HDB/errmsg (.ecode db))))
     (when-not (.open db path (oflags opts))
       (println path "open:" (HDB/errmsg (.ecode db))))
-    (assoc opts :db db)))
+    (with-meta
+      (assoc opts :db db)
+      {:type ::layer})))
 
-(defn db-set [env key val]
-  (if (let [db  #^HDB (env :db)
-            key #^bytes ((env :key) key)
-            val #^bytes ((env :dump) val)]
-        (.put db key val))
-    val))
+(defmethod print-method ::layer [layer #^Writer w]
+  (let [layer (with-meta (assoc layer :graph "...") nil)]
+    (print-method layer w)))
 
-(defn db-add [env key val]
-  (if (let [db  #^HDB (env :db)
-            key #^bytes ((env :key) key)
-            val #^bytes ((env :dump) val)]
-        (.putkeep db key val))
-    val))
+(defmacro db-send [action layer & args]
+  (condp = (count args)
+    0 `(let [db# #^HDB (~layer :db)]
+         (. db# ~action))
+    1 (let [[key] args]
+        `(let [db#  #^HDB (~layer :db)
+               key# (bytes ((~layer :key) ~key))]
+         (. db# (~action key#))))
+    2 (let [[key val] args]
+        `(when (let [db#  #^HDB (~layer :db)
+                     key# (bytes ((~layer :key)  ~key))
+                     val# (bytes ((~layer :dump) ~val))]
+                 (. db# (~action key# val#)))
+           ~val))))
 
-(defn db-append [env key val]
-  (if (let [db  #^HDB (env :db)
-            key #^bytes ((env :key) key)
-            val #^bytes ((env :dump) val)]
-        (.putcat db key val))
-    val))
+(defn db-set [layer key val]
+  (db-send put layer key val))
 
-(defn db-get [env key]
-  (let [db  #^HDB (env :db)
-        key #^bytes ((env :key) key)
-        val #^bytes (.get db key)]
-    (if val ((env :load) val))))
+(defn db-add [layer key val]
+  (db-send putkeep layer key val))
 
-(defn db-update [env key fn]
-  (let [db #^HDB (env :db)]
-    (.tranbegin db)
-    (let [old #^bytes (db-get env key)
-          new (fn old)]
-      (if (nil? new)
-        (.tranabort db)
-        (do (db-set env key new)
-            (.trancommit db)))
-      new)))
+(defn db-append [layer key val]
+  (db-send putcat layer key val))
 
-(defn db-delete [env key]
-  (let [db  #^HDB (env :db)
-        key #^bytes ((env :key) key)]
-    (.out db key)))
+(defn db-len [layer key]
+  (db-send vsiz layer key))
+
+(defn db-get [layer key]
+  (let [val #^bytes (db-send get layer key)]
+    (if val ((layer :load) val))))
+
+(defn db-get-slice [layer key length]
+  (let [val #^bytes (db-send get layer key)]
+    (if val ((layer :load) val length))))
+
+(defn db-delete [layer key]
+  (db-send out layer key))
+
+(defmacro db-transaction [layer & body]
+  `(if in-transaction?
+     (do ~@body)
+     (binding [in-transaction? true]
+       (let [db# #^HDB (~layer :db)]
+         (.tranbegin db#)
+         (if-let [result# (do ~@body)]
+           (do (.trancommit db#)
+               result#)
+           (.tranabort db#))))))
+
+(defn db-truncate [layer]
+  (db-send vanish layer))
+
+(defn db-count [layer]
+  (db-send rnum layer))
+
+(defn db-close [layer]
+  (db-send close layer))

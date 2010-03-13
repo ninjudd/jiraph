@@ -6,12 +6,13 @@
 
 (defn lookup-node [walk layer id]
   (or (@(walk :nodes) [id layer])
-      (let [node (get-node (walk :graph) layer id)]
-        (swap! (walk :nodes) assoc! [id layer] node)
+      (let [node (get-node ((walk :graph) layer) id)]
+        (swap! (walk :nodes) assoc-in! [[id layer]] node)
         node)))
 
 (defn walked? [walk step]
-  (not (nil? (get-in walk [:steps (step :id) (step :from-id) (step :layer)]))))
+  (some #(and (= (step :from-id) (% :id)) (= (step :layer) (% :layer)))
+        (get-in walk [:steps (step :id)])))
 
 (defn back? [step]
   (= (step :id)
@@ -45,20 +46,23 @@
   (let [step (init-step (Step :id focus-id) opts)]
     (transient
      (assoc opts
-            :graph     graph
-            :focus-id  focus-id
-            :steps     (transient {})
-            :nodes     (atom (transient {}))
-            :include?  (transient {})
-            :ids       (transient [])
-            :count     0
-            :to-follow (queue step)))))
+       :graph      graph
+       :focus-id   focus-id
+       :steps      (transient {})
+       :nodes      (atom (transient {}))
+       :include?   (transient {})
+       :ids        (transient [])
+       :count      0
+       :to-follow  (queue step)
+       :sort-edges (if-let [s (opts :sort-edges-by)]
+                     #(compare (s %1) (s %2))
+                     (opts :sort-edges))))))
 
 (defn persist-walk! [walk]
+  (swap! (walk :nodes) persistent!)
   (persistent!
    (-> walk
        (update-in! [:steps] persistent!)
-       (update-in! [:nodes] swap! persistent!)
        (update-in! [:include?] persistent!)
        (update-in! [:ids] persistent!))))
 
@@ -67,7 +71,7 @@
     walk
     (-> walk
         (add-node step)
-        (assoc-in!  [:steps (step :id) (step :from-id) (step :layer)] step)
+        (update-in! [:steps (step :id)] conj-vec step)
         (update-in! [:to-follow] conj step))))
 
 (defn layers [walk step]
@@ -80,14 +84,21 @@
   (let [from-id (from-step :id)
         to-id   (edge :to-id)
         to-step (Step [from-step from-id to-id layer edge])]
-    (if-let [reduce (walk :reduce)]
-      (reduce from-step to-step)
+    (if-let [reduce-fn (walk :reduce)]
+      (reduce-fn from-step to-step)
       to-step)))
 
+(defn- sorted-edges [walk node]
+  (if node
+    (let [edges (vals (get-edges node))]
+      (if-let [comp (walk :sort-edges)]
+        (sort comp edges)
+        edges))
+    ()))
+
 (defn- layer-steps [walk step layer]
-  (let [node  (lookup-node walk layer (step :id))
-        edges (if node (node :edges) [])]
-    (map (partial make-step walk step layer) edges)))
+  (let [node (lookup-node walk layer (step :id))]
+    (map (partial make-step walk step layer) (sorted-edges walk node))))
 
 (defn follow [walk step]
   (reduce assoc-step walk
@@ -104,10 +115,14 @@
           (persist-walk! walk)
           (recur (follow walk step)))))))
 
+(defn- make-path [walk step]
+  (loop [step step, path ()]
+    (if step
+      (recur (step :source) (conj path step))
+      path)))
 
-;; (walk g "profile:1" :limit 100
-;;       :follow? (fn [step])
-;;       :add?    (fn [step])
-;;       :layers  (fn [step])
-;;       :reduce  (fn [prev-step step])
-;; )
+(defn paths [walk id]
+  (map make-path walk (get-in walk [:steps id])))
+
+(defn path [walk id]
+  (make-path walk (first (get-in walk [:steps id]))))

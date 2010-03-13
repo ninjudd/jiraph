@@ -1,7 +1,7 @@
 package jiraph;
 
 option java_package = "jiraph";
-option java_outer_classname = "Protos";
+option java_outer_classname = "Proto";
 
 message Edge {
   required uint32 to_id = 1;
@@ -9,7 +9,9 @@ message Edge {
 }
 
 message Node {
-  repeated Edge edges  = 1;
-  optional string type = 2;
-  optional string data = 3;
+  optional uint32 id   = 1;
+  repeated Edge edges  = 2;
+  optional string type = 3;
+  optional string data = 4;
+  repeated uint32 _len = 5;
 }

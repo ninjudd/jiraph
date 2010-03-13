@@ -12,7 +12,7 @@
     :else (apply hash-map args)))
 
 (defn assoc-or [map key value]
-  (if (map key)
+  (if (or (map key) (nil? value))
     map
     (assoc map key value)))
 
@@ -41,9 +41,8 @@
 
 (defmacro let-if [test bindings & body]
   `(if ~test
-     (let ~bindings
-       ~@body)
-     ~@body))
+     (let ~bindings ~@body)
+     (do ~@body)))
 
 (defmacro defclass [class & fields]
   `(let [type#   (keyword (name (quote ~class)))
@@ -68,6 +67,11 @@
            (into (queue) seq)
            (conj (queue) seq))))
 
+(defn conj-vec [coll item]
+  (if (instance? clojure.lang.PersistentVector coll)
+    (conj coll item)
+    (conj (vec coll) item)))
+
 (defn slice [n coll]
   (loop [num    n
          slices []
@@ -81,6 +85,30 @@
   (let [n    (.. Runtime getRuntime availableProcessors)
         rets (map #(future (map f %)) (slice n coll))]
     (mapcat #(deref %) rets)))
+
+(defn read-mult [str]
+  (let [r (java.io.PushbackReader. (java.io.StringReader. str))]
+    (loop [items []]
+      (try
+       (recur (conj items (read r)))
+       (catch Exception _ items)))))
+
+(defn append [left right]
+  (cond (map? left)  (merge-with append left right)
+        (coll? left) (if (sequential? right) (into left right) (conj left right))
+        :else        right))
+
+(defn read-append [str]
+  (apply merge-with append (read-mult str)))
+
+(defn sort-with
+  "Sort using decorate-sort-undecorate (Schwartzian transform)."
+  ([keyfn coll]
+     (sort-with keyfn compare coll))
+  ([keyfn #^java.util.Comparator comp coll]
+     (let [keyvals (map #(list (keyfn %) %) coll)]
+       (map second
+            (sort (fn [x y] (. comp (compare (first x) (first y)))) keyvals)))))
 
 (defn assoc-in!
   "Associates a value in a nested associative structure, where ks is a sequence of keys

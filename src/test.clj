@@ -1,9 +1,9 @@
 (use 'clojure.test)
 
-(def test-names [:tc :graph])
+(def test-names [:jiraph.tc :jiraph])
 
 (def test-namespaces
-     (map #(symbol (str "test.jiraph." (name %)))
+     (map #(symbol (str "test." (name %)))
           test-names))
 
 (defn run []
