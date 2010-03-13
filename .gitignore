@@ -1,3 +1,5 @@
 lib
 classes
 *.jar
+*.class
+*.java

@@ -6,7 +6,7 @@
 
 (defn lookup-node [walk layer id]
   (or (@(walk :nodes) [id layer])
-      (let [node (get-node ((walk :graph) layer) id)]
+      (let [node (get-node layer id)]
         (swap! (walk :nodes) assoc-in! [[id layer]] node)
         node)))
 
@@ -42,11 +42,10 @@
           (update-in! [:count] inc)
           (assoc-in!  [:include? id] true)))))
 
-(defn empty-walk [graph focus-id opts]
+(defn empty-walk [focus-id opts]
   (let [step (init-step (Step :id focus-id) opts)]
     (transient
      (assoc opts
-       :graph      graph
        :focus-id   focus-id
        :steps      (transient {})
        :nodes      (atom (transient {}))
@@ -105,10 +104,10 @@
     (mapcat (partial layer-steps walk step)
             (layers walk step))))
 
-(defn walk [graph focus-id & args]
+(defn walk [focus-id & args]
   (let [opts  (args-map args)
         limit (opts :limit)]
-    (loop [walk (empty-walk graph focus-id opts)]
+    (loop [walk (empty-walk focus-id opts)]
       (let [step (-> walk :to-follow first)
             walk (update-in! walk [:to-follow] pop)]
         (if (or (nil? step) (and limit (< limit (walk :count))))
