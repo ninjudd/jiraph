@@ -44,10 +44,6 @@
       (assoc opts :db db)
       {:type ::layer})))
 
-(defmethod print-method ::layer [layer #^Writer w]
-  (let [layer (with-meta (assoc layer :graph "...") nil)]
-    (print-method layer w)))
-
 (defmacro db-send [action layer & args]
   (condp = (count args)
     0 `(let [db# #^HDB (~layer :db)]

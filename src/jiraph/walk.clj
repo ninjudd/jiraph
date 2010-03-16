@@ -11,7 +11,7 @@
         node)))
 
 (defn walked? [walk step]
-  (some #(and (= (step :from-id) (% :id)) (= (step :layer) (% :layer)))
+  (some #(and (= (step :from-id) (% :from-id)) (= (step :layer) (% :layer)))
         (get-in walk [:steps (step :id)])))
 
 (defn back? [step]
