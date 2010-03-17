@@ -5,11 +5,16 @@
   (f obj)
   obj)
 
-(defn args-map [args] ; based on cupboard.utils
-  (cond
-    (map? args) args
-    (and (sequential? args) (= (count args) 1)) (args-map (first args))
-    :else (apply hash-map args)))
+(defn args-map [args]
+  (loop [args args map {}]
+    (if (empty? args)
+      map
+      (let [arg  (first args)
+            args (rest args)]
+        (cond
+         (map?  arg) (recur args        (merge map arg))
+         (coll? arg) (recur args        (apply assoc map arg))
+         :else       (recur (rest args) (assoc map arg (first args))))))))
 
 (defn assoc-or [map key value]
   (if (or (map key) (nil? value))

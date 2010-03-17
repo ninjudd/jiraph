@@ -79,9 +79,10 @@
   `(db-transaction (*graph* ~layer) ~@body))
 
 (defn make-node [layer & args]
-  (if-let [proto (opt layer :proto)]
-    (apply protobuf proto args)
-    (apply hash-map args)))
+  (let [node (args-map args)]
+    (if-let [proto (opt layer :proto)]
+      (protobuf proto node)
+      node)))
 
 (defn get-node
   ([layer id]     (db-get (*graph* layer) id))
@@ -89,7 +90,7 @@
 
 (defn add-node! [layer id & args]
   {:pre [(not (opt layer :append-only))]}
-  (let [node (apply make-node layer :id id args)]
+  (let [node (make-node layer :id id args)]
     (with-callbacks :add [layer id node]
       (db-add (*graph* layer) id node))))
 
@@ -104,7 +105,7 @@
 
 (defn append-node! [layer id & args]
   {:pre [(not (opt layer :disable-append))]}
-  (let [node (apply make-node layer args)]
+  (let [node (make-node layer args)]
     (with-callbacks :append [layer id node]
       (if (opt layer :store-length-on-append)
         (transaction layer
@@ -123,10 +124,10 @@
     (fn [node]
       (if node
         (apply assoc node args)
-        (apply make-node layer :id id args)))))
+        (make-node layer :id id args)))))
 
 (defn conj-edge! [layer from-id to-id & args]
-  (let [edge (apply hash-map :to-id to-id args)]
+  (let [edge (args-map :to-id to-id args)]
     (conj-node! layer from-id :edges [edge])
     edge))
 
