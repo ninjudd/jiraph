@@ -48,6 +48,12 @@
   `(binding [*graph* ~graph]
      (do ~@body)))
 
+(defn set-graph! [graph]
+  (def *graph* graph))
+
+(defn graph-layers []
+  (keys *graph*))
+
 (defn- opt [layer key]
   ((*graph* layer) key))
 
@@ -127,7 +133,7 @@
         (make-node layer :id id args)))))
 
 (defn conj-edge! [layer from-id to-id & args]
-  (let [edge (args-map :to-id to-id args)]
+  (let [edge (args-map args :to-id to-id)]
     (conj-node! layer from-id :edges [edge])
     edge))
 

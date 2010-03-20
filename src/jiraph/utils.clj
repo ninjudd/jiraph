@@ -5,16 +5,20 @@
   (f obj)
   obj)
 
-(defn args-map [args]
-  (loop [args args map {}]
-    (if (empty? args)
-      map
-      (let [arg  (first args)
-            args (rest args)]
-        (cond
-         (map?  arg) (recur args        (merge map arg))
-         (coll? arg) (recur args        (apply assoc map arg))
-         :else       (recur (rest args) (assoc map arg (first args))))))))
+(defn args-map
+  ([arg & args]
+     (args-map (conj args arg)))
+  ([args]
+     (loop [args args map {}]
+       (if (empty? args)
+         map
+         (let [arg  (first args)
+               args (rest args)]
+           (cond
+            (nil?  arg) (recur args map)
+            (map?  arg) (recur args (merge map arg))
+            (coll? arg) (recur (into args (reverse arg)) map)
+            :else       (recur (rest args) (assoc map arg (first args)))))))))
 
 (defn assoc-or [map key value]
   (if (or (map key) (nil? value))
