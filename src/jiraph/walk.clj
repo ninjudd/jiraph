@@ -98,9 +98,11 @@
     (map (partial make-step walk step layer) (sorted-edges walk nodes))))
 
 (defn follow [walk step]
-  (reduce assoc-step walk
-    (mapcat (partial layer-steps walk step)
-            (layers walk step))))
+  (if (follow? walk step)
+    (reduce assoc-step walk
+      (mapcat (partial layer-steps walk step)
+              (layers walk step)))
+    walk))
 
 (defn walk [focus-id & args]
   (let [opts  (args-map args)
