@@ -16,11 +16,11 @@
   <property name="je.jar" value="lib/${dep.je}.jar"/>
 
   <property name="repository.tokyocabinet" value="http://1978th.net/tokyocabinet"/>
-  <property name="dep.tokyocabinet" value="tokyocabinet-1.4.42"/>
+  <property name="dep.tokyocabinet" value="tokyocabinet-1.4.43"/>
   <property name="tokyocabinet" value="lib/${dep.tokyocabinet}"/>
 
   <property name="repository.jtokyocabinet" value="${repository.tokyocabinet}/javapkg"/>
-  <property name="dep.jtokyocabinet" value="tokyocabinet-java-1.22"/>
+  <property name="dep.jtokyocabinet" value="tokyocabinet-java-1.23"/>
   <property name="jtokyocabinet" value="lib/${dep.jtokyocabinet}"/>
   <property name="tokyocabinet.jar" value="lib/tokyocabinet.jar"/>
 
@@ -49,21 +49,25 @@
     <delete>
       <fileset dir="." includes="*.jar"/>
     </delete>
-    <delete dir="lib"/>
+    <delete>
+      <fileset dir="lib" casesensitive="yes">
+        <exclude name="**/*.tar.gz"/>
+      </fileset>
+    </delete>
     <delete dir="classes"/>
   </target>
 
-  <available file="${tokyocabinet}" property="has_tokyocabinet"/>
+  <available file="${tokyocabinet}.tar.gz" property="has_tokyocabinet"/>
   <target name="fetch_tokyocabinet" depends="init" unless="has_tokyocabinet">
     <get src="${repository.tokyocabinet}/${dep.tokyocabinet}.tar.gz"
          dest="lib/${dep.tokyocabinet}.tar.gz" usetimestamp="true"/>
-    <gunzip src="lib/${dep.tokyocabinet}.tar.gz"/>
-    <untar src="lib/${dep.tokyocabinet}.tar" dest="lib"/>
-    <delete file="lib/${dep.tokyocabinet}.tar"/>
   </target>
 
   <available file="${tokyocabinet}/Makefile" property="configured_tokyocabinet"/>
   <target name="config_tokyocabinet" depends="fetch_tokyocabinet" unless="configured_tokyocabinet">
+    <gunzip src="lib/${dep.tokyocabinet}.tar.gz"/>
+    <untar src="lib/${dep.tokyocabinet}.tar" dest="lib"/>
+    <delete file="lib/${dep.tokyocabinet}.tar"/>
     <chmod file="${tokyocabinet}/configure" perm="+x"/>
     <exec dir="${tokyocabinet}" executable="./configure">
       <arg value="--prefix=${basedir}/lib/install"/>
@@ -78,17 +82,17 @@
     </exec>
   </target>
 
-  <available file="${jtokyocabinet}" property="has_jtokyocabinet"/>
+  <available file="${jtokyocabinet}.tar.gz" property="has_jtokyocabinet"/>
   <target name="fetch_jtokyocabinet" depends="init" unless="has_jtokyocabinet">
     <get src="${repository.jtokyocabinet}/${dep.jtokyocabinet}.tar.gz"
          dest="lib/${dep.jtokyocabinet}.tar.gz" usetimestamp="true"/>
-    <gunzip src="lib/${dep.jtokyocabinet}.tar.gz"/>
-    <untar src="lib/${dep.jtokyocabinet}.tar" dest="lib"/>
-    <delete file="lib/${dep.jtokyocabinet}.tar"/>
   </target>
 
   <available file="${jtokyocabinet}/Makefile" property="configured_jtokyocabinet"/>
   <target name="config_jtokyocabinet" depends="fetch_jtokyocabinet" unless="configured_jtokyocabinet">
+    <gunzip src="lib/${dep.jtokyocabinet}.tar.gz"/>
+    <untar src="lib/${dep.jtokyocabinet}.tar" dest="lib"/>
+    <delete file="lib/${dep.jtokyocabinet}.tar"/>
     <chmod file="${jtokyocabinet}/configure" perm="+x"/>
     <exec dir="${jtokyocabinet}" executable="./configure">
       <env key="JAVA_HOME" value="${env.JAVA_HOME}"/>
