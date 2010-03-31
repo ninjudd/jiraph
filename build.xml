@@ -95,6 +95,7 @@
     <delete file="lib/${dep.jtokyocabinet}.tar"/>
     <chmod file="${jtokyocabinet}/configure" perm="+x"/>
     <exec dir="${jtokyocabinet}" executable="./configure">
+      <env key="CPPFLAGS"  value="-I${basedir}/lib/install/include -L${basedir}/lib/install/lib"/>
       <env key="JAVA_HOME" value="${env.JAVA_HOME}"/>
       <arg value="--prefix=${basedir}/lib/install"/>
     </exec>
@@ -102,7 +103,9 @@
 
   <available file="${tokyocabinet.jar}" property="has_tokyocabinet_jar"/>
   <target name="make_jtokyocabinet" depends="config_jtokyocabinet" unless="has_tokyocabinet_jar">
-    <exec dir="${jtokyocabinet}" executable="make" failonerror="true"/>
+    <exec dir="${jtokyocabinet}" executable="make" failonerror="true">
+      <env key="INCLUDEDIR" value="${basedir}/lib/install/include"/>
+    </exec>
     <exec dir="${jtokyocabinet}" executable="make" failonerror="true">
       <arg value="install"/>
     </exec>
