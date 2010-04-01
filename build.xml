@@ -49,11 +49,7 @@
     <delete>
       <fileset dir="." includes="*.jar"/>
     </delete>
-    <delete>
-      <fileset dir="lib" casesensitive="yes">
-        <exclude name="**/*.tar.gz"/>
-      </fileset>
-    </delete>
+    <delete dir="lib"/>
     <delete dir="classes"/>
   </target>
 
@@ -178,9 +174,10 @@
   </path>
 
   <target name="compile" depends="fetch_clojure,fetch_contrib,make_tokyocabinet,make_jtokyocabinet,build_protobuf">
-    <java classname="clojure.lang.Compile" classpathref="classpath" fork="true">
-      <sysproperty key="java.library.path" value="${jtokyocabinet}"/>
+    <java classname="clojure.lang.Compile" classpathref="classpath" fork="true" failonerror="true">
+      <sysproperty key="java.library.path" value="lib/install/lib"/>
       <sysproperty key="clojure.compile.path" value="classes"/>
+      <env key="LD_LIBRARY_PATH" value="lib/install/lib"/>
       <arg value="jiraph.utils"/>
       <arg value="jiraph.tc"/>
       <arg value="jiraph"/>
