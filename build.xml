@@ -158,6 +158,9 @@
   <available file="${clojure-protobuf.jar}" property="has_protobuf_jar"/>
   <target name="build_protobuf" depends="fetch_clojure" unless="has_protobuf_jar">
     <antcall target="fetch_protobuf"/>
+    <exec dir="lib/clojure-protobuf" executable="git" failonerror="true">
+      <arg value="pull"/>
+    </exec>
     <exec dir="lib/clojure-protobuf" executable="ant" failonerror="true">
       <arg line="package -Dclojure.jar=${basedir}/${clojure.jar}"/>
     </exec>
