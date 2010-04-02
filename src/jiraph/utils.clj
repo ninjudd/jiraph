@@ -119,6 +119,14 @@
        (map second
             (sort (fn [x y] (. comp (compare (first x) (first y)))) keyvals)))))
 
+(defn any [& preds]
+  (fn [& args]
+    (some #(apply % args) preds)))
+
+(defn all [& preds]
+  (fn [& args]
+    (every? #(apply % args) preds)))
+
 (defn assoc-in!
   "Associates a value in a nested associative structure, where ks is a sequence of keys
   and v is the new value and returns a new nested structure. The associative structure
