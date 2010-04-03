@@ -138,19 +138,8 @@
     edge))
 
 (defn get-edges
-  ([layer id]     (get-edges (get-node layer id)))
-  ([layer id len] (get-edges (get-node layer id len)))
-  ([node]
-     (persistent!
-      (reduce
-       (fn [edges edge]
-         (let [to-id    (:to-id edge)
-               existing (edges to-id)]
-           (assoc! edges
-             to-id (if existing
-                     (merge-with append existing edge)
-                     edge))))
-       (transient {}) (:edges node)))))
+  ([layer id]     (:edges (get-node layer id)))
+  ([layer id len] (:edges (get-node layer id len))))
 
 (defn update-edges! [layer id update-fn & args]
   (update-node! layer id
@@ -158,7 +147,7 @@
       (if node
         (assoc node
           :edges (vec (vals
-                  (apply update-fn (get-edges node) args))))
+                  (apply update-fn (node :edges) args))))
         (let [edges (apply update-fn {} args)]
           (when-not (empty? edges)
             (make-node layer :id id :edges (vec (vals edges)))))))))

@@ -88,7 +88,7 @@
     (reduce-step walk from-step to-step)))
 
 (defn- sorted-edges [walk nodes]
-  (let [edges (mapcat (comp vals get-edges) nodes)]
+  (let [edges (mapcat (comp vals :edges) nodes)]
     (if-let [cmp (walk :sort-edges)]
       (sort cmp edges)
       edges)))
