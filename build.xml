@@ -188,4 +188,17 @@
   <target name="package" depends="compile">
     <jar destfile="jiraph.jar" basedir="classes"/>
   </target>
+
+  <target name="compile_test_proto" depends="compile">
+    <exec dir="src" executable="../lib/clojure-protobuf/lib/install/bin/protoclj">
+      <arg value="test/test.proto"/>
+    </exec>
+  </target>
+
+  <target name="test" depends="compile_test_proto">
+    <java classname="clojure.main" classpathref="classpath" failonerror="true" fork="true">
+      <sysproperty key="java.library.path" value="lib/install/lib"/>
+      <arg value="src/test.clj"/>
+    </java>
+  </target>
 </project>

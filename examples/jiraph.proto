@@ -11,7 +11,7 @@ message Edge {
 
 message Node {
   optional uint32 id   = 1;
-  repeated Edge edges  = 2 [(map_by = "to_id")];
+  repeated Edge edges  = 2 [(map_by) = "to_id"];
   optional string type = 3;
   optional string data = 4;
   repeated uint32 _len = 5;

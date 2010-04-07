@@ -3,7 +3,7 @@
   (:use jiraph.utils)
   (:use clojure.test))
 
-(def db (db-open {:path "/tmp/jiraph-test-foo"}))
+(def db (db-open {:path "/tmp/jiraph-test-foo" :create true}))
 
 (defn clear-db [f]
   (map db-truncate db)

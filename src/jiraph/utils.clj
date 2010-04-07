@@ -110,6 +110,10 @@
 (defn read-append [str]
   (apply merge-with append (read-mult str)))
 
+(defn read-append-bytes
+  ([#^bytes b] (read-append (String. b)))
+  ([#^bytes b len] (read-append (String. b 0 (int len)))))
+
 (defn sort-with
   "Sort using decorate-sort-undecorate (Schwartzian transform)."
   ([keyfn coll]

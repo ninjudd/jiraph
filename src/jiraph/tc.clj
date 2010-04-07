@@ -7,9 +7,9 @@
 (def in-transaction? false)
 
 (def default-opts
-     {:key  #(.getBytes (str %))
-      :dump #(.getBytes (pr-str %))
-      :load #(read-append (String. #^bytes %))})
+  {:key  #(.getBytes (str %))
+   :dump #(.getBytes (pr-str %))
+   :load read-append-bytes})
 
 (defn- tflags [opts]
   (bit-or

@@ -109,21 +109,19 @@
         (when-not (= old new)
           (db-set (*graph* layer) id new))))))
 
-(defn append-node! [layer id & args]
+(defn conj-node! [layer id & args]
   {:pre [(not (opt layer :disable-append))]}
   (let [node (make-node layer args)]
     (with-callbacks :append [layer id node]
       (if (opt layer :store-length-on-append)
         (transaction layer
-          (let [node (assoc node :_len (db-len (*graph* layer) id))]
+          (let [node (assoc node :_len [(db-len (*graph* layer) id)])]
             (db-append (*graph* layer) id node)))
         (db-append (*graph* layer) id node)))))
 
 (defn delete-node! [layer id]
   (with-callbacks :delete [layer id]
     (db-delete (*graph* layer) id)))
-
-(def conj-node! append-node!)
 
 (defn assoc-node! [layer id & args]
   (update-node! layer id
@@ -134,7 +132,7 @@
 
 (defn conj-edge! [layer from-id to-id & args]
   (let [edge (args-map args :to-id to-id)]
-    (conj-node! layer from-id :edges [edge])
+    (conj-node! layer from-id :edges {to-id edge})
     edge))
 
 (defn get-edges
@@ -146,16 +144,15 @@
     (fn [node]
       (if node
         (assoc node
-          :edges (vec (vals
-                  (apply update-fn (node :edges) args))))
+          :edges (apply update-fn (node :edges) args))
         (let [edges (apply update-fn {} args)]
           (when-not (empty? edges)
-            (make-node layer :id id :edges (vec (vals edges)))))))))
+            (make-node layer :id id :edges edges)))))))
 
 (defn update-edge! [layer from-id to-id update-fn & args]
   (update-edges! layer from-id
     (fn [edges]
-      (let [edge (apply update-fn (edges to-id) args)]
+      (let [edge (apply update-fn ((or edges {}) to-id) args)]
         (when edge
           (assoc edges
             to-id (assoc edge :to-id to-id)))))))

@@ -6,14 +6,20 @@
 (defn append-actions [layer id & args]
   (conj-node! :actions id layer [(into [jiraph/*callback* id] args)]))
 
-(defgraph graph
-  :path "/tmp/jiraph-test" :proto jiraph.Proto$Node :create true :bnum 1000000
+(defgraph proto-graph
+  :path "/tmp/jiraph-proto-test" :proto test.jiraph.Proto$Node :create true :bnum 1000000
   (layer :friends :store-length-on-append true)
   (layer :enemies :post-write append-actions)
   (layer :actions :append-only true :proto nil))
 
+(defgraph graph
+  :path "/tmp/jiraph-test" :create true :bnum 1000000
+  (layer :friends :store-length-on-append true)
+  (layer :enemies :post-write append-actions)
+  (layer :actions :append-only true))
+
 (defn clear-graph [f]
-  (doseq [layer (vals graph)]
+  (doseq [layer (concat (vals graph) (vals proto-graph))]
     (jiraph.tc/db-truncate layer))
   (f))
 
@@ -24,7 +30,8 @@
     (assoc m :data (.toUpperCase data))))
 
 (deftest graph-access
-  (with-graph graph
+  (doseq [g [graph proto-graph]]
+  (with-graph g
     (testing "nodes"
       (add-node! :friends 1 :type "person" :data "foo")
       (let [node (get-node :friends 1)]
@@ -61,6 +68,7 @@
       (is (= nil (get-node :friends 1)))
       )
     (testing "edges"
+      (add-node! :enemies 1 :data "bar")
       (assoc-edge! :enemies 1 5 :data "arch-nemesis")
       (let [edges (get-edges :enemies 1)]
         (is (= 1 (count edges)))
@@ -91,7 +99,7 @@
       (conj-edge! :friends 1 4 :data "ZAP!")
       (conj-edge! :friends 1 8 :data "spiderman")
       (let [node  (get-node :friends 1)
-            edges (get-edges node)
+            edges (:edges node)
             len   (node :_len)]
         (is (= 3 (count edges)))
         (is (= (edges 2) {:to-id 2, :data "ZAP!"}))
@@ -135,3 +143,4 @@
                                 {:id 15, :type "arch-rival", :data "bad"}] ((actions :enemies) 1)))
         (is (= [:post-delete 15]                                           ((actions :enemies) 2))))
       )))
+)
