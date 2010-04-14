@@ -29,6 +29,11 @@
   (let [data #^String (m :data)]
     (assoc m :data (.toUpperCase data))))
 
+(deftest layer-meta-accessors
+  (with-graph graph
+    (assoc-layer-meta! :friends :version 4)
+    (is (= {:version 4} (layer-meta :friends)))))
+
 (deftest graph-access
   (doseq [g [graph proto-graph]]
   (with-graph g

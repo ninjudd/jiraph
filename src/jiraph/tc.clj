@@ -101,3 +101,16 @@
 
 (defn db-close [layer]
   (db-send close layer))
+
+(defn db-get-meta [layer]
+  (let [db  #^HDB (layer :db)
+        key #^bytes (.getBytes "_meta")
+        val #^bytes (. db (get key))]
+    (if val (read-string (String. val)) {})))
+
+(defn db-set-meta [layer meta]
+  (let [db  #^HDB (layer :db)
+        key #^bytes (.getBytes "_meta")
+        val #^bytes (.getBytes (pr-str meta))]
+    (when (. db (put key val))
+      meta)))

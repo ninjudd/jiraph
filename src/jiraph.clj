@@ -165,3 +165,11 @@
     (fn [edges]
       (when (edges to-id)
         (dissoc edges to-id)))))
+
+(defn layer-meta [layer]
+  (db-get-meta (*graph* layer)))
+
+(defn assoc-layer-meta! [layer & args]
+  (transaction layer
+    (let [meta (layer-meta layer)]
+      (db-set-meta (*graph* layer) (apply assoc meta args)))))
