@@ -1,4 +1,4 @@
-<project name="clojure-protobuf" default="package">
+<project name="jiraph" default="package">
 
   <property name="repository.clojure" value="http://clojure.googlecode.com/files"/>
   <property name="dep.clojure" value="clojure-1.1.0"/>
