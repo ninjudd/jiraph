@@ -38,7 +38,9 @@
   (doseq [g [graph proto-graph]]
   (with-graph g
     (testing "nodes"
+      (is (not (node-exists? :friends 1)))
       (add-node! :friends 1 :type "person" :data "foo")
+      (is (node-exists? :friends 1))
       (let [node (get-node :friends 1)]
         (is (= 1        (:id node)))
         (is (= "foo"    (:data node)))
@@ -70,6 +72,7 @@
           (is (= "person" (:type node)))))
 
       (delete-node! :friends 1)
+      (is (not (node-exists? :friends 1)))
       (is (= nil (get-node :friends 1)))
       )
     (testing "edges"
@@ -78,6 +81,11 @@
       (let [edges (get-edges :enemies 1)]
         (is (= 1 (count edges)))
         (is (= (edges 5) {:to-id 5, :data "arch-nemesis"})))
+
+      (assoc-edge! :enemies 3 6)
+      (let [edges (get-edges :enemies 3)]
+        (is (= 1 (count edges)))
+        (is (= (edges 6) {:to-id 6})))
 
       (assoc-edge! :enemies 1 5 :data "baz")
       (let [edges (get-edges :enemies 1)]

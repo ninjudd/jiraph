@@ -20,15 +20,16 @@
             (coll? arg) (recur (into args (reverse arg)) map)
             :else       (recur (rest args) (assoc map arg (first args)))))))))
 
-(defn assoc-or [map key value]
-  (if (or (map key) (nil? value))
-    map
-    (assoc map key value)))
+(defmacro assoc-or [map key value]
+  `(if (~map ~key)
+     ~map
+     (assoc ~map ~key ~value)))
 
-(defn assoc-if [map test & args]
-  (if test
-    (apply assoc map args)
-    map))
+(defmacro assoc-if [map test & args]
+  (let [assoc (cons 'assoc (cons map args))]
+    `(if ~test
+       ~assoc
+       ~map)))
 
 (defmacro verify [x exception & body]
   `(if ~x

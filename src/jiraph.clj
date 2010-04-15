@@ -26,7 +26,7 @@
         (fn [graph [_ layer & args]]
           (let [opts  (merge opts (apply hash-map args))
                 proto (if (opts :proto) (protodef (eval (opts :proto))))]
-           (assoc graph layer
+          (assoc graph layer
               (db-open (-> opts
                            (assoc :proto proto)
                            (assoc :path (str (opts :path) "/" (name layer)))
@@ -95,6 +95,9 @@
   ([layer id]     (db-get (*graph* layer) id))
   ([layer id len] (db-get-slice (*graph* layer) id len)))
 
+(defn node-exists? [layer id]
+  (not (= -1 (db-len (*graph* layer) id))))
+
 (defn add-node! [layer id & args]
   {:pre [(not (opt layer :append-only))]}
   (let [node (make-node layer :id id args)]
@@ -159,7 +162,9 @@
             to-id (assoc edge :to-id to-id)))))))
 
 (defn assoc-edge! [layer from-id to-id & args]
-  (apply update-edge! layer from-id to-id assoc args))
+  (if (empty? args)
+    (update-edge! layer from-id to-id #(or % {}))
+    (apply update-edge! layer from-id to-id assoc args)))
 
 (defn delete-edge! [layer from-id to-id]
   (update-edges! layer from-id
