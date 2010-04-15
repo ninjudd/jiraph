@@ -26,13 +26,14 @@
         (fn [graph [_ layer & args]]
           (let [opts  (merge opts (apply hash-map args))
                 proto (if (opts :proto) (protodef (eval (opts :proto))))]
-            (assoc graph layer
+           (assoc graph layer
               (db-open (-> opts
                            (assoc :proto proto)
                            (assoc :path (str (opts :path) "/" (name layer)))
                            (default-callback :write [:add :append :update :delete])
                            (default-callback :alter [:add :append :update])
                            (assoc-if proto
+                             :proto-fields (vec (protofields proto))
                              :dump protobuf-dump
                              :load (partial protobuf-load proto)))))))]
     (when (opts :create) (.mkdir (File. #^String (opts :path))))
@@ -165,3 +166,20 @@
     (fn [edges]
       (when (edges to-id)
         (dissoc edges to-id)))))
+
+(defn layer-meta [layer]
+  (db-get-meta (*graph* layer)))
+
+(defn assoc-layer-meta! [layer & args]
+  (transaction layer
+    (let [meta (layer-meta layer)]
+      (db-set-meta (*graph* layer) (apply assoc meta args)))))
+
+(defn field-to-layer [& layers]
+  (reduce (fn [map layer]
+            (reduce (fn [map field]
+                      (if (or (= field :id) (field map) (.startsWith (name field) "_"))
+                        map
+                        (assoc map field layer)))
+                    map (get-in *graph* [layer :proto-fields])))
+          {} layers))
