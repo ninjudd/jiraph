@@ -18,25 +18,33 @@
   (layer :enemies :post-write append-actions)
   (layer :actions :append-only true))
 
-(defn clear-graph [f]
-  (doseq [layer (concat (vals graph) (vals proto-graph))]
-    (jiraph.tc/db-truncate layer))
+
+(defmacro with-each-graph [graphs & body]
+  `(doseq [g# ~graphs]
+     (with-graph g#
+       ~@body)))
+
+(defn clear-graphs [f]
+  (with-each-graph [graph proto-graph]
+    (truncate-graph!))
   (f))
 
-(use-fixtures :each clear-graph)
+(use-fixtures :each clear-graphs)
 
 (defn upcase-data [m]
   (let [data #^String (m :data)]
     (assoc m :data (.toUpperCase data))))
 
 (deftest layer-meta-accessors
-  (with-graph graph
+  (with-each-graph [graph proto-graph]
     (assoc-layer-meta! :friends :version 4)
     (is (= {:version 4} (layer-meta :friends)))))
 
+(deftest field-to-layer-map
+  (is (= {:data :friends, :type :friends} (field-to-layer proto-graph :friends :enemies))))
+
 (deftest graph-access
-  (doseq [g [graph proto-graph]]
-  (with-graph g
+  (with-each-graph [graph proto-graph]
     (testing "nodes"
       (is (not (node-exists? :friends 1)))
       (add-node! :friends 1 :type "person" :data "foo")
@@ -155,5 +163,5 @@
         (is (= [:post-update 15 {:id 15, :type "rival", :data "bad"}
                                 {:id 15, :type "arch-rival", :data "bad"}] ((actions :enemies) 1)))
         (is (= [:post-delete 15]                                           ((actions :enemies) 2))))
-      )))
+      ))
 )

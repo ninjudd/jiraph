@@ -27,7 +27,7 @@
           (let [opts  (merge opts (apply hash-map args))
                 proto (if (opts :proto) (protodef (eval (opts :proto))))]
           (assoc graph layer
-              (db-open (-> opts
+              (db-init (-> opts
                            (assoc :proto proto)
                            (assoc :path (str (opts :path) "/" (name layer)))
                            (default-callback :write [:add :append :update :delete])
@@ -39,15 +39,25 @@
     (when (opts :create) (.mkdir (File. #^String (opts :path))))
     `(def ~sym ~(reduce open-layer {} layers))))
 
+(defn open-graph [graph]
+  (doall (map db-open (vals graph))))
+
 (defn close-graph [graph]
-  (map db-close (vals graph)))
+  (doall (map db-close (vals graph))))
+
+(defn graph-open? [graph]
+  (db-open? (first (vals graph))))
 
 (declare *graph*)
 (declare *callback*)
 
 (defmacro with-graph [graph & body]
   `(binding [*graph* ~graph]
-     (do ~@body)))
+     (if (graph-open? *graph*)
+       (do ~@body)
+       (try (do (open-graph *graph*)
+                ~@body)
+            (finally (close-graph *graph*))))))
 
 (defn set-graph! [graph]
   (def *graph* graph))
@@ -180,11 +190,15 @@
     (let [meta (layer-meta layer)]
       (db-set-meta (*graph* layer) (apply assoc meta args)))))
 
-(defn field-to-layer [& layers]
+(defn truncate-graph! []
+  (doall (map db-truncate (vals *graph*))))
+
+(defn field-to-layer [graph & layers]
   (reduce (fn [map layer]
             (reduce (fn [map field]
-                      (if (or (= field :id) (field map) (.startsWith (name field) "_"))
+                      (if (or (= field :id) (= field :edges)
+                              (field map) (.startsWith (name field) "_"))
                         map
                         (assoc map field layer)))
-                    map (get-in *graph* [layer :proto-fields])))
+                    map (get-in graph [layer :proto-fields])))
           {} layers))

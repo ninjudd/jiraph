@@ -11,6 +11,13 @@
    :dump #(.getBytes (pr-str %))
    :load read-append-bytes})
 
+(defn db-init [opts]
+  (let [opts (merge default-opts opts)
+        db   #^HDB (HDB.)]
+    (with-meta
+      (assoc opts :db db)
+      {:type ::layer})))
+
 (defn- tflags [opts]
   (bit-or
    (if (opts :large) HDB/TLARGE 0)
@@ -29,20 +36,16 @@
                 (if (opts :nolock)   HDB/ONOLCK  0)
                 (if (opts :noblock)  HDB/OLCKNB  0))))
 
-(defn db-open [opts]
-  (let [opts   (merge default-opts opts)
-        db     #^HDB (HDB.)
-        path   (opts :path)
-        bnum   (or (opts :bnum) 0)
-        apow   (or (opts :apow) -1)
-        fpow   (or (opts :fpow) -1)]
-    (when-not (.tune db bnum apow fpow (tflags opts))
+(defn db-open [layer]
+  (let [db   #^HDB (layer :db)
+        path (layer :path)
+        bnum (or (layer :bnum) 0)
+        apow (or (layer :apow) -1)
+        fpow (or (layer :fpow) -1)]
+    (when-not (.tune db bnum apow fpow (tflags layer))
       (println path "tune:" (HDB/errmsg (.ecode db))))
-    (when-not (.open db path (oflags opts))
-      (println path "open:" (HDB/errmsg (.ecode db))))
-    (with-meta
-      (assoc opts :db db)
-      {:type ::layer})))
+    (when-not (.open db path (oflags layer))
+      (println path "open:" (HDB/errmsg (.ecode db))))))
 
 (defmacro db-send [action layer & args]
   (condp = (count args)
@@ -98,6 +101,9 @@
 
 (defn db-count [layer]
   (db-send rnum layer))
+
+(defn db-open? [layer]
+  (not (nil? (db-send path layer))))
 
 (defn db-close [layer]
   (db-send close layer))
