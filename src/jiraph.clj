@@ -65,7 +65,7 @@
 (defn graph-layers []
   (keys *graph*))
 
-(defn- opt [layer key]
+(defn opt [layer key]
   ((*graph* layer) key))
 
 (defn- callback [name layer args]
@@ -105,8 +105,11 @@
   ([layer id]     (db-get (*graph* layer) id))
   ([layer id len] (db-get-slice (*graph* layer) id len)))
 
+(defn node-size [layer id]
+  (db-len (*graph* layer) id))
+
 (defn node-exists? [layer id]
-  (not (= -1 (db-len (*graph* layer) id))))
+  (not (= -1 (node-size layer id))))
 
 (defn add-node! [layer id & args]
   {:pre [(not (opt layer :append-only))]}
@@ -127,11 +130,15 @@
   {:pre [(not (opt layer :disable-append))]}
   (let [node (make-node layer args)]
     (with-callbacks :append [layer id node]
-      (if (opt layer :store-length-on-append)
+      (if (opt layer :auto-compact)
         (transaction layer
-          (let [node (assoc node :_len [(db-len (*graph* layer) id)])]
-            (db-append (*graph* layer) id node)))
-        (db-append (*graph* layer) id node)))))
+          (db-append (*graph* layer) id node)
+          (db-set (*graph* layer) id (db-get (*graph* layer) id)))
+        (if (opt layer :store-length-on-append)
+          (transaction layer
+            (let [node (assoc node :_len [(db-len (*graph* layer) id)])]
+              (db-append (*graph* layer) id node)))
+          (db-append (*graph* layer) id node))))))
 
 (defn delete-node! [layer id]
   (with-callbacks :delete [layer id]
@@ -196,8 +203,7 @@
 (defn field-to-layer [graph & layers]
   (reduce (fn [map layer]
             (reduce (fn [map field]
-                      (if (or (= field :id) (= field :edges)
-                              (field map) (.startsWith (name field) "_"))
+                      (if (or (= field :id) (= field :edges) (field map) (.startsWith (name field) "_"))
                         map
                         (assoc map field layer)))
                     map (get-in graph [layer :proto-fields])))

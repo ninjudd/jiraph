@@ -9,13 +9,13 @@
 (defgraph proto-graph
   :path "/tmp/jiraph-proto-test" :proto test.jiraph.Proto$Node :create true :bnum 1000000
   (layer :friends :store-length-on-append true)
-  (layer :enemies :post-write append-actions)
+  (layer :enemies :auto-compact true :post-write append-actions)
   (layer :actions :append-only true :proto nil))
 
 (defgraph graph
   :path "/tmp/jiraph-test" :create true :bnum 1000000
   (layer :friends :store-length-on-append true)
-  (layer :enemies :post-write append-actions)
+  (layer :enemies :auto-compact false :post-write append-actions)
   (layer :actions :append-only true))
 
 
@@ -145,6 +145,14 @@
           (is (= (edges 2) {:to-id 2, :data "ZAP!"}))
           (is (= (edges 4) {:to-id 4, :data "ZAP!"})))
         ))
+    (testing "auto-compact"
+      (conj-node! :enemies 1 :data "bar" :type "foo")
+      (let [len (node-size :enemies 1)]
+        (conj-node! :enemies 1 :data "baz")
+        (if (opt :enemies :auto-compact)
+          (is (= len (node-size :enemies 1)))
+          (is (< len (node-size :enemies 1))))
+      ))
     (testing "callbacks"
       (add-node!    :enemies 11 :type "nemesis" :data "evil")
       (add-node!    :enemies 15 :type "rival"   :data "bad")
