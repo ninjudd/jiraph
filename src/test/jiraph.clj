@@ -8,13 +8,13 @@
 
 (defgraph proto-graph
   :path "/tmp/jiraph-proto-test" :proto test.jiraph.Proto$Node :create true :bnum 1000000
-  (layer :friends :store-length-on-append true)
+  (layer :friends :append-only true)
   (layer :enemies :auto-compact true :post-write append-actions)
   (layer :actions :append-only true :proto nil))
 
 (defgraph graph
   :path "/tmp/jiraph-test" :create true :bnum 1000000
-  (layer :friends :store-length-on-append true)
+  (layer :friends :append-only true)
   (layer :enemies :auto-compact false :post-write append-actions)
   (layer :actions :append-only true))
 
@@ -46,21 +46,27 @@
 (deftest graph-access
   (with-each-graph [graph proto-graph]
     (testing "nodes"
-      (is (not (node-exists? :friends 1)))
-      (add-node! :friends 1 :type "person" :data "foo")
-      (is (node-exists? :friends 1))
-      (let [node (get-node :friends 1)]
+      (is (not (node-exists? :enemies 1)))
+      (add-node! :enemies 1 :type "person" :data "foo")
+      (is (node-exists? :enemies 1))
+      (let [node (get-node :enemies 1)]
         (is (= 1        (:id node)))
         (is (= "foo"    (:data node)))
         (is (= "person" (:type node))))
 
-      (assoc-node! :friends 1 :data "zap")
-      (let [node (get-node :friends 1)]
+      (assoc-node! :enemies 1 :data "zap")
+      (let [node (get-node :enemies 1)]
         (is (= 1        (:id node)))
         (is (= "zap"    (:data node)))
         (is (= "person" (:type node))))
 
-      (update-node! :friends 1 #(assoc % :data "bar"))
+      (update-node! :enemies 1 #(assoc % :data "bar"))
+      (let [node (get-node :enemies 1)]
+        (is (= 1        (:id node)))
+        (is (= "bar"    (:data node)))
+        (is (= "person" (:type node))))
+
+      (conj-node! :friends 1 :data "bar" :type "person")
       (let [node (get-node :friends 1)]
         (is (= 1        (:id node)))
         (is (= "bar"    (:data node)))
@@ -79,9 +85,22 @@
           (is (= "bar"    (:data node)))
           (is (= "person" (:type node)))))
 
-      (delete-node! :friends 1)
-      (is (not (node-exists? :friends 1)))
-      (is (= nil (get-node :friends 1)))
+      (testing "cannot change id of node"
+        (let [len (node-len :friends 1)]
+          (conj-node! :friends 1 :id 5) ; should not change id
+          (is (= len (node-len :friends 1)))
+          (is (= 1 (:id (get-node :friends 1)))))
+
+        (assoc-node! :enemies 1 :id 5)
+        (is (= 1 (:id (get-node :enemies 1))))
+
+        (add-node! :enemies 5 :id 6 :data "bar")
+        (is (= 5 (:id (get-node :enemies 5))))
+        )
+
+      (delete-node! :enemies 1)
+      (is (not (node-exists? :enemies 1)))
+      (is (= nil (get-node :enemies 1)))
       )
     (testing "edges"
       (add-node! :enemies 1 :data "bar")
@@ -126,32 +145,32 @@
         (is (= (edges 2) {:to-id 2, :data "ZAP!"}))
         (is (= (edges 4) {:to-id 4, :data "ZAP!"}))
         (is (= (edges 8) {:to-id 8, :data "spiderman"}))
-        (is (=  5 (count len)))
-        (is (= -1 (first len)))
+        (is (= 6 (count len)))
+        (is (< 0 (first len)))
         ; back through history
-        (let [edges (get-edges :friends 1 (len 1))]
+        (let [edges (get-edges :friends 1 (len 2))]
           (is (= 1 (count edges)))
           (is (= (edges 2) {:to-id 2, :data "since high-school"})))
-        (let [edges (get-edges :friends 1 (len 2))]
+        (let [edges (get-edges :friends 1 (len 3))]
           (is (= 2 (count edges)))
           (is (= (edges 2) {:to-id 2, :data "since high-school"}))
           (is (= (edges 4) {:to-id 4, :data "from work"})))
-        (let [edges (get-edges :friends 1 (len 3))]
+        (let [edges (get-edges :friends 1 (len 4))]
           (is (= 2 (count edges)))
           (is (= (edges 2) {:to-id 2, :data "ZAP!"}))
           (is (= (edges 4) {:to-id 4, :data "from work"})))
-        (let [edges (get-edges :friends 1 (len 4))]
+        (let [edges (get-edges :friends 1 (len 5))]
           (is (= 2 (count edges)))
           (is (= (edges 2) {:to-id 2, :data "ZAP!"}))
           (is (= (edges 4) {:to-id 4, :data "ZAP!"})))
         ))
     (testing "auto-compact"
       (conj-node! :enemies 1 :data "bar" :type "foo")
-      (let [len (node-size :enemies 1)]
+      (let [len (node-len :enemies 1)]
         (conj-node! :enemies 1 :data "baz")
         (if (opt :enemies :auto-compact)
-          (is (= len (node-size :enemies 1)))
-          (is (< len (node-size :enemies 1))))
+          (is (= len (node-len :enemies 1)))
+          (is (< len (node-len :enemies 1))))
       ))
     (testing "callbacks"
       (add-node!    :enemies 11 :type "nemesis" :data "evil")

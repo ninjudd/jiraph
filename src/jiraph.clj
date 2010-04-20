@@ -105,15 +105,15 @@
   ([layer id]     (db-get (*graph* layer) id))
   ([layer id len] (db-get-slice (*graph* layer) id len)))
 
-(defn node-size [layer id]
+(defn node-len [layer id]
   (db-len (*graph* layer) id))
 
 (defn node-exists? [layer id]
-  (not (= -1 (node-size layer id))))
+  (not (= -1 (node-len layer id))))
 
 (defn add-node! [layer id & args]
   {:pre [(not (opt layer :append-only))]}
-  (let [node (make-node layer :id id args)]
+  (let [node (make-node layer args :id id)]
     (with-callbacks :add [layer id node]
       (db-add (*graph* layer) id node))))
 
@@ -121,24 +121,33 @@
   {:pre [(not (opt layer :append-only))]}
   (transaction layer
     (let [old (get-node layer id)
-          new (apply update-fn old args)]
+          new (assoc (apply update-fn old args) :id id)]
       (with-callbacks :update [layer id old new]
         (when-not (= old new)
           (db-set (*graph* layer) id new))))))
 
+(defn compact-node! [layer id]
+  {:pre [(not (opt layer :disable-append))]}
+  (transaction layer
+    (let [node (db-get (*graph* layer) id)
+          node (if (opt layer :append-only) (dissoc node :_len) node)]
+      (db-set (*graph* layer) id node))))
+
 (defn conj-node! [layer id & args]
   {:pre [(not (opt layer :disable-append))]}
-  (let [node (make-node layer args)]
-    (with-callbacks :append [layer id node]
-      (if (opt layer :auto-compact)
-        (transaction layer
-          (db-append (*graph* layer) id node)
-          (db-set (*graph* layer) id (db-get (*graph* layer) id)))
-        (if (opt layer :store-length-on-append)
+  (let [node (dissoc (make-node layer args) :id)]
+    (when-not (empty? node)
+      (with-callbacks :append [layer id node]
+        (if (opt layer :auto-compact)
           (transaction layer
-            (let [node (assoc node :_len [(db-len (*graph* layer) id)])]
-              (db-append (*graph* layer) id node)))
-          (db-append (*graph* layer) id node))))))
+            (db-append (*graph* layer) id node)
+            (compact-node! layer id))
+          (transaction layer
+            (let [len  (node-len layer id)
+                  node (if (= -1 len)
+                         (assoc node :id id)
+                         (if (opt layer :append-only) (assoc node :_len [len]) node))]
+              (db-append (*graph* layer) id node))))))))
 
 (defn delete-node! [layer id]
   (with-callbacks :delete [layer id]
