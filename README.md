@@ -54,7 +54,7 @@ You can also specify options to configure (like the install prefix):
     ant install
 
 Or you can specify custom locations for specific libraries:
-    ant package -Dclojure.jar=$HOME/lib/clojure-1.1.0.jar -Dclojure.jar=$HOME/lib/clojure-contrib-1.1.0.jar \
+    ant package -Dclojure.jar=$HOME/lib/clojure-1.1.0.jar -Dclojure-contrib.jar=$HOME/lib/clojure-contrib-1.1.0.jar \
                 -Dtokyocabinet=$HOME/lib/tokyocabinet-1.4.42 -Djtokyocabinet=$HOME/lib/tokyocabinet-java-1.22
 
 This code has been tested with clojure version 1.1.0 and tokyocabinet version 1.4.42.
