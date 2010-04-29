@@ -2,7 +2,7 @@
   (:use jiraph.utils)
   (:import tokyocabinet.HDB))
 
-(set! *warn-on-reflection* true)
+;(set! *warn-on-reflection* true)
 
 (def in-transaction? false)
 
