@@ -11,10 +11,6 @@
   <property name="repository.clojure-protobuf" value="git://github.com/ninjudd/clojure-protobuf.git"/>
   <property name="clojure-protobuf.jar" value="lib/clojure-protobuf.jar"/>
 
-  <property name="repository.je" value="http://download.oracle.com/berkeley-db"/>
-  <property name="dep.je" value="je-4.0.92"/>
-  <property name="je.jar" value="lib/${dep.je}.jar"/>
-
   <property name="repository.tokyocabinet" value="http://1978th.net/tokyocabinet"/>
   <property name="dep.tokyocabinet" value="tokyocabinet-1.4.43"/>
   <property name="tokyocabinet" value="lib/${dep.tokyocabinet}"/>
@@ -70,6 +66,7 @@
     <delete file="lib/${dep.tokyocabinet}.tar"/>
     <chmod file="${tokyocabinet}/configure" perm="+x"/>
     <exec dir="${tokyocabinet}" executable="./configure">
+      <env key="CFLAGS" value="-arch x86_64"/>
       <arg value="--prefix=${basedir}/lib/install"/>
     </exec>
   </target>
@@ -99,6 +96,7 @@
       <env key="JAVA_HOME" value="${env.JAVA_HOME}"/>
       <arg value="--prefix=${basedir}/lib/install"/>
     </exec>
+    <replace file="${jtokyocabinet}/Makefile" token=""
   </target>
 
   <available file="${tokyocabinet.jar}" property="has_tokyocabinet_jar"/>
@@ -110,16 +108,6 @@
       <arg value="install"/>
     </exec>
     <copy file="${jtokyocabinet}/tokyocabinet.jar" todir="lib"/>
-  </target>
-
-  <available file="${je.jar}" property="has_je"/>
-  <target name="fetch_je" depends="init" unless="has_je">
-    <get src="${repository.je}/${dep.je}.tar.gz"
-         dest="lib/${dep.je}.tar.gz" usetimestamp="true"/>
-    <gunzip src="lib/${dep.je}.tar.gz"/>
-    <untar src="lib/${dep.je}.tar" dest="lib"/>
-    <delete file="lib/${dep.je}.tar"/>
-    <copy file="lib/${dep.je}/lib/${dep.je}.jar" todir="lib"/>
   </target>
 
   <target name="install" depends="make_tokyocabinet,make_jtokyocabinet">
@@ -172,7 +160,6 @@
     <pathelement location="${clojure-contrib.jar}"/>
     <pathelement location="${tokyocabinet.jar}"/>
     <pathelement location="${clojure-protobuf.jar}"/>
-    <pathelement location="${je.jar}"/>
     <pathelement location="src"/>
     <pathelement location="classes"/>
   </path>
