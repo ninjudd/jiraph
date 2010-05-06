@@ -66,7 +66,6 @@
     <delete file="lib/${dep.tokyocabinet}.tar"/>
     <chmod file="${tokyocabinet}/configure" perm="+x"/>
     <exec dir="${tokyocabinet}" executable="./configure">
-      <env key="CFLAGS" value="-arch x86_64"/>
       <arg value="--prefix=${basedir}/lib/install"/>
     </exec>
   </target>
@@ -96,7 +95,6 @@
       <env key="JAVA_HOME" value="${env.JAVA_HOME}"/>
       <arg value="--prefix=${basedir}/lib/install"/>
     </exec>
-    <replace file="${jtokyocabinet}/Makefile" token=""
   </target>
 
   <available file="${tokyocabinet.jar}" property="has_tokyocabinet_jar"/>
