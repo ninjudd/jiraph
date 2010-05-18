@@ -1,4 +1,4 @@
-(ns test.jiraph
+(ns test-core
   (:use jiraph)
   (:use protobuf)
   (:use clojure.test))
@@ -6,18 +6,11 @@
 (defn append-actions [layer id & args]
   (conj-node! :actions id layer [(into [jiraph/*callback* id] args)]))
 
-(defgraph proto-graph
-  :path "/tmp/jiraph-proto-test" :proto test.jiraph.Proto$Node :create true :bnum 1000000
-  (layer :friends :append-only true)
-  (layer :enemies :auto-compact true :post-write append-actions)
-  (layer :actions :append-only true :proto nil))
-
 (defgraph graph
   :path "/tmp/jiraph-test" :create true :bnum 1000000
   (layer :friends :append-only true)
   (layer :enemies :auto-compact false :post-write append-actions)
   (layer :actions :append-only true))
-
 
 (defmacro with-each-graph [graphs & body]
   `(doseq [g# ~graphs]
@@ -25,7 +18,7 @@
        ~@body)))
 
 (defn clear-graphs [f]
-  (with-each-graph [graph proto-graph]
+  (with-each-graph [graph]
     (truncate-graph!))
   (f))
 
@@ -36,15 +29,12 @@
     (assoc m :data (.toUpperCase data))))
 
 (deftest layer-meta-accessors
-  (with-each-graph [graph proto-graph]
+  (with-each-graph [graph]
     (assoc-layer-meta! :friends :version 4)
     (is (= {:version 4} (layer-meta :friends)))))
 
-(deftest field-to-layer-map
-  (is (= {:data :friends, :type :friends} (field-to-layer proto-graph :friends :enemies))))
-
 (deftest graph-access
-  (with-each-graph [graph proto-graph]
+  (with-each-graph [graph]
     (testing "nodes"
       (is (not (node-exists? :enemies 1)))
       (add-node! :enemies 1 :type "person" :data "foo")
@@ -162,16 +152,16 @@
         (let [edges (get-edges :friends 1 (len 5))]
           (is (= 2 (count edges)))
           (is (= (edges 2) {:to-id 2, :data "ZAP!"}))
-          (is (= (edges 4) {:to-id 4, :data "ZAP!"})))
-        ))
+          (is (= (edges 4) {:to-id 4, :data "ZAP!"})))))
+    
     (testing "auto-compact"
       (conj-node! :enemies 1 :data "bar" :type "foo")
       (let [len (node-len :enemies 1)]
         (conj-node! :enemies 1 :data "baz")
         (if (opt :enemies :auto-compact)
           (is (= len (node-len :enemies 1)))
-          (is (< len (node-len :enemies 1))))
-      ))
+          (is (< len (node-len :enemies 1))))))
+    
     (testing "callbacks"
       (add-node!    :enemies 11 :type "nemesis" :data "evil")
       (add-node!    :enemies 15 :type "rival"   :data "bad")
@@ -189,6 +179,5 @@
         (is (= [:post-add 15 {:id 15, :type "rival", :data "bad"}]         ((actions :enemies) 0)))
         (is (= [:post-update 15 {:id 15, :type "rival", :data "bad"}
                                 {:id 15, :type "arch-rival", :data "bad"}] ((actions :enemies) 1)))
-        (is (= [:post-delete 15]                                           ((actions :enemies) 2))))
-      ))
-)
+        (is (= [:post-delete 15]                                           ((actions :enemies) 2)))))))
+
