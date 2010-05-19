@@ -11,10 +11,6 @@
   <property name="repository.clojure-protobuf" value="git://github.com/ninjudd/clojure-protobuf.git"/>
   <property name="clojure-protobuf.jar" value="lib/clojure-protobuf.jar"/>
 
-  <property name="repository.je" value="http://download.oracle.com/berkeley-db"/>
-  <property name="dep.je" value="je-4.0.92"/>
-  <property name="je.jar" value="lib/${dep.je}.jar"/>
-
   <property name="repository.tokyocabinet" value="http://1978th.net/tokyocabinet"/>
   <property name="dep.tokyocabinet" value="tokyocabinet-1.4.43"/>
   <property name="tokyocabinet" value="lib/${dep.tokyocabinet}"/>
@@ -30,10 +26,14 @@
   <condition property="env.JAVA_HOME" value="/Library/Java/Home">
     <and>
       <not><isset property="env.JAVA_HOME"/></not>
-      <os family="unix"/>
-      <os family="mac"/>
+      <os family="unix"/><os family="mac"/>
     </and>
   </condition>
+
+  <condition property="copy_flags" value="-Rf">
+    <and><os family="unix"/><os family="mac"/></and>
+  </condition>
+  <property name="copy_flags" value="-RTf"/>
 
   <target name="init">
     <mkdir dir="lib"/>
@@ -108,20 +108,10 @@
     <copy file="${jtokyocabinet}/tokyocabinet.jar" todir="lib"/>
   </target>
 
-  <available file="${je.jar}" property="has_je"/>
-  <target name="fetch_je" depends="init" unless="has_je">
-    <get src="${repository.je}/${dep.je}.tar.gz"
-         dest="lib/${dep.je}.tar.gz" usetimestamp="true"/>
-    <gunzip src="lib/${dep.je}.tar.gz"/>
-    <untar src="lib/${dep.je}.tar" dest="lib"/>
-    <delete file="lib/${dep.je}.tar"/>
-    <copy file="lib/${dep.je}/lib/${dep.je}.jar" todir="lib"/>
-  </target>
-
   <target name="install" depends="make_tokyocabinet,make_jtokyocabinet">
     <echo message="Installing to ${install_prefix}/"/>
     <exec executable="cp" failonerror="true">
-      <arg line="-Rf ${basedir}/lib/install/ ${install_prefix}"/>
+      <arg line="${copy_flags} ${basedir}/lib/install/ ${install_prefix}"/>
     </exec>
     <exec dir="lib/clojure-protobuf" executable="ant" failonerror="true">
       <arg line="install -Dinstall_prefix=${install_prefix}"/>
@@ -168,7 +158,6 @@
     <pathelement location="${clojure-contrib.jar}"/>
     <pathelement location="${tokyocabinet.jar}"/>
     <pathelement location="${clojure-protobuf.jar}"/>
-    <pathelement location="${je.jar}"/>
     <pathelement location="src"/>
     <pathelement location="classes"/>
   </path>

@@ -26,8 +26,8 @@
         (fn [graph [_ layer & args]]
           (let [opts  (merge opts (apply hash-map args))
                 proto (if (opts :proto) (protodef (eval (opts :proto))))]
-           (assoc graph layer
-              (db-open (-> opts
+          (assoc graph layer
+              (db-init (-> opts
                            (assoc :proto proto)
                            (assoc :path (str (opts :path) "/" (name layer)))
                            (default-callback :write [:add :append :update :delete])
@@ -39,15 +39,25 @@
     (when (opts :create) (.mkdir (File. #^String (opts :path))))
     `(def ~sym ~(reduce open-layer {} layers))))
 
+(defn open-graph [graph]
+  (doall (map db-open (vals graph))))
+
 (defn close-graph [graph]
-  (map db-close (vals graph)))
+  (doall (map db-close (vals graph))))
+
+(defn graph-open? [graph]
+  (db-open? (first (vals graph))))
 
 (declare *graph*)
 (declare *callback*)
 
 (defmacro with-graph [graph & body]
   `(binding [*graph* ~graph]
-     (do ~@body)))
+     (if (graph-open? *graph*)
+       (do ~@body)
+       (try (do (open-graph *graph*)
+                ~@body)
+            (finally (close-graph *graph*))))))
 
 (defn set-graph! [graph]
   (def *graph* graph))
@@ -55,7 +65,7 @@
 (defn graph-layers []
   (keys *graph*))
 
-(defn- opt [layer key]
+(defn opt [layer key]
   ((*graph* layer) key))
 
 (defn- callback [name layer args]
@@ -95,9 +105,15 @@
   ([layer id]     (db-get (*graph* layer) id))
   ([layer id len] (db-get-slice (*graph* layer) id len)))
 
+(defn node-len [layer id]
+  (db-len (*graph* layer) id))
+
+(defn node-exists? [layer id]
+  (not (= -1 (node-len layer id))))
+
 (defn add-node! [layer id & args]
   {:pre [(not (opt layer :append-only))]}
-  (let [node (make-node layer :id id args)]
+  (let [node (make-node layer args :id id)]
     (with-callbacks :add [layer id node]
       (db-add (*graph* layer) id node))))
 
@@ -105,20 +121,33 @@
   {:pre [(not (opt layer :append-only))]}
   (transaction layer
     (let [old (get-node layer id)
-          new (apply update-fn old args)]
+          new (assoc (apply update-fn old args) :id id)]
       (with-callbacks :update [layer id old new]
         (when-not (= old new)
           (db-set (*graph* layer) id new))))))
 
+(defn compact-node! [layer id]
+  {:pre [(not (opt layer :disable-append))]}
+  (transaction layer
+    (let [node (db-get (*graph* layer) id)
+          node (if (opt layer :append-only) (dissoc node :_len) node)]
+      (db-set (*graph* layer) id node))))
+
 (defn conj-node! [layer id & args]
   {:pre [(not (opt layer :disable-append))]}
-  (let [node (make-node layer args)]
-    (with-callbacks :append [layer id node]
-      (if (opt layer :store-length-on-append)
-        (transaction layer
-          (let [node (assoc node :_len [(db-len (*graph* layer) id)])]
-            (db-append (*graph* layer) id node)))
-        (db-append (*graph* layer) id node)))))
+  (let [node (dissoc (make-node layer args) :id)]
+    (when-not (empty? node)
+      (with-callbacks :append [layer id node]
+        (if (opt layer :auto-compact)
+          (transaction layer
+            (db-append (*graph* layer) id node)
+            (compact-node! layer id))
+          (transaction layer
+            (let [len  (node-len layer id)
+                  node (if (= -1 len)
+                         (assoc node :id id)
+                         (if (opt layer :append-only) (assoc node :_len [len]) node))]
+              (db-append (*graph* layer) id node))))))))
 
 (defn delete-node! [layer id]
   (with-callbacks :delete [layer id]
@@ -159,7 +188,9 @@
             to-id (assoc edge :to-id to-id)))))))
 
 (defn assoc-edge! [layer from-id to-id & args]
-  (apply update-edge! layer from-id to-id assoc args))
+  (if (empty? args)
+    (update-edge! layer from-id to-id #(or % {}))
+    (apply update-edge! layer from-id to-id assoc args)))
 
 (defn delete-edge! [layer from-id to-id]
   (update-edges! layer from-id
@@ -175,11 +206,14 @@
     (let [meta (layer-meta layer)]
       (db-set-meta (*graph* layer) (apply assoc meta args)))))
 
-(defn field-to-layer [& layers]
+(defn truncate-graph! []
+  (doall (map db-truncate (vals *graph*))))
+
+(defn field-to-layer [graph & layers]
   (reduce (fn [map layer]
             (reduce (fn [map field]
-                      (if (or (= field :id) (field map) (.startsWith (name field) "_"))
+                      (if (or (= field :id) (= field :edges) (field map) (.startsWith (name field) "_"))
                         map
                         (assoc map field layer)))
-                    map (get-in *graph* [layer :proto-fields])))
+                    map (get-in graph [layer :proto-fields])))
           {} layers))

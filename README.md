@@ -31,13 +31,13 @@ its id if there are multiple types of nodes (e.g. "human:144567", "robot:23131")
 id is stored in the attributes map as `:id`.  Each edge also has a `:to-id` attribute
 specifying which node it connects to. Here is an example node slice with outgoing edges:
 
-  {:id        "human:1445677"
-   :name      "Justin"
-   :nicknames ["Judd" "Huck" "Judd Huck"]
-   :edges     [{:to-id "robot:23131", :type :friend}
-               {:to-id "human:1234",  :type :wife}
-               {:to-id "dog:525152",  :type :pet}]
-  }
+    {:id        "human:1445677"
+     :name      "Justin"
+     :nicknames ["Judd" "Huck" "Judd Huck"]
+     :edges     [{:to-id "robot:23131", :type :friend}
+                 {:to-id "human:1234",  :type :wife}
+                 {:to-id "dog:525152",  :type :pet}]
+    }
 
 ## Performance
 
@@ -54,7 +54,7 @@ You can also specify options to configure (like the install prefix):
     ant install
 
 Or you can specify custom locations for specific libraries:
-    ant package -Dclojure.jar=$HOME/lib/clojure-1.1.0.jar -Dclojure.jar=$HOME/lib/clojure-contrib-1.1.0.jar \
+    ant package -Dclojure.jar=$HOME/lib/clojure-1.1.0.jar -Dclojure-contrib.jar=$HOME/lib/clojure-contrib-1.1.0.jar \
                 -Dtokyocabinet=$HOME/lib/tokyocabinet-1.4.42 -Djtokyocabinet=$HOME/lib/tokyocabinet-java-1.22
 
 This code has been tested with clojure version 1.1.0 and tokyocabinet version 1.4.42.
