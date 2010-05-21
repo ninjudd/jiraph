@@ -6,6 +6,12 @@
 (defn append-actions [layer id & args]
   (conj-node! :actions id layer [(into [jiraph/*callback* id] args)]))
 
+(defgraph proto-graph
+  :path "/tmp/jiraph-proto-test" :proto test.jiraph.Proto$Node :create true :bnum 1000000
+  (layer :friends :append-only true)
+  (layer :enemies :auto-compact true :post-write append-actions)
+  (layer :actions :append-only true :proto nil))
+
 (defgraph graph
   :path "/tmp/jiraph-test" :create true :bnum 1000000
   (layer :friends :append-only true)
@@ -18,7 +24,7 @@
        ~@body)))
 
 (defn clear-graphs [f]
-  (with-each-graph [graph]
+  (with-each-graph [graph proto-graph]
     (truncate-graph!))
   (f))
 
@@ -29,12 +35,15 @@
     (assoc m :data (.toUpperCase data))))
 
 (deftest layer-meta-accessors
-  (with-each-graph [graph]
+  (with-each-graph [graph proto-graph]
     (assoc-layer-meta! :friends :version 4)
     (is (= {:version 4} (layer-meta :friends)))))
 
+(deftest field-to-layer-map
+  (is (= {:data :friends, :type :friends} (field-to-layer proto-graph :friends :enemies))))
+
 (deftest graph-access
-  (with-each-graph [graph]
+  (with-each-graph [graph proto-graph]
     (testing "nodes"
       (is (not (node-exists? :enemies 1)))
       (add-node! :enemies 1 :type "person" :data "foo")
