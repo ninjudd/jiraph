@@ -1,8 +1,8 @@
 (ns jiraph
   (:use jiraph.utils)
   (:use clojure.contrib.java-utils)
-  (:use protobuf)
   (:use jiraph.tc)
+  (:use protobuf)
   (:import java.io.File))
 
 (defn- callback-name [when what]
@@ -25,7 +25,7 @@
         open-layer
         (fn [graph [_ layer & args]]
           (let [opts  (merge opts (apply hash-map args))
-                proto (if (opts :proto) (protodef (eval (opts :proto))))]
+                proto (when (opts :proto) (protodef (eval (opts :proto))))]
           (assoc graph layer
               (db-init (-> opts
                            (assoc :proto proto)
@@ -217,3 +217,4 @@
                         (assoc map field layer)))
                     map (get-in graph [layer :proto-fields])))
           {} layers))
+

@@ -1,4 +1,4 @@
-(ns test.jiraph
+(ns test-core
   (:use jiraph)
   (:use protobuf)
   (:use clojure.test))
@@ -17,7 +17,6 @@
   (layer :friends :append-only true)
   (layer :enemies :auto-compact false :post-write append-actions)
   (layer :actions :append-only true))
-
 
 (defmacro with-each-graph [graphs & body]
   `(doseq [g# ~graphs]
@@ -162,16 +161,16 @@
         (let [edges (get-edges :friends 1 (len 5))]
           (is (= 2 (count edges)))
           (is (= (edges 2) {:to-id 2, :data "ZAP!"}))
-          (is (= (edges 4) {:to-id 4, :data "ZAP!"})))
-        ))
+          (is (= (edges 4) {:to-id 4, :data "ZAP!"})))))
+    
     (testing "auto-compact"
       (conj-node! :enemies 1 :data "bar" :type "foo")
       (let [len (node-len :enemies 1)]
         (conj-node! :enemies 1 :data "baz")
         (if (opt :enemies :auto-compact)
           (is (= len (node-len :enemies 1)))
-          (is (< len (node-len :enemies 1))))
-      ))
+          (is (< len (node-len :enemies 1))))))
+    
     (testing "callbacks"
       (add-node!    :enemies 11 :type "nemesis" :data "evil")
       (add-node!    :enemies 15 :type "rival"   :data "bad")
@@ -189,6 +188,5 @@
         (is (= [:post-add 15 {:id 15, :type "rival", :data "bad"}]         ((actions :enemies) 0)))
         (is (= [:post-update 15 {:id 15, :type "rival", :data "bad"}
                                 {:id 15, :type "arch-rival", :data "bad"}] ((actions :enemies) 1)))
-        (is (= [:post-delete 15]                                           ((actions :enemies) 2))))
-      ))
-)
+        (is (= [:post-delete 15]                                           ((actions :enemies) 2)))))))
+
