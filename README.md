@@ -51,11 +51,7 @@ The easiest way to use Jiraph is via [Leiningen](http://github.com/technomancy/l
     [jiraph "0.1.3-SNAPSHOT"]
 
 Protocol Buffers, if used, should be placed in jiraph/proto and compiled by running:
-    lein proto
-    
-A jar may then be built via:
-    lein deps
-    lein jar
+    lein proto 
 
 This code has been tested with clojure 1.2.0 (snapshot as of 5/20) and tokyocabinet version 1.4.42. A branch for 1.1.0 also exists.
 
