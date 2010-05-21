@@ -45,19 +45,19 @@ For faster performance, Jiraph supports using protocol buffers for node slices a
 
 ## Installation
 
-To download all necessary libraries automatically and install:
-    ant package
-    ant install
+Jiraph requires prior installation of the tokyocabinet libraries in order to work. 
 
-You can also specify options to configure (like the install prefix):
-    ant package -Dconfigure='--prefix=/opt/local'
-    ant install
+The easiest way to use Jiraph is via [Leiningen](http://github.com/technomancy/leiningen). Add the following dependency to your project.clj:
+    [jiraph "0.1.3-SNAPSHOT"]
 
-Or you can specify custom locations for specific libraries:
-    ant package -Dclojure.jar=$HOME/lib/clojure-1.1.0.jar -Dclojure-contrib.jar=$HOME/lib/clojure-contrib-1.1.0.jar \
-                -Dtokyocabinet=$HOME/lib/tokyocabinet-1.4.42 -Djtokyocabinet=$HOME/lib/tokyocabinet-java-1.22
+Protocol Buffers, if used, should be placed in jiraph/proto and compiled by running:
+    lein proto
+    
+A jar may then be built via:
+    lein deps
+    lein jar
 
-This code has been tested with clojure version 1.1.0 and tokyocabinet version 1.4.42.
+This code has been tested with clojure 1.2.0 (snapshot as of 5/20) and tokyocabinet version 1.4.42. A branch for 1.1.0 also exists.
 
 ## java.library.path
 
