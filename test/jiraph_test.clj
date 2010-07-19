@@ -1,4 +1,4 @@
-(ns test-core
+(ns jiraph-test
   (:use jiraph)
   (:use protobuf)
   (:use clojure.test))
