@@ -32,7 +32,7 @@
                            (default-callback :write [:add :append :update :delete])
                            (default-callback :alter [:add :append :update])
                            (assoc-if proto
-                             :proto-fields (vec (protofields proto))
+                             :proto-fields (protofields proto)
                              :dump protobuf-dump
                              :load (partial protobuf-load proto)))))))]
     (when (opts :create) (.mkdir (File. #^String (opts :path))))
@@ -214,6 +214,6 @@
                       (if (or (= field :id) (= field :edges) (field map) (.startsWith (name field) "_"))
                         map
                         (assoc map field layer)))
-                    map (get-in graph [layer :proto-fields])))
+                    map (keys (get-in graph [layer :proto-fields]))))
           {} layers))
 
