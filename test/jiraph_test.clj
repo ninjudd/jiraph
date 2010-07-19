@@ -7,7 +7,7 @@
   (conj-node! :actions id layer [(into [jiraph/*callback* id] args)]))
 
 (defgraph proto-graph
-  :path "/tmp/jiraph-proto-test" :proto test.jiraph.Proto$Node :create true :bnum 1000000
+  :path "/tmp/jiraph-proto-test" :proto jiraph.Test$Node :create true :bnum 1000000
   (layer :friends :append-only true)
   (layer :enemies :auto-compact true :post-write append-actions)
   (layer :actions :append-only true :proto nil))

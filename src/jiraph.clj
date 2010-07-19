@@ -1,6 +1,5 @@
 (ns jiraph
   (:use jiraph.utils)
-  (:use clojure.contrib.java-utils)
   (:use jiraph.tc)
   (:use protobuf)
   (:import java.io.File))

@@ -1,5 +1,4 @@
-(ns jiraph.utils
-  (:use clojure.contrib.math))
+(ns jiraph.utils)
 
 (defn tap [f obj]
   (f obj)
@@ -88,7 +87,7 @@
          items  (vec coll)]
     (if (empty? items)
       slices
-      (let [size (ceil (/ (count items) num))]
+      (let [size (Math/ceil (/ (count items) num))]
         (recur (dec num) (conj slices (subvec items 0 size)) (subvec items size))))))
 
 (defn pcollect [f coll]
