@@ -3,6 +3,28 @@ import "clojure/protobuf/extensions.proto";
 option java_package = "jiraph";
 option java_outer_classname = "Test";
 
+message Foo {
+  optional int32 foo = 1;
+  optional int32 bar = 2;
+  optional int32 baz = 3;
+
+  repeated string tags    = 4;
+  repeated Item   tag_set = 5 [(set) = true];
+  repeated Entry  num_map = 6 [(map) = true];
+
+  optional Foo nested = 7;
+}
+
+message Item {
+  required string item   = 1;
+  required bool   exists = 2 [default = true];
+}
+
+message Entry {
+  required int32  key = 1;
+  required string val = 2;
+}
+
 message Edge {
   required uint32 to_id = 1;
   optional string data  = 2;
