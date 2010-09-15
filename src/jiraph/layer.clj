@@ -23,6 +23,9 @@
 (defmacro transaction [layer & forms]
   `(txn ~layer (fn [] (do ~@forms))))
 
+(defn all-revisions [layer id]
+  (filter pos? (:rev (get-meta layer id))))
+
 (defn revisions [layer id]
   (let [meta (get-meta layer id)]
     (reverse

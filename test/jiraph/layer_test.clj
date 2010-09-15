@@ -58,13 +58,16 @@
         (binding [*rev* 100]
           (is (= node (get-node layer 3))))))
 
-    (testing "compact-node! removes revisions"
+    (testing "compact-node! removes revisions but leaves all-revisions"
       (is (= '(100 101) (revisions layer 3)))
+      (is (= '(100 101) (all-revisions layer 3)))
       (is (= {:bar 3, :baz 8} (compact-node! layer 3)))
-      (is (= () (revisions layer 3))))
+      (is (= () (revisions layer 3)))
+      (is (= '(100, 101) (all-revisions layer 3))))
 
-    (testing "revisions returns an empty list for nodes without revisions"
-      (is (= () (revisions layer 1))))
+    (testing "revisions and all-revisions returns an empty list for nodes without revisions"
+      (is (= () (revisions layer 1)))
+      (is (= () (all-revisions layer 1))))
 
     (testing "incoming keeps track of incoming edges"
       (is (= #{} (incoming layer 1)))
