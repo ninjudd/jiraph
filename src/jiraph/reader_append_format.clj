@@ -20,21 +20,21 @@
         
         :else right))
 
-(defn- read-append [str defaults]
+(defn- read-append [defaults str]
   (with-in-str str
-    (apply merge-with append (read-seq))))
+    (apply merge-with append defaults (read-seq))))
 
 (deftype ReaderAppendFormat [defaults]
   jiraph.byte-append-format/ByteAppendFormat
   
   (load [format data]
     (if data
-      (read-append (String. data) defaults)
+      (read-append defaults (String. data))
       defaults))
   
   (load [format data len]
     (if data
-      (read-append (String. data 0 (inc len)) defaults)
+      (read-append defaults (String. data 0 len))
       defaults))
   
   (dump [format node]

@@ -20,7 +20,13 @@
   (delete-node!  [layer id])
   (truncate!     [layer]))
 
+(defmacro transaction [layer & forms]
+  `(txn ~layer (fn [] (do ~@forms))))
+
 (defn revisions [layer id]
   (let [meta (get-meta layer id)]
     (reverse
      (take-while pos? (reverse (:rev meta))))))
+
+(defn incoming [layer id]
+  (:in (get-meta layer id)))

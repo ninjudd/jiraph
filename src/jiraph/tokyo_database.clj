@@ -28,7 +28,8 @@
   `(or ~form
        (case (.ecode ~'hdb)
          ~HDB/EKEEP false
-         (throw (java.io.IOException. (.errmsg ~'hdb))))))
+         ~HDB/ENOREC false
+         (throw (java.io.IOException. (.errmsg ~'hdb) )))))
 
 (deftype TokyoDatabase [#^HDB hdb opts]
   jiraph.byte-database/ByteDatabase
@@ -47,22 +48,17 @@
   (get [db key] (.get  hdb (str->bytes key)))
   (len [db key] (.vsiz hdb (str->bytes key)))
 
-  (txn [db f]
-    (.tranbegin hdb)
-    (try (let [result (f)]
-           (.trancommit hdb)
-           result)
-         (catch Exception e
-           (.tranabort hdb)
-           (throw e))))
-
   (add!    [db key val] (check (.putkeep hdb (str->bytes key) (bytes val))))
   (put!    [db key val] (check (.put     hdb (str->bytes key) (bytes val))))
   (append! [db key val] (check (.putcat  hdb (str->bytes key) (bytes val))))
-  (inc!    [db key i]   (.inc hdb (str->bytes key) i))
+  (inc!    [db key i]   (.addint hdb (str->bytes key) i))
   
   (delete!   [db key] (check (.out    hdb (str->bytes key))))
-  (truncate! [db]     (check (.vanish hdb))))
+  (truncate! [db]     (check (.vanish hdb)))
+
+  (txn-begin  [db] (.tranbegin  hdb))
+  (txn-commit [db] (.trancommit hdb))
+  (txn-abort  [db] (.tranabort  hdb)))
 
 (defn make [opts]
   (TokyoDatabase. (HDB.) opts))
