@@ -31,6 +31,12 @@
          ~HDB/ENOREC false
          (throw (java.io.IOException. (.errmsg ~'hdb) )))))
 
+(defn- key-seq* [hdb]
+  (lazy-seq
+   (if-let [key (.iternext2 hdb)]
+     (cons key (key-seq* hdb))
+     nil)))
+
 (deftype TokyoDatabase [#^HDB hdb opts]
   jiraph.byte-database/ByteDatabase
 
@@ -43,11 +49,15 @@
       (check (.open hdb path (oflags opts)))))
 
   (close [db] (.close hdb))
-  (sync  [db] (.sync  hdb))
+  (sync! [db] (.sync  hdb))
   
   (get [db key] (.get  hdb (str->bytes key)))
   (len [db key] (.vsiz hdb (str->bytes key)))
 
+  (key-seq [db]
+    (.iterinit hdb)
+    (key-seq* hdb))
+    
   (add!    [db key val] (check (.putkeep hdb (str->bytes key) (bytes val))))
   (put!    [db key val] (check (.put     hdb (str->bytes key) (bytes val))))
   (append! [db key val] (check (.putcat  hdb (str->bytes key) (bytes val))))

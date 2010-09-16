@@ -10,8 +10,9 @@
 
 (def *transactions* #{})
 
+(def meta-prefix "_")
 (defn- meta-key [id]
-  (str "_" id))
+  (str meta-prefix id))
 
 (declare meta-len)
 (defn- get-meta* [layer key rev]
@@ -71,7 +72,7 @@
       {:rev [0 *rev*] :len [nil len]}
       {:rev 0 :len nil})))
 
-(def count-key "__count")
+(def count-key (str meta-prefix meta-prefix "count"))
 
 (defn- inc-count! [layer]
   (db/inc! (.db layer) count-key 1))
@@ -89,9 +90,14 @@
 
   (open  [layer] (db/open  db))
   (close [layer] (db/close db))
-  (sync  [layer] (db/sync  db))
-  (count [layer] (db/inc! db count-key 0))
+  (sync! [layer] (db/sync! db))
 
+  (node-count [layer]
+    (db/inc! db count-key 0))
+  
+  (node-ids [layer]
+    (remove #(.startsWith % meta-prefix) (db/key-seq db)))
+  
   (get-node [layer id]
     (if-let [length (if *rev* (len layer id *rev*))]
       (f/load format (db/get db id) length)
@@ -124,6 +130,20 @@
         (set-incoming! layer true id (keys (:edges attrs)))
         attrs)))
 
+  (append-node! [layer id attrs]
+    (when-not (empty? attrs)
+      (transaction layer
+        (let [len  (db/len db id)
+              node (make-node attrs)
+              data (f/dump format node)]
+          (db/append! db id data)
+          (if (= -1 len)
+            (inc-count! layer))
+          (set-len! layer id (+ (max len 0) (alength data)))
+          (set-incoming! layer true  id (keys (remove-vals :deleted (:edges attrs))))
+          (set-incoming! layer false id (keys (filter-vals :deleted (:edges attrs))))
+          node))))
+  
   (update-node! [layer id f args]
     (transaction layer
       (let [old  (get-node layer id)
@@ -139,22 +159,8 @@
           (set-incoming! layer false id (remove new-edges old-edges)))
         new)))
 
-  (assoc-node! [layer id args]
-    (update-node! layer id assoc args))
-
-  (append-node! [layer id attrs]
-    (when-not (empty? attrs)
-      (transaction layer
-        (let [len  (db/len db id)
-              node (make-node attrs)
-              data (f/dump format node)]
-          (db/append! db id data)
-          (if (= -1 len)
-            (inc-count! layer))
-          (set-len! layer id (+ (max len 0) (alength data)))
-          (set-incoming! layer true  id (keys (remove-vals :deleted (:edges attrs))))
-          (set-incoming! layer false id (keys (filter-vals :deleted (:edges attrs))))
-          node))))
+  (assoc-node! [layer id attrs]
+    (update-node! layer id merge [attrs]))
   
   (compact-node! [layer id]
     (update-node! layer id update [:edges (partial remove-vals :deleted)]))

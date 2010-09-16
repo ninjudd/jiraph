@@ -1,12 +1,13 @@
 (ns jiraph.byte-database
-  (:refer-clojure :exclude [get sync]))
+  (:refer-clojure :exclude [get]))
 
 (defprotocol ByteDatabase "Byte-layer backend database"
   (open       [db])
   (close      [db])
-  (sync       [db])
+  (sync!      [db])
   (get        [db key])
   (len        [db key])
+  (key-seq    [db])
   (add!       [db key val])
   (put!       [db key val])
   (append!    [db key val])
