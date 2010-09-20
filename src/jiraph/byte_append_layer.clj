@@ -4,8 +4,9 @@
         [useful :only [update verify zip filter-vals remove-vals]])
   (:require [jiraph.byte-database :as db]
             [jiraph.byte-append-format :as f]
-            [jiraph.reader-append-format :as reader-append-format])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream InputStreamReader]
+            [jiraph.reader-append-format :as reader-append-format]
+            [jiraph.protobuf-append-format :as protobuf-append-format])
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
            [clojure.lang LineNumberingPushbackReader]))
 
 (def *transactions* #{})
@@ -41,8 +42,8 @@
     (let [meta (get-meta* layer key nil)]
       ;; Must shift meta lengths by one since they store the length of the previous revision.
       (find-with (partial >= rev)
-                 (reverse (:_rev meta))
-                 (cons nil (reverse (:_len meta)))))))
+                 (reverse (:mrev meta))
+                 (cons nil (reverse (:mlen meta)))))))
 
 (defn- append-meta! [layer id attrs & [rev]]
   (let [db (.db layer)
@@ -51,7 +52,7 @@
     (transaction layer
       (->> (if rev
              (let [len (db/len db key)]
-               (assoc attrs :_rev rev :_len len))
+               (assoc attrs :mrev rev :mlen len))
              attrs)
            (f/dump mf)
            (db/append! db key)))))
@@ -94,10 +95,10 @@
 
   (node-count [layer]
     (db/inc! db count-key 0))
-  
+
   (node-ids [layer]
     (remove #(.startsWith % meta-prefix) (db/key-seq db)))
-  
+
   (get-node [layer id]
     (if-let [length (if *rev* (len layer id *rev*))]
       (f/load format (db/get db id) length)
@@ -120,7 +121,7 @@
              (catch Exception e
                (db/txn-abort db)
                (throw e))))))
-  
+
   (add-node! [layer id attrs]
     (let [node (make-node attrs)
           data (f/dump format node)]
@@ -143,7 +144,7 @@
           (set-incoming! layer true  id (keys (remove-vals :deleted (:edges attrs))))
           (set-incoming! layer false id (keys (filter-vals :deleted (:edges attrs))))
           node))))
-  
+
   (update-node! [layer id f args]
     (transaction layer
       (let [old  (get-node layer id)
@@ -161,7 +162,7 @@
 
   (assoc-node! [layer id attrs]
     (update-node! layer id merge [attrs]))
-  
+
   (compact-node! [layer id]
     (update-node! layer id update [:edges (partial remove-vals :deleted)]))
 
@@ -172,9 +173,14 @@
           (dec-count! layer)
           (reset-len! layer id)
           (set-incoming! layer false id (keys (:edges node)))))))
-  
+
   (truncate! [layer] (db/truncate! db)))
 
-(defn make [db format]
-  (let [meta-format (reader-append-format/make {:in #{} :rev [] :len [] :_rev [] :_len []})]
-    (ByteAppendLayer. db format meta-format)))
+(defn make [db format & [meta-format]]
+  (ByteAppendLayer.
+   db format
+   (or meta-format
+       (cond (instance? jiraph.reader-append-format.ReaderAppendFormat format)
+             (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
+             (instance? jiraph.protobuf-append-format.ProtobufAppendFormat format)
+             (protobuf-append-format/make jiraph.Meta$Node)))))

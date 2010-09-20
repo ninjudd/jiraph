@@ -21,8 +21,6 @@
           (if (:nolock   opts) HDB/ONOLCK  0)
           (if (:noblock  opts) HDB/OLCKNB  0))))
 
-(defmacro str->bytes [s]
-  `(bytes (.getBytes (str ~s))))
 
 (defmacro check [form]
   `(or ~form
@@ -37,7 +35,7 @@
      (cons key (key-seq* hdb))
      nil)))
 
-(deftype TokyoDatabase [#^HDB hdb opts]
+(deftype TokyoDatabase [#^HDB hdb opts key-format]
   jiraph.byte-database/ByteDatabase
 
   (open [db]
@@ -51,24 +49,26 @@
   (close [db] (.close hdb))
   (sync! [db] (.sync  hdb))
   
-  (get [db key] (.get  hdb (str->bytes key)))
-  (len [db key] (.vsiz hdb (str->bytes key)))
+  (get [db key] (.get  hdb (key-format key)))
+  (len [db key] (.vsiz hdb (key-format key)))
 
   (key-seq [db]
     (.iterinit hdb)
     (key-seq* hdb))
     
-  (add!    [db key val] (check (.putkeep hdb (str->bytes key) (bytes val))))
-  (put!    [db key val] (check (.put     hdb (str->bytes key) (bytes val))))
-  (append! [db key val] (check (.putcat  hdb (str->bytes key) (bytes val))))
-  (inc!    [db key i]   (.addint hdb (str->bytes key) i))
+  (add!    [db key val] (check (.putkeep hdb (key-format key) (bytes val))))
+  (put!    [db key val] (check (.put     hdb (key-format key) (bytes val))))
+  (append! [db key val] (check (.putcat  hdb (key-format key) (bytes val))))
+  (inc!    [db key i]   (.addint hdb (key-format key) i))
   
-  (delete!   [db key] (check (.out    hdb (str->bytes key))))
+  (delete!   [db key] (check (.out    hdb (key-format key))))
   (truncate! [db]     (check (.vanish hdb)))
 
   (txn-begin  [db] (.tranbegin  hdb))
   (txn-commit [db] (.trancommit hdb))
   (txn-abort  [db] (.tranabort  hdb)))
 
-(defn make [opts]
-  (TokyoDatabase. (HDB.) opts))
+(defn make [opts & [key-format]]
+  (TokyoDatabase.
+   (HDB.) opts
+   (or key-format #(bytes (.getBytes (str %))))))

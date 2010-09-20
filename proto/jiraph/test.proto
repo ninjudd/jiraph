@@ -26,14 +26,17 @@ message Entry {
 }
 
 message Edge {
-  required uint32 to_id = 1;
-  optional string data  = 2;
+  required string to_id   = 1;
+  optional string a       = 2;
+  optional string b       = 3;
+  optional bool   deleted = 4;
 }
 
 message Node {
-  optional uint32 id   = 1;
-  repeated Edge edges  = 2 [(map_by) = "to_id"];
-  optional string type = 3;
-  optional string data = 4;
-  repeated uint32 _len = 5;
+  optional string id    = 1;
+  repeated Edge   edges = 2 [(map_by) = "to_id"];
+  optional int32  rev   = 3;
+  optional int32  foo   = 4;
+  optional string bar   = 5;
+  repeated int32  baz   = 6;
 }

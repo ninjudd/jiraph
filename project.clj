@@ -3,6 +3,6 @@
   :dependencies [[clojure "1.2.0"]
                  [tokyocabinet "1.23-SNAPSHOT"]
                  [clojure-useful "0.2.9-SNAPSHOT"]
-                 [clojure-protobuf "0.2.10"]]
-  :dev-dependencies [[clojure-protobuf "0.2.10"]]
+                 [clojure-protobuf "0.2.11-SNAPSHOT"]]
+  :dev-dependencies [[clojure-protobuf "0.2.11-SNAPSHOT"]]
   :tasks [protobuf.tasks])
