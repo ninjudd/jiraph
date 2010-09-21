@@ -1,26 +1,26 @@
 (ns jiraph.walk
-  (:use jiraph
-        [useful :only [assoc-in! update-in!]]))
+  (:use [useful :only [assoc-in! update-in! queue conj-vec]])
+  (:require [jiraph.graph :as graph]))
 
-(defclass Step :source :from-id :id :layer :edge)
+(defrecord Step [id from-id layer source edge])
 
 (defn lookup-node [walk layer id]
   (or (@(walk :nodes) [id layer])
-      (let [node (get-node layer id)]
+      (let [node (graph/get-node layer id)]
         (swap! (walk :nodes) assoc-in! [[id layer]] node)
         node)))
 
 (defn walked? [walk step]
-  (some #(and (= (step :from-id) (% :from-id)) (= (step :layer) (% :layer)))
-        (get-in walk [:steps (step :id)])))
+  (some #(and (= (:from-id step) (:from-id %)) (= (:layer step) (:layer %)))
+        (get-in walk [:steps (:id step)])))
 
 (defn back? [step]
-  (= (step :id)
+  (= (:id step)
      (get-in step [:source :from-id])))
 
 (defmacro defwalkfn [fn-name args default]
   (let [key (keyword (name fn-name))]
-    `(defn ~fn-name ~args
+    `(defn- ~fn-name ~args
        (if-let [f# (~(first args) ~key)]
          (if (fn? f#) (f# ~@args) f#)
          ~default))))
@@ -30,10 +30,10 @@
 (defwalkfn add?      [walk step] true)
 
 (defwalkfn layers [walk step]
-  (graph-layers))
+  (graph/layers))
 
 (defwalkfn node-ids [walk layer step]
-  [(step :id)])
+  [(:id step)])
 
 (defwalkfn init-step [walk step]
   step)
@@ -42,7 +42,7 @@
   to-step)
 
 (defn- add-node [walk step]
-  (let [id (step :id)]
+  (let [id (:id step)]
     (if (or (get-in walk [:include? id]) (not (add? walk step)))
       walk
       (-> walk
@@ -51,7 +51,7 @@
           (assoc-in!  [:include? id] true)))))
 
 (defn- empty-walk [focus-id opts]
-  (let [step (init-step opts (Step :id focus-id))]
+  (let [step (init-step opts (Step. focus-id nil nil nil nil))]
     (transient
      (assoc opts
        :focus-id   focus-id
@@ -60,7 +60,7 @@
        :include?   (transient {})
        :ids        (transient [])
        :count      0
-       :to-follow  (queue step)
+       :to-follow  (queue [step])
        :sort-edges (if-let [s (opts :sort-edges-by)]
                      #(compare (s %1) (s %2))
                      (opts :sort-edges))))))
@@ -78,13 +78,13 @@
     walk
     (-> walk
         (add-node step)
-        (update-in! [:steps (step :id)] conj-vec step)
+        (update-in! [:steps (:id step)] conj-vec step)
         (update-in! [:to-follow] conj step))))
 
 (defn- make-step [walk from-step layer edge]
-  (let [from-id (from-step :id)
-        to-id   (edge :to-id)
-        to-step (Step [from-step from-id to-id layer edge])]
+  (let [from-id (:id from-step)
+        to-id   (:to-id edge)
+        to-step (Step. to-id from-id layer from-step edge)]
     (reduce-step walk from-step to-step)))
 
 (defn- sorted-edges [walk nodes]
@@ -105,7 +105,7 @@
     walk))
 
 (defn walk [focus-id & args]
-  (let [opts  (args-map args)
+  (let [opts  (apply hash-map args)
         limit (opts :limit)]
     (loop [walk (empty-walk focus-id opts)]
       (let [step (-> walk :to-follow first)
@@ -117,7 +117,7 @@
 (defn- make-path [walk step]
   (loop [step step, path ()]
     (if step
-      (recur (step :source) (conj path step))
+      (recur (:source step) (conj path step))
       path)))
 
 (defn paths [walk id]

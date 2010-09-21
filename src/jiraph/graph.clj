@@ -39,6 +39,9 @@
 (defn compact-node! [layer id] (layer/compact-node! (*graph* layer) id))
 (defn delete-node!  [layer id] (layer/delete-node!  (*graph* layer) id))
 
+(defn layers []
+  (keys *graph*))
+
 (defn all-revisions
   ([meta]
      (filter pos? (:rev meta)))
