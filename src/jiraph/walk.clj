@@ -1,6 +1,6 @@
 (ns jiraph.walk
-  (:use jiraph)
-  (:use jiraph.utils))
+  (:use jiraph
+        [useful :only [assoc-in! update-in!]]))
 
 (defclass Step :source :from-id :id :layer :edge)
 
