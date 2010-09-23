@@ -13,17 +13,21 @@
   `(binding [layer/*rev* ~rev]
      ~@forms))
 
-(defn sync! [& layers]
-  (if (empty? layers)
-    (doseq [layer (vals *graph*)]
-      (layer/sync! layer))
-    (doseq [layer layers]
-      (layer/sync! (*graph* layer)))))
-
 (defmacro transaction [layer & forms]
   `(layer/transaction (*graph* ~layer) ~@forms))
 
-(defn truncate!  [layer] (layer/truncate!  (*graph* layer)))
+(defmacro with-each-layer [layers & forms]
+  `(doseq [~'layer (if (empty? ~layers) (vals *graph*) (map *graph* ~layers))]
+     ~@forms))
+
+(defn sync! [& layers]
+  (with-each-layer layers
+    (layer/sync! layer)))
+
+(defn truncate! [& layers]
+  (with-each-layer layers
+    (layer/truncate! layer)))
+
 (defn node-ids   [layer] (layer/node-ids   (*graph* layer)))
 (defn node-count [layer] (layer/node-count (*graph* layer)))
 
