@@ -11,7 +11,7 @@
    :bar (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-bar" :create true}) (paf/make Test$Node))
    :baz (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-baz" :create true}) (raf/make))})
 
-(defwalk Full)
+(defwalk Full :add? true)
 
 (deftest simple-walk
   (with-graph test-graph

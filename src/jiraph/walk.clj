@@ -24,10 +24,13 @@
    :reduce-step   (fn [walk from-step to-step] to-step)
    :sort-edges    (fn [walk edges] edges)})
 
+(defn walk-fn [[name f]]
+  [name (if (fn? f) f (fn [& _] f))])
+
 (defmacro defwalk [name & methods]
   `(do (defrecord ~name ~'[focus-id steps nodes include? ids count to-follow])
        (extend ~name
-         Walk ~(merge default-walk-impl (apply hash-map methods)))))
+         Walk (into default-walk-impl (map walk-fn (partition 2 ~methods))))))
 
 (defn lookup-node [walk layer id]
   (or (@(:nodes walk) [id layer])
