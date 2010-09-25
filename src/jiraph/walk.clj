@@ -45,19 +45,19 @@
 
 (defn- add-node [walk step]
   (let [id (:id step)]
-    (if (or (get-in walk [:include? id]) (not (add? walk step)))
+    (if (or ((:include? walk) id) (not (add? walk step)))
       walk
       (-> walk
-          (update-in! [:ids] conj! id)
-          (update-in! [:count] inc)
-          (assoc-in!  [:include? id] true)))))
+          (update-in [:include?] conj! id)
+          (update-in [:ids]      conj! id)
+          (update-in [:count]    inc)))))
 
 (defn- persist-walk! [walk]
   (swap! (:nodes walk) persistent!)
   (-> walk
-      (update-in [:steps] persistent!)
       (update-in [:include?] persistent!)
-      (update-in [:ids] persistent!)))
+      (update-in [:ids]      persistent!)
+      (update-in [:steps]    persistent!)))
 
 (defn conj-step [walk step]
   (if (or (back? step) (walked? walk step) (not (traverse? walk step)))
@@ -65,7 +65,7 @@
     (-> walk
         (add-node step)
         (update-in! [:steps (:id step)] conj-vec step)
-        (update-in! [:to-follow] conj step))))
+        (update-in  [:to-follow]        conj step))))
 
 (defn- make-step [walk from-step layer [to-id edge]]
   (let [from-id (:id from-step)
@@ -84,7 +84,7 @@
     walk))
 
 (defn init-walk [type focus-id]
-  (let [walk (construct type focus-id (transient {}) (atom (transient {})) (transient {}) (transient []) 0 (queue))
+  (let [walk (construct type focus-id (transient {}) (atom (transient {})) (transient #{}) (transient []) 0 (queue))
         step (init-step walk (Step. focus-id nil nil nil nil))]
     (conj-step walk step)))
 
@@ -94,18 +94,18 @@
     (loop [walk (init-walk type focus-id)]
       (let [step (-> walk :to-follow first)
             walk (update-in! walk [:to-follow] pop)]
-        (if (or (nil? step) (and limit (< limit (walk :count))))
+        (if (or (nil? step) (and limit (< limit (:count walk))))
           (persist-walk! walk)
           (recur (follow walk step)))))))
 
-(defn- make-path [walk step]
+(defn- make-path [step]
   (loop [step step, path ()]
     (if step
       (recur (:source step) (conj path step))
       path)))
 
 (defn paths [walk id]
-  (map make-path walk (get-in walk [:steps id])))
+  (map make-path (get-in walk [:steps id])))
 
 (defn path [walk id]
-  (make-path walk (first (get-in walk [:steps id]))))
+  (make-path (first (get-in walk [:steps id]))))

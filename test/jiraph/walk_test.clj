@@ -26,7 +26,6 @@
     (add-node! :baz "8" {:edges {"1" {:a "foo"} "2" {:a "bar"}}})
 
     (let [walk (walk Full "1")]
-      (println walk)
       (is (= 8 (:count walk)))
       (is (= ["1" "2" "3" "4" "5" "6" "7" "8"] (:ids walk)))
       (is (= ["1" "2" "4" "8"] (map :id (path walk "8"))))
