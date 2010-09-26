@@ -1,5 +1,5 @@
 (ns jiraph.walk
-  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct]])
+  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map]])
   (:require [jiraph.graph :as graph]))
 
 (defprotocol Walk "Jiraph walk protocol"
@@ -9,8 +9,7 @@
   (follow-layers [walk step])
   (alias-ids     [walk layer step])
   (init-step     [walk step])
-  (reduce-step   [walk from-step to-step])
-  (sort-edges    [walk edges]))
+  (reduce-step   [walk from-step to-step]))
 
 (defrecord Step [id from-id layer source edge])
 
@@ -21,16 +20,15 @@
    :follow-layers (fn [walk step] (graph/layers))
    :alias-ids     (fn [walk layer step] [(:id step)])
    :init-step     (fn [walk step] step)
-   :reduce-step   (fn [walk from-step to-step] to-step)
-   :sort-edges    (fn [walk edges] edges)})
+   :reduce-step   (fn [walk from-step to-step] to-step)})
 
 (defn walk-fn [[name f]]
   [name (if (fn? f) f (fn [& _] f))])
 
 (defmacro defwalk [name & methods]
-  `(do (defrecord ~name ~'[focus-id steps nodes include? ids count to-follow])
+  `(do (defrecord ~name ~'[focus-id steps nodes include? ids count to-follow sort-edges])
        (extend ~name
-         Walk (into default-walk-impl (map walk-fn (partition 2 ~methods))))))
+         Walk (into default-walk-impl (map walk-fn (into-map ~@methods))))))
 
 (defn lookup-node [walk layer id]
   (or (@(:nodes walk) [id layer])
@@ -45,6 +43,9 @@
 (defn back? [step]
   (= (:id step)
      (get-in step [:source :from-id])))
+
+(defn initial? [step]
+  (nil? (:from-id step)))
 
 (defn- add-node [walk step]
   (let [id (:id step)]
@@ -77,7 +78,7 @@
 
 (defn- layer-steps [walk step layer]
   (let [nodes (map (partial lookup-node walk layer) (alias-ids walk layer step))]
-    (map (partial make-step walk step layer) (sort-edges walk (mapcat :edges nodes)))))
+    (map (partial make-step walk step layer) ((:sort-edges walk) (mapcat :edges nodes)))))
 
 (defn follow [walk step]
   (if (follow? walk step)
@@ -86,15 +87,16 @@
               (follow-layers walk step)))
     walk))
 
-(defn init-walk [type focus-id]
-  (let [walk (construct type focus-id (transient {}) (atom (transient {})) (transient #{}) (transient []) 0 (queue))
+(defn init-walk [type focus-id opts]
+  (let [sort (or (:sort-edges opts) identity)
+        walk (construct type focus-id (transient {}) (atom (transient {})) (transient #{}) (transient []) 0 (queue) sort)
         step (init-step walk (Step. focus-id nil nil nil nil))]
     (conj-step walk step)))
 
 (defn walk [type focus-id & opts]
   (let [opts  (apply hash-map opts)
         limit (opts :limit)]
-    (loop [walk (init-walk type focus-id)]
+    (loop [walk (init-walk type focus-id opts)]
       (let [step (-> walk :to-follow first)
             walk (update-in! walk [:to-follow] pop)]
         (if (or (nil? step) (and limit (< limit (:count walk))))

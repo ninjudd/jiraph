@@ -1,4 +1,5 @@
 (ns jiraph.graph
+  (:use [useful :only [into-map]])
   (:require [jiraph.layer :as layer]))
 
 (def *graph* nil)
@@ -35,9 +36,9 @@
 (defn get-meta     [layer id] (layer/get-meta     (*graph* layer) id))
 (defn node-exists? [layer id] (layer/node-exists? (*graph* layer) id))
 
-(defn add-node!    [layer id attrs]    (layer/add-node!    (*graph* layer) id attrs))
-(defn append-node! [layer id attrs]    (layer/append-node! (*graph* layer) id attrs))
-(defn assoc-node!  [layer id attrs]    (layer/assoc-node!  (*graph* layer) id attrs))
+(defn add-node!    [layer id & attrs]  (layer/add-node!    (*graph* layer) id (into-map attrs)))
+(defn append-node! [layer id & attrs]  (layer/append-node! (*graph* layer) id (into-map attrs)))
+(defn assoc-node!  [layer id & attrs]  (layer/assoc-node!  (*graph* layer) id (into-map attrs)))
 (defn update-node! [layer id f & args] (layer/update-node! (*graph* layer) id f args))
 
 (defn compact-node! [layer id] (layer/compact-node! (*graph* layer) id))
