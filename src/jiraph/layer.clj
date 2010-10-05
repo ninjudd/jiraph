@@ -9,6 +9,8 @@
   (truncate!     [layer]           "Removes all node data from the layer.")
   (node-count    [layer]           "Return the total number of nodes in this layer.")
   (node-ids      [layer]           "Return a lazy sequence of all node ids in this layer.")
+  (get-property  [layer key]       "Fetch a layer-wide property.")
+  (set-property! [layer key val]   "Store a layer-wide property.")
   (txn           [layer f]         "Wrap the function f in a transaction.")
   (get-node      [layer id]        "Fetch a node.")
   (get-meta      [layer id]        "Fetch the meta-node (contains incoming edges and revision data).")

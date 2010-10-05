@@ -32,6 +32,14 @@
 (defn node-ids   [layer] (layer/node-ids   (*graph* layer)))
 (defn node-count [layer] (layer/node-count (*graph* layer)))
 
+(defn get-property  [layer key]     (layer/get-property  (*graph* layer) key))
+(defn set-property! [layer key val] (layer/set-property! (*graph* layer) key val))
+
+(defn update-property! [layer key f & args]
+  (transaction layer
+    (let [val (get-property layer key)]
+      (set-property! layer key (apply f val args)))))
+
 (defn get-node     [layer id] (layer/get-node     (*graph* layer) id))
 (defn get-meta     [layer id] (layer/get-meta     (*graph* layer) id))
 (defn node-exists? [layer id] (layer/node-exists? (*graph* layer) id))
