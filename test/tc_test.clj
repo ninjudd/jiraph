@@ -1,4 +1,4 @@
-(ns test-tc
+(ns tc-test
   (:use jiraph.tc)
   (:use jiraph.utils)
   (:use clojure.test))
