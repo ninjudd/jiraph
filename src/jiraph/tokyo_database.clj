@@ -1,5 +1,6 @@
 (ns jiraph.tokyo-database
-  (:require jiraph.byte-database)
+  (:use [useful :only [into-map]])
+  (:require jiraph.byte-database)  
   (:import [tokyocabinet HDB]))
 
 (def compress
@@ -68,7 +69,8 @@
   (txn-commit [db] (.trancommit hdb))
   (txn-abort  [db] (.tranabort  hdb)))
 
-(defn make [opts & [key-format]]
-  (TokyoDatabase.
-   (HDB.) opts
-   (or key-format #(bytes (.getBytes (str %))))))
+(defn make [& opts]
+  (let [opts (into-map opts)]
+    (TokyoDatabase.
+     (HDB.) opts
+     (or (:key-format opts) #(bytes (.getBytes (str %)))))))
