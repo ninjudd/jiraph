@@ -44,6 +44,7 @@
           bnum (or (:bnum opts)  0)
           apow (or (:apow opts) -1)
           fpow (or (:fpow opts) -1)]
+      (.mkdirs (.getParentFile (java.io.File. path)))
       (check (.tune hdb bnum apow fpow (tflags opts)))
       (check (.open hdb path (oflags opts)))))
 
