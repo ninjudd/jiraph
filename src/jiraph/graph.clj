@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map]])
+  (:use [useful :only [into-map update remove-keys-by-val remove-vals]])
   (:require [jiraph.layer :as layer]))
 
 (def *graph* nil)
@@ -15,7 +15,10 @@
      ~@forms))
 
 (defmacro transaction [layer & forms]
-  `(layer/transaction (*graph* ~layer) ~@forms))
+  `(let [layer#  (*graph* ~layer)
+         result# (layer/transaction layer# ~@forms)]
+     (layer/sync! layer#)
+     result#))
 
 (defmacro with-each-layer [layers & forms]
   `(doseq [~'layer (if (empty? ~layers) (vals *graph*) (map *graph* ~layers))]
@@ -41,35 +44,61 @@
       (set-property! layer key (apply f val args)))))
 
 (defn get-node     [layer id] (layer/get-node     (*graph* layer) id))
-(defn get-meta     [layer id] (layer/get-meta     (*graph* layer) id))
 (defn node-exists? [layer id] (layer/node-exists? (*graph* layer) id))
 
-(defn add-node!    [layer id & attrs]  (layer/add-node!    (*graph* layer) id (into-map attrs)))
-(defn append-node! [layer id & attrs]  (layer/append-node! (*graph* layer) id (into-map attrs)))
-(defn assoc-node!  [layer id & attrs]  (layer/assoc-node!  (*graph* layer) id (into-map attrs)))
-(defn update-node! [layer id f & args] (layer/update-node! (*graph* layer) id f args))
+(defn add-node! [layer id & attrs]
+  (let [layer (*graph* layer)
+        node  (layer/add-node! layer id (into-map attrs))]
+    (doseq [[to-id edge] (:edges node)]
+      (if-not (:deleted edge)
+        (layer/add-incoming! layer to-id id)))
+    node))
 
-(defn compact-node! [layer id] (layer/compact-node! (*graph* layer) id))
-(defn delete-node!  [layer id] (layer/delete-node!  (*graph* layer) id))
+(defn append-node! [layer id & attrs]
+  (let [layer (*graph* layer)
+        node  (layer/append-node! layer id (into-map attrs))]
+    (doseq [[to-id edge] (:edges node)]
+      (if (:deleted edge)
+        (layer/drop-incoming! layer to-id id)
+        (layer/add-incoming!  layer to-id id)))
+    node))
+
+(defn update-node! [layer id f & args]
+  (let [layer     (*graph* layer)
+        [old new] (layer/update-node! layer id f args)]
+    (let [new-edges (set (remove-keys-by-val :deleted (:edges new)))
+          old-edges (set (remove-keys-by-val :deleted (:edges old)))]
+      (doseq [to-id (remove old-edges new-edges)]
+        (layer/add-incoming! layer to-id id))
+      (doseq [to-id (remove new-edges old-edges)]
+        (layer/drop-incoming! layer to-id id)))
+    [old new]))
+
+(defn delete-node! [layer id]
+  (let [layer (*graph* layer)
+        node  (layer/delete-node! layer id)]
+    (doseq [[to-id edge] (:edges node)]
+      (if-not (:deleted edge)
+        (layer/drop-incoming! layer to-id id)))))
+
+(defn assoc-node!
+  "Associate attrs with a node."
+  [layer id & attrs]
+  (apply update-node! layer id merge attrs))
+
+(defn compact-node!
+  "Compact a node by removing deleted edges. This will also collapse appended revisions."
+  [layer id]
+  (update-node! layer id update :edges (partial remove-vals :deleted)))
 
 (defn layers []
   (keys *graph*))
 
-(defn all-revisions
-  ([meta]
-     (filter pos? (:rev meta)))
-  ([layer id]
-     (all-revisions (get-meta layer id))))
+(defn get-all-revisions [layer id]
+  (filter pos? (layer/get-revisions (*graph* layer) id)))
 
-(defn revisions
-  ([meta]
-     (reverse
-      (take-while pos? (reverse (:rev meta)))))
-  ([layer id]
-     (revisions (get-meta layer id))))
+(defn get-revisions [layer id]
+  (reverse
+   (take-while pos? (reverse (layer/get-revisions (*graph* layer) id)))))
 
-(defn incoming
-  ([meta]
-     (:in meta))
-  ([layer id]
-     (:in (get-meta layer id))))
+(defn get-incoming [layer id] (layer/get-incoming (*graph* layer) id))

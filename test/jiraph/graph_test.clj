@@ -14,7 +14,7 @@
   (with-graph test-graph
     (doseq [layer (keys test-graph)]
       (truncate! layer)
-
+      
       (testing "add-node! won't overwrite existing node"
         (let [node {:id "1" :foo 2 :bar "three"}]
           (is (= node (add-node! layer "1" node)))
@@ -23,13 +23,14 @@
           (is (= node (get-node layer "1")))))
 
       (testing "assoc-node! modifies specific attributes"
-        (let [node {:id "1" :foo 54 :bar "three" :baz [1 2 3]}]
-          (is (= node (assoc-node! layer "1" {:foo 54 :baz [1 2 3]})))
-          (is (= node (get-node layer "1")))))
+        (let [old {:id "1" :foo 2 :bar "three"}
+              new {:id "1" :foo 54 :bar "three" :baz [1 2 3]}]
+          (is (= [old new] (assoc-node! layer "1" {:foo 54 :baz [1 2 3]})))
+          (is (= new (get-node layer "1")))))
 
       (testing "assoc-node! creates node if it doesn't exist"
         (let [node {:id "2" :foo 9 :bar "the answer"}]
-          (is (= node (assoc-node! layer "2" {:foo 9 :bar "the answer"})))
+          (is (= [nil node] (assoc-node! layer "2" {:foo 9 :bar "the answer"})))
           (is (= node (get-node layer "2")))))
 
       (testing "node-ids, node-count and node-exists?"
@@ -41,15 +42,16 @@
           (is (not (node-exists? layer id)))))
 
       (testing "update-node! supports artitrary functions"
-        (let [node {:id "1" :foo 54 :bar "three"}]
-          (is (= node (update-node! layer "1" dissoc :baz)))
-          (is (= node (get-node layer "1"))))
-        (let [node {:id "1" :foo 54 :bar "three" :baz [5]}]
-          (is (= node (update-node! layer "1" assoc :baz [5])))
-          (is (= node (get-node layer "1"))))
-        (let [node {:id "1" :foo 54 :baz [5]}]
-          (is (= node (update-node! layer "1" select-keys [:foo :baz])))
-          (is (= node (get-node layer "1")))))
+        (let [node1 {:id "1" :foo 54 :bar "three" :baz [1 2 3]}]
+          (let [node2 {:id "1" :foo 54 :bar "three"}]
+            (is (= [node1 node2] (update-node! layer "1" dissoc :baz)))
+            (is (= node2 (get-node layer "1")))
+            (let [node3 {:id "1" :foo 54 :bar "three" :baz [5]}]
+              (is (= [node2 node3] (update-node! layer "1" assoc :baz [5])))
+              (is (= node3 (get-node layer "1")))
+              (let [node4 {:id "1" :foo 54 :baz [5]}]
+                (is (= [node3 node4] (update-node! layer "1" select-keys [:foo :baz])))
+                (is (= node4 (get-node layer "1"))))))))
 
       (testing "append-node! supports viewing old revisions"
         (let [node  {:id "3" :bar "cat" :baz [5] :rev 100}
@@ -64,28 +66,30 @@
             (is (= node (get-node layer "3"))))))
 
       (testing "compact-node! removes revisions but leaves all-revisions"
-        (is (= '(100 101) (revisions layer "3")))
-        (is (= '(100 101) (all-revisions layer "3")))
-        (is (= {:id "3" :bar "cat", :baz [5 8]} (compact-node! layer "3")))
-        (is (= () (revisions layer "3")))
-        (is (= '(100, 101) (all-revisions layer "3"))))
+        (let [old {:id "3" :bar "cat" :baz [5 8] :rev 101}
+              new {:id "3" :bar "cat", :baz [5 8]}]
+          (is (= '(100 101) (get-revisions layer "3")))
+          (is (= '(100 101) (get-all-revisions layer "3")))
+          (is (= [old new] (compact-node! layer "3")))
+          (is (= () (get-revisions layer "3")))
+          (is (= '(100, 101) (get-all-revisions layer "3")))))
 
       (testing "revisions and all-revisions returns an empty list for nodes without revisions"
-        (is (= () (revisions layer "1")))
-        (is (= () (all-revisions layer "1"))))
+        (is (= () (get-revisions layer "1")))
+        (is (= () (get-all-revisions layer "1"))))
 
-      (testing "incoming keeps track of incoming edges"
-        (is (= #{} (incoming layer "1")))
+      (testing "keeps track of incoming edges"
+        (is (= #{} (get-incoming layer "1")))
         (is (add-node! layer "4" {:edges {"1" {:a "one"}}}))
-        (is (= #{"4"} (incoming layer "1")))
+        (is (= #{"4"} (get-incoming layer "1")))
         (is (add-node! layer "5" {:edges {"1" {:b "two"}}}))
-        (is (= #{"4" "5"} (incoming layer "1")))
+        (is (= #{"4" "5"} (get-incoming layer "1")))
         (is (append-node! layer "5" {:edges {"1" {:deleted true}}}))
-        (is (= #{"4"} (incoming layer "1")))
+        (is (= #{"4"} (get-incoming layer "1")))
         (is (assoc-node! layer "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
-        (is (= #{}  (incoming layer "1")))
-        (is (= #{"4"} (incoming layer "2")))
-        (is (= #{"4"} (incoming layer "3"))))
+        (is (empty? (get-incoming layer "1")))
+        (is (= #{"4"} (get-incoming layer "2")))
+        (is (= #{"4"} (get-incoming layer "3"))))
 
       (testing "layer-wide properties"
         (is (= nil (get-property layer :foo)))

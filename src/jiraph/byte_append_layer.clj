@@ -1,7 +1,7 @@
 (ns jiraph.byte-append-layer
   (:refer-clojure :exclude [sync count])
   (:use jiraph.layer
-        [useful :only [update verify zip filter-vals remove-vals]])
+        [useful :only [find-with]])
   (:require [jiraph.byte-database :as db]
             [jiraph.byte-append-format :as f]
             [jiraph.reader-append-format :as reader-append-format]
@@ -24,30 +24,29 @@
   (str property-prefix key))
 
 (declare meta-len)
-(defn- get-meta* [layer key rev]
+(defn- get-meta [layer key rev]
   (let [db (.db layer)
         mf (.meta-format layer)]
     (if rev
       (f/load mf (db/get db key) (meta-len key rev))
       (f/load mf (db/get db key)))))
 
-(defn find-with
-  "Returns the val corresponding to the first key where (pred key) returns true."
-  [pred keys vals]
-  (last (first (filter (comp pred first) (zip keys vals)))))
-
-(defn- len [layer id rev]
+(defn- len
+  "The byte length of the node at revision rev."
+  [layer id rev]
   (if-not rev
     (db/len (.db layer) id)
-    (let [meta (get-meta* layer (meta-key id) nil)]
+    (let [meta (get-meta layer (meta-key id) nil)]
       (find-with (partial >= rev)
                  (reverse (:rev meta))
                  (reverse (:len meta))))))
 
-(defn- meta-len [layer key rev]
+(defn- meta-len
+  "The byte length of the meta node at revision rev."
+  [layer key rev]
   (if-not rev
     (db/len (.db layer) key)
-    (let [meta (get-meta* layer key nil)]
+    (let [meta (get-meta layer key nil)]
       ;; Must shift meta lengths by one since they store the length of the previous revision.
       (find-with (partial >= rev)
                  (reverse (:mrev meta))
@@ -64,11 +63,6 @@
              attrs)
            (f/dump mf)
            (db/append! db key)))))
-
-(defn- set-incoming! [layer exists from-id to-ids]
-  (let [attrs {:in {from-id exists}}]
-    (doseq [to-id to-ids]
-      (append-meta! layer to-id attrs *rev*))))
 
 (defn- set-len! [layer id len]
   (if *rev*
@@ -121,9 +115,6 @@
                     (f/load format (db/get db id)))]
       (assoc node :id id)))
 
-  (get-meta [layer id]
-    (get-meta* layer (meta-key id) *rev*))
-
   (node-exists? [layer id]
     (< 0 (len layer id *rev*)))
 
@@ -145,7 +136,6 @@
       (when (db/add! db id data)
         (inc-count! layer)
         (set-len! layer id (alength data))
-        (set-incoming! layer true id (keys (:edges attrs)))
         (assoc node :id id))))
 
   (append-node! [layer id attrs]
@@ -158,8 +148,6 @@
           (if (= -1 len)
             (inc-count! layer))
           (set-len! layer id (+ (max len 0) (alength data)))
-          (set-incoming! layer true  id (keys (remove-vals :deleted (:edges attrs))))
-          (set-incoming! layer false id (keys (filter-vals :deleted (:edges attrs))))
           (assoc node :id id)))))
 
   (update-node! [layer id f args]
@@ -171,17 +159,7 @@
         (if (nil? old)
           (inc-count! layer))
         (reset-len! layer id (alength data))
-        (let [new-edges (set (keys (remove-vals :deleted (:edges new))))
-              old-edges (set (keys (remove-vals :deleted (:edges old))))]
-          (set-incoming! layer true  id (remove old-edges new-edges))
-          (set-incoming! layer false id (remove new-edges old-edges)))
-        (assoc new :id id))))
-
-  (assoc-node! [layer id attrs]
-    (update-node! layer id merge [attrs]))
-
-  (compact-node! [layer id]
-    (update-node! layer id update [:edges (partial remove-vals :deleted)]))
+        [(if old (assoc old :id id)) (assoc new :id id)])))
 
   (delete-node! [layer id]
     (transaction layer
@@ -189,7 +167,13 @@
         (when (db/delete! db id)
           (dec-count! layer)
           (reset-len! layer id)
-          (set-incoming! layer false id (keys (:edges node)))))))
+          node))))
+
+  (get-revisions [layer id] (:rev (get-meta layer (meta-key id) *rev*)))
+  (get-incoming  [layer id] (:in  (get-meta layer (meta-key id) *rev*)))
+
+  (add-incoming!  [layer id from-id] (append-meta! layer id {:in {from-id true}}  *rev*))
+  (drop-incoming! [layer id from-id] (append-meta! layer id {:in {from-id false}} *rev*))
 
   (truncate! [layer] (db/truncate! db)))
 
