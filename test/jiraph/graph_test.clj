@@ -10,25 +10,6 @@
   {:tr (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-reader"   :create true}) (raf/make))
    :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))})
 
-(deftest multi-layer
-  (with-graph test-graph
-    (truncate!)
-    (testing "cross-layer-transactions"
-      (let [node {:id "7" :foo 7 :bar "seven"}]
-        (with-transaction [:tr :tp]
-          (is (= node (add-node! :tr "7" node)))
-          (is (= node (add-node! :tp "7" node)))
-          (is (= node (get-node :tr "7")))
-          (is (= node (get-node :tp "7")))
-          (abort-transaction))
-        (is (= nil (get-node :tr "7")))
-        (is (= nil (get-node :tp "7")))
-        (with-transaction [:tp :tr]
-          (is (= node (add-node! :tr "7" node)))
-          (is (= node (add-node! :tp "7" node))))
-        (is (= node (get-node :tr "7")))
-        (is (= node (get-node :tp "7")))))))
-
 (deftest single-layer
   (with-graph test-graph
     (doseq [layer (keys test-graph)]
@@ -112,12 +93,12 @@
 
       (testing "transactions"
         (let [node {:id "7" :foo 7 :bar "seven"}]
-          (with-transaction [layer]
+          (with-transaction layer
             (is (= node (add-node! layer "7" node)))
             (is (= node (get-node layer "7")))
             (abort-transaction))
           (is (= nil (get-node layer "7")))
-          (with-transaction [layer]
+          (with-transaction layer
             (is (= node (add-node! layer "7" node))))
           (is (= node (get-node layer "7")))))
 
@@ -126,4 +107,17 @@
         (is (= [1 2 3] (set-property! layer :foo [1 2 3])))
         (is (= [1 2 3] (get-property layer :foo)))
         (is (= [1 2 3 5] (update-property! layer :foo conj 5)))
-        (is (= [1 2 3 5] (get-property layer :foo)))))))
+        (is (= [1 2 3 5] (get-property layer :foo))))
+
+      (testing ":rev property stores max committed revision"
+        (at-revision 102
+          (with-transaction layer
+            (add-node! layer "8" {:foo 8}))
+          (is (= 8 (:foo (get-node layer "8"))))
+          (is (= 102 (get-property layer :rev)))))
+
+      (testing "past revisions are ignored inside of transactions"
+        (at-revision 101
+          (with-transaction layer
+            (add-node! layer "8" {:foo 9}))
+          (is (= 8 (:foo (get-node layer "8")))))))))

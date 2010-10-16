@@ -56,7 +56,7 @@
   (let [db (.db layer)
         mf (.meta-format layer)
         key (meta-key id)]
-    (with-transaction [layer]
+    (with-transaction layer
       (->> (if rev
              (let [len (db/len db key)]
                (assoc attrs :mrev rev :mlen len))
@@ -140,7 +140,7 @@
 
   (append-node! [layer id attrs]
     (when-not (empty? attrs)
-      (with-transaction [layer]
+      (with-transaction layer
         (let [len  (db/len db id)
               node (make-node attrs)
               data (f/dump format node)]
@@ -151,7 +151,7 @@
           (assoc node :id id)))))
 
   (update-node! [layer id f args]
-    (with-transaction [layer]
+    (with-transaction layer
       (let [old  (get-node layer id)
             new  (make-node (apply f old args))
             data (f/dump format new)]
@@ -162,7 +162,7 @@
         [(if old (assoc old :id id)) (assoc new :id id)])))
 
   (delete-node! [layer id]
-    (with-transaction [layer]
+    (with-transaction layer
       (let [node (get-node layer id)]
         (when (db/delete! db id)
           (dec-count! layer)

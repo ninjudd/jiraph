@@ -14,11 +14,10 @@
   `(binding [layer/*rev* ~rev]
      ~@forms))
 
-(defmacro with-transaction [layers & forms]
+(defmacro with-transaction [layer & forms]  
   `(try
-     (let [result#
-           (layer/with-transaction (map *graph* ~layers) ~@forms)]
-       (sync! ~@layers)
+     (let [result# (layer/with-transaction (*graph* ~layer) ~@forms)]
+       (sync! ~layer)
        result#)
      (catch javax.transaction.TransactionRolledbackException e#)))
 
@@ -44,7 +43,7 @@
 (defn set-property! [layer key val] (layer/set-property! (*graph* layer) key val))
 
 (defn update-property! [layer key f & args]
-  (with-transaction [layer]
+  (with-transaction layer
     (let [val (get-property layer key)]
       (set-property! layer key (apply f val args)))))
 
