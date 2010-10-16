@@ -23,5 +23,10 @@
   (add-incoming!  [layer id from-id] "Add an incoming edge record on id for from-id.")
   (drop-incoming! [layer id from-id] "Remove the incoming edge record on id for from-id."))
 
-(defmacro transaction [layer & forms]
-  `(txn ~layer (fn [] (do ~@forms))))
+(defmacro with-transaction [layers & forms]
+  `(loop [layers# ~layers
+          f# (fn [] (do ~@forms))]
+     (if (empty? layers#)
+       (f#)
+       (recur (rest layers#)
+              (fn [] (txn (first layers#) f#))))))

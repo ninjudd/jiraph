@@ -10,11 +10,30 @@
   {:tr (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-reader"   :create true}) (raf/make))
    :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))})
 
-(deftest graph
+(deftest multi-layer
+  (with-graph test-graph
+    (truncate!)
+    (testing "cross-layer-transactions"
+      (let [node {:id "7" :foo 7 :bar "seven"}]
+        (with-transaction [:tr :tp]
+          (is (= node (add-node! :tr "7" node)))
+          (is (= node (add-node! :tp "7" node)))
+          (is (= node (get-node :tr "7")))
+          (is (= node (get-node :tp "7")))
+          (abort-transaction))
+        (is (= nil (get-node :tr "7")))
+        (is (= nil (get-node :tp "7")))
+        (with-transaction [:tp :tr]
+          (is (= node (add-node! :tr "7" node)))
+          (is (= node (add-node! :tp "7" node))))
+        (is (= node (get-node :tr "7")))
+        (is (= node (get-node :tp "7")))))))
+
+(deftest single-layer
   (with-graph test-graph
     (doseq [layer (keys test-graph)]
       (truncate! layer)
-      
+
       (testing "add-node! won't overwrite existing node"
         (let [node {:id "1" :foo 2 :bar "three"}]
           (is (= node (add-node! layer "1" node)))
@@ -90,6 +109,17 @@
         (is (empty? (get-incoming layer "1")))
         (is (= #{"4"} (get-incoming layer "2")))
         (is (= #{"4"} (get-incoming layer "3"))))
+
+      (testing "transactions"
+        (let [node {:id "7" :foo 7 :bar "seven"}]
+          (with-transaction [layer]
+            (is (= node (add-node! layer "7" node)))
+            (is (= node (get-node layer "7")))
+            (abort-transaction))
+          (is (= nil (get-node layer "7")))
+          (with-transaction [layer]
+            (is (= node (add-node! layer "7" node))))
+          (is (= node (get-node layer "7")))))
 
       (testing "layer-wide properties"
         (is (= nil (get-property layer :foo)))
