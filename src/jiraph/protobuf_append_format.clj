@@ -13,7 +13,10 @@
   
   (dump [format node]
     (protobuf-dump
-     (if (protobuf? node) node (protobuf proto node)))))
+     (if (protobuf? node) node (protobuf proto node))))
+
+  (fields [format]
+    (map first (protofields proto))))
 
 (defn make [proto]
   (ProtobufAppendFormat. (protodef proto)))

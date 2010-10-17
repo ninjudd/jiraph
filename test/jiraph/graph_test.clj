@@ -6,13 +6,11 @@
             [jiraph.protobuf-append-format :as paf])
   (:import [jiraph Test$Node]))
 
-(def test-graph
-  {:tr (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-reader"   :create true}) (raf/make))
-   :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))})
-
-(deftest single-layer
-  (with-graph test-graph
-    (doseq [layer (keys test-graph)]
+(deftest each-layer
+  (with-graph
+    {:tr (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-reader"   :create true}) (raf/make))
+     :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))}
+    (doseq [layer (layers)]
       (truncate! layer)
 
       (testing "add-node! won't overwrite existing node"
@@ -121,3 +119,12 @@
           (with-transaction layer
             (add-node! layer "8" {:foo 9}))
           (is (= 8 (:foo (get-node layer "8")))))))))
+
+(deftest map-field-to-layer
+  (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
+           :b (bal/make (tokyo/make {:path "/tmp/jiraph-test-b"   :create true}) (raf/make {:bam 1 :bap 2}))
+           :c (bal/make (tokyo/make {:path "/tmp/jiraph-test-c"   :create true}) (raf/make {:one 1 :two 2}))}]
+    (is (= {:baz :a, :bar :a, :foo :a,
+            :bap :b, :bam :b,
+            :two :c, :one :c}
+           (field-to-layer g [:a :b :c])))))

@@ -100,6 +100,11 @@
   (node-ids [layer]
     (remove #(.startsWith % meta-prefix) (db/key-seq db)))
 
+  (fields [layer]
+    (remove #(or (contains? #{:id :edges :rev} %)
+                 (.startsWith (str %) "_"))
+            (f/fields format)))
+
   (get-property  [layer key]
     (if-let [bytes (db/get db (property-key key))]
       (read-string (String. bytes))))

@@ -26,7 +26,10 @@
       defaults))
   
   (dump [format node]
-    (.getBytes (pr-str node))))
+    (.getBytes (pr-str node)))
+
+  (fields [format]
+    (keys defaults)))
 
 (defn make [& [defaults]]
   (ReaderAppendFormat. defaults))

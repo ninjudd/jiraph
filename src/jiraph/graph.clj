@@ -14,7 +14,7 @@
   `(binding [layer/*rev* ~rev]
      ~@forms))
 
-(defmacro with-transaction [layer & forms]  
+(defmacro with-transaction [layer & forms]
   `(try
      (let [result# (layer/with-transaction (*graph* ~layer) ~@forms)]
        (sync! ~layer)
@@ -46,6 +46,10 @@
   (with-transaction layer
     (let [val (get-property layer key)]
       (set-property! layer key (apply f val args)))))
+
+(defn current-revision [& layers]
+  (apply max (for [layer (if (empty? layers) (keys *graph*) layers)]
+               (or (get-property layer :revision) 0))))
 
 (defn get-node     [layer id] (layer/get-node     (*graph* layer) id))
 (defn node-exists? [layer id] (layer/node-exists? (*graph* layer) id))
@@ -106,3 +110,9 @@
    (take-while pos? (reverse (layer/get-revisions (*graph* layer) id)))))
 
 (defn get-incoming [layer id] (layer/get-incoming (*graph* layer) id))
+
+(defn field-to-layer [graph layers]
+  (reduce (fn [m layer]
+            (reduce #(assoc %1 %2 layer)
+                    m (layer/fields (graph layer))))
+          {} (reverse layers)))
