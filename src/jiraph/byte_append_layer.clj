@@ -28,7 +28,7 @@
   (let [db (.db layer)
         mf (.meta-format layer)]
     (if rev
-      (f/load mf (db/get db key) (meta-len key rev))
+      (f/load mf (db/get db key) 0 (meta-len key rev))
       (f/load mf (db/get db key)))))
 
 (defn- len
@@ -116,9 +116,9 @@
 
   (get-node [layer id]
     (if-let [node (if-let [length (if *rev* (len layer id *rev*))]
-                    (f/load format (db/get db id) length)
+                    (f/load format (db/get db id) 0 length)
                     (f/load format (db/get db id)))]
-      (assoc node :id id)))
+      node))
 
   (node-exists? [layer id]
     (< 0 (len layer id *rev*)))
@@ -141,7 +141,7 @@
       (when (db/add! db id data)
         (inc-count! layer)
         (set-len! layer id (alength data))
-        (assoc node :id id))))
+        node)))
 
   (append-node! [layer id attrs]
     (when-not (empty? attrs)
@@ -153,7 +153,7 @@
           (if (= -1 len)
             (inc-count! layer))
           (set-len! layer id (+ (max len 0) (alength data)))
-          (assoc node :id id)))))
+          node))))
 
   (update-node! [layer id f args]
     (with-transaction layer
@@ -164,7 +164,7 @@
         (if (nil? old)
           (inc-count! layer))
         (reset-len! layer id (alength data))
-        [(if old (assoc old :id id)) (assoc new :id id)])))
+        [old new])))
 
   (delete-node! [layer id]
     (with-transaction layer

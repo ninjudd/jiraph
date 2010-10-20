@@ -8,8 +8,8 @@
   (load [format data]
     (if data (protobuf-load proto data)))
   
-  (load [format data len]
-    (if data (protobuf-load proto data len)))
+  (load [format data offset len]
+    (if data (protobuf-load proto data offset len)))
   
   (dump [format node]
     (protobuf-dump

@@ -20,9 +20,9 @@
       (read-append defaults (String. data))
       defaults))
   
-  (load [format data len]
+  (load [format data offset len]
     (if data
-      (read-append defaults (String. data 0 len))
+      (read-append defaults (String. data offset len))
       defaults))
   
   (dump [format node]

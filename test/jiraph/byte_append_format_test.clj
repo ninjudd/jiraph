@@ -50,7 +50,4 @@
             data2 (dump format {:nested {:foo 4 :tags ["baz"] :bar 3}})
             data3 (dump format {:nested {:baz 5 :tags ["foo"] :nested {:tag-set {"b" true "c" false}}}})]
         (is (= {:nested {:foo 4 :bar 3 :baz 5 :tags ["bar" "baz" "foo"] :nested {:tag-set #{"a" "b"}}}}
-               (load format (catbytes data1 data2 data3)))))
-      )
-    
-    ))
+               (load format (catbytes data1 data2 data3))))))))

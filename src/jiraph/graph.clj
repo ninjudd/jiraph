@@ -49,7 +49,7 @@
 
 (defn current-revision [& layers]
   (apply max (for [layer (if (empty? layers) (keys *graph*) layers)]
-               (or (get-property layer :revision) 0))))
+               (or (get-property layer :rev) 0))))
 
 (defn get-node     [layer id] (layer/get-node     (*graph* layer) id))
 (defn node-exists? [layer id] (layer/node-exists? (*graph* layer) id))
