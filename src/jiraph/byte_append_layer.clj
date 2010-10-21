@@ -44,13 +44,13 @@
 (defn- meta-len
   "The byte length of the meta node at revision rev."
   [layer key rev]
-  (if-not rev
-    (db/len (.db layer) key)
-    (let [meta (get-meta layer key nil)]
-      ;; Must shift meta lengths by one since they store the length of the previous revision.
-      (find-with (partial >= rev)
-                 (reverse (:mrev meta))
-                 (cons nil (reverse (:mlen meta)))))))
+  (or (if rev
+        (let [meta (get-meta layer key nil)]
+          ;; Must shift meta lengths by one since they store the length of the previous revision.
+          (find-with (partial >= rev)
+                     (reverse (:mrev meta))
+                     (cons nil (reverse (:mlen meta))))))
+      (db/len (.db layer) key)))
 
 (defn- append-meta! [layer id attrs & [rev]]
   (let [db (.db layer)

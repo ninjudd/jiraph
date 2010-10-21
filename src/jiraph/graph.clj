@@ -18,13 +18,15 @@
 (defmacro with-transaction [layer & forms]
   `(try
      (layer/with-transaction (*graph* ~layer)
-       ;; skip revisions that have already been committed
-       (when (or (not layer/*rev*)
-                 (> layer/*rev* (or (get-property ~layer :rev) 0)))
-         (let [result# (do ~@forms)]
-           (if layer/*rev*
-             (set-property! ~layer :rev layer/*rev*))
-           result#)))
+       (if layer/*rev*
+         (let [rev# (or (get-property ~layer :rev) 0)]
+           (if (<= layer/*rev* rev#)
+             (printf "skipping revision: revision [%s] <= current revision [%s]\n" layer/*rev* rev#)
+             (let [result# (do ~@forms)]
+               (if layer/*rev*
+                 (set-property! ~layer :rev layer/*rev*))
+               result#)))
+         (do ~@forms)))
      (catch javax.transaction.TransactionRolledbackException e#)))
 
 (defn abort-transaction []
