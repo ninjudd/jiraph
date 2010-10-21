@@ -14,11 +14,17 @@
   `(binding [layer/*rev* ~rev]
      ~@forms))
 
+
 (defmacro with-transaction [layer & forms]
   `(try
-     (let [result# (layer/with-transaction (*graph* ~layer) ~@forms)]
-       (sync! ~layer)
-       result#)
+     (layer/with-transaction (*graph* ~layer)
+       ;; skip revisions that have already been committed
+       (when (or (not layer/*rev*)
+                 (> layer/*rev* (or (get-property ~layer :rev) 0)))
+         (let [result# (do ~@forms)]
+           (if layer/*rev*
+             (set-property! ~layer :rev layer/*rev*))
+           result#)))
      (catch javax.transaction.TransactionRolledbackException e#)))
 
 (defn abort-transaction []
@@ -54,15 +60,22 @@
 (defn get-node     [layer id] (layer/get-node     (*graph* layer) id))
 (defn node-exists? [layer id] (layer/node-exists? (*graph* layer) id))
 
+(defn append-only? [layer]
+  (let [append-only (:append-only (meta *graph*))]
+    (or (true? append-only)
+        (contains? append-only layer))))
+
 (defn add-node! [layer id & attrs]
+  {:pre [(if (append-only? layer) layer/*rev* true)]}
   (let [layer (*graph* layer)
         node  (layer/add-node! layer id (into-map attrs))]
     (doseq [[to-id edge] (:edges node)]
-      (if-not (:deleted edge)
+      (when-not (:deleted edge)
         (layer/add-incoming! layer to-id id)))
     node))
 
 (defn append-node! [layer id & attrs]
+  {:pre [(if (append-only? layer) layer/*rev* true)]}
   (let [layer (*graph* layer)
         node  (layer/append-node! layer id (into-map attrs))]
     (doseq [[to-id edge] (:edges node)]
@@ -72,6 +85,7 @@
     node))
 
 (defn update-node! [layer id f & args]
+  {:pre [(not (append-only? layer))]}
   (let [layer     (*graph* layer)
         [old new] (layer/update-node! layer id f args)]
     (let [new-edges (set (remove-keys-by-val :deleted (:edges new)))

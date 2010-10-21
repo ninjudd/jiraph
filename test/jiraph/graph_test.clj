@@ -76,19 +76,6 @@
         (is (= () (get-revisions layer "1")))
         (is (= () (get-all-revisions layer "1"))))
 
-      (testing "keeps track of incoming edges"
-        (is (= #{} (get-incoming layer "1")))
-        (is (add-node! layer "4" {:edges {"1" {:a "one"}}}))
-        (is (= #{"4"} (get-incoming layer "1")))
-        (is (add-node! layer "5" {:edges {"1" {:b "two"}}}))
-        (is (= #{"4" "5"} (get-incoming layer "1")))
-        (is (append-node! layer "5" {:edges {"1" {:deleted true}}}))
-        (is (= #{"4"} (get-incoming layer "1")))
-        (is (assoc-node! layer "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
-        (is (empty? (get-incoming layer "1")))
-        (is (= #{"4"} (get-incoming layer "2")))
-        (is (= #{"4"} (get-incoming layer "3"))))
-
       (testing "transactions"
         (let [node {:foo 7 :bar "seven"}]
           (with-transaction layer
@@ -118,7 +105,33 @@
         (at-revision 101
           (with-transaction layer
             (add-node! layer "8" {:foo 9}))
-          (is (= 8 (:foo (get-node layer "8")))))))))
+          (is (= 8 (:foo (get-node layer "8"))))))
+
+      (testing "keeps track of incoming edges"
+        (is (= #{} (get-incoming layer "1")))
+        (is (add-node! layer "4" {:edges {"1" {:a "one"}}}))
+        (is (= #{"4"} (get-incoming layer "1")))
+        (is (add-node! layer "5" {:edges {"1" {:b "two"}}}))
+        (is (= #{"4" "5"} (get-incoming layer "1")))
+        (is (append-node! layer "5" {:edges {"1" {:deleted true}}}))
+        (is (= #{"4"} (get-incoming layer "1")))
+        (is (assoc-node! layer "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
+        (is (empty? (get-incoming layer "1")))
+        (is (= #{"4"} (get-incoming layer "2")))
+        (is (= #{"4"} (get-incoming layer "3"))))
+
+      (testing "keeps track of incoming edges inside with revsions"
+        (at-revision 200
+          (is (add-node! layer "10" {:edges {"11" {:a "one"}}})))
+        (is (= #{"10"} (get-incoming layer "11")))
+        (at-revision 201
+          (is (add-node! layer "12" {:edges {"11" {:a "one"}}})))
+        (is (= #{"10" "12"} (get-incoming layer "11")))
+        (at-revision 202
+          (is (add-node! layer "13" {:edges {"11" {:a "one"}}})))
+        (is (= #{"10" "12" "13"} (get-incoming layer "11")))
+        (at-revision 200
+          (is (= #{"10"} (get-incoming layer "11"))))))))
 
 (deftest map-field-to-layer
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))

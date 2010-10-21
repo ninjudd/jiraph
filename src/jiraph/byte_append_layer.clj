@@ -28,7 +28,7 @@
   (let [db (.db layer)
         mf (.meta-format layer)]
     (if rev
-      (f/load mf (db/get db key) 0 (meta-len key rev))
+      (f/load mf (db/get db key) 0 (meta-len layer key rev))
       (f/load mf (db/get db key)))))
 
 (defn- len
