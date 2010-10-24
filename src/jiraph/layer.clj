@@ -12,7 +12,7 @@
   (fields         [layer]            "A list of canonical fields stored in this layer. Can be empty.")
   (get-property   [layer key]        "Fetch a layer-wide property.")
   (set-property!  [layer key val]    "Store a layer-wide property.")
-  (txn            [layer f]          "Wrap the function f in a transaction.")
+  (transaction    [layer f]          "Call the function f inside a transaction. Should abort on any exception.")
   (get-node       [layer id]         "Fetch a node.")
   (node-exists?   [layer id]         "Check if a node exists in the layer.")
   (add-node!      [layer id attrs]   "Add a node, throwing an exception if it already exists.")
@@ -25,4 +25,4 @@
   (drop-incoming! [layer id from-id] "Remove the incoming edge record on id for from-id."))
 
 (defmacro with-transaction [layer & forms]
-  `(txn ~layer (fn [] ~@forms)))
+  `(transaction ~layer (fn [] ~@forms)))

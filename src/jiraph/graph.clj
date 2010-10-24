@@ -14,24 +14,6 @@
   `(binding [layer/*rev* ~rev]
      ~@forms))
 
-
-(defmacro with-transaction [layer & forms]
-  `(try
-     (layer/with-transaction (*graph* ~layer)
-       (if layer/*rev*
-         (let [rev# (or (get-property ~layer :rev) 0)]
-           (if (<= layer/*rev* rev#)
-             (printf "skipping revision: revision [%s] <= current revision [%s]\n" layer/*rev* rev#)
-             (let [result# (do ~@forms)]
-               (if layer/*rev*
-                 (set-property! ~layer :rev layer/*rev*))
-               result#)))
-         (do ~@forms)))
-     (catch javax.transaction.TransactionRolledbackException e#)))
-
-(defn abort-transaction []
-  (throw (javax.transaction.TransactionRolledbackException.)))
-
 (defmacro with-each-layer [layers & forms]
   `(doseq [~'layer (if (empty? ~layers) (vals *graph*) (map *graph* ~layers))]
      ~@forms))
@@ -51,7 +33,7 @@
 (defn set-property! [layer key val] (layer/set-property! (*graph* layer) key val))
 
 (defn update-property! [layer key f & args]
-  (with-transaction layer
+  (layer/with-transaction (*graph* layer)
     (let [val (get-property layer key)]
       (set-property! layer key (apply f val args)))))
 
@@ -132,3 +114,25 @@
             (reduce #(assoc %1 %2 layer)
                     m (layer/fields (graph layer))))
           {} (reverse layers)))
+
+(defn- skip-past-revisions! [layer f]
+  (let [rev (or (get-property layer :rev) 0)]
+    (if (<= layer/*rev* rev)
+      (printf "skipping revision: revision [%s] <= current revision [%s]\n" layer/*rev* rev)
+      (let [result (f)]
+        (if layer/*rev*
+          (set-property! layer :rev layer/*rev*))
+        result))))
+
+(defn transaction [layer f]
+  (try (layer/with-transaction (*graph* layer)
+         (if layer/*rev*
+           (skip-past-revisions! layer f)
+           (f)))
+     (catch javax.transaction.TransactionRolledbackException e)))
+
+(defmacro with-transaction [layer & forms]
+  `(transaction ~layer (fn [] ~@forms)))
+
+(defn abort-transaction []
+  (throw (javax.transaction.TransactionRolledbackException.)))

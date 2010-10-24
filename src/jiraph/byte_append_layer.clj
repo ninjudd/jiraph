@@ -123,7 +123,7 @@
   (node-exists? [layer id]
     (< 0 (len layer id *rev*)))
 
-  (txn [layer f]
+  (transaction [layer f]
     (if (contains? *transactions* layer)
       (f)
       (binding [*transactions* (conj *transactions* layer)]
