@@ -131,7 +131,7 @@
         (try (let [result (f)]
                (db/txn-commit db)
                result)
-             (catch Exception e
+             (catch Throwable e
                (db/txn-abort db)
                (throw e))))))
 

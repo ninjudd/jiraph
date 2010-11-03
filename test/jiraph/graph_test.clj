@@ -83,6 +83,12 @@
             (is (= node (get-node layer "7")))
             (abort-transaction))
           (is (= nil (get-node layer "7")))
+          (is (thrown? Error
+                       (with-transaction layer
+                         (is (= node (add-node! layer "7" node)))
+                         (is (= node (get-node layer "7")))
+                         (throw (Error.)))))
+          (is (= nil (get-node layer "7")))
           (with-transaction layer
             (is (= node (add-node! layer "7" node))))
           (is (= node (get-node layer "7")))))
