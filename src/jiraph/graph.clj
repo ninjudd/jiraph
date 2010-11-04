@@ -1,6 +1,8 @@
 (ns jiraph.graph
   (:use [useful :only [into-map update remove-keys-by-val remove-vals]])
-  (:require [jiraph.layer :as layer]))
+  (:require [jiraph.layer :as layer]
+            [jiraph.tokyo-database :as tokyo]
+            [jiraph.byte-append-layer :as byte-append-layer]))
 
 (def *graph* nil)
 
@@ -136,3 +138,6 @@
 
 (defn abort-transaction []
   (throw (javax.transaction.TransactionRolledbackException.)))
+
+(defn layer [path]
+  (byte-append-layer/make (tokyo/make {:path path :create true})))

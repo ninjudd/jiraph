@@ -8,7 +8,7 @@
 
 (deftest each-layer
   (with-graph
-    {:tr (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-reader"   :create true}) (raf/make))
+    {:tr (layer "/tmp/jiraph-test-tokyo-reader")
      :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))}
     (doseq [layer (layers)]
       (truncate! layer)

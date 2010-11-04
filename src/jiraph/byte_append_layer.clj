@@ -182,11 +182,12 @@
 
   (truncate! [layer] (db/truncate! db)))
 
-(defn make [db format & [meta-format]]
-  (ByteAppendLayer.
-   db format
-   (or meta-format
-       (cond (instance? jiraph.reader-append-format.ReaderAppendFormat format)
-             (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
-             (instance? jiraph.protobuf-append-format.ProtobufAppendFormat format)
-             (protobuf-append-format/make jiraph.Meta$Node)))))
+(defn make [db & [format meta-format]]
+  (let [format (or format (reader-append-format/make))]
+    (ByteAppendLayer.
+     db format
+     (or meta-format
+         (cond (instance? jiraph.reader-append-format.ReaderAppendFormat format)
+               (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
+               (instance? jiraph.protobuf-append-format.ProtobufAppendFormat format)
+               (protobuf-append-format/make jiraph.Meta$Node))))))
