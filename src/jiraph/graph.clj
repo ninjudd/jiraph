@@ -4,13 +4,27 @@
             [jiraph.tokyo-database :as tokyo]
             [jiraph.byte-append-layer :as byte-append-layer]))
 
-(def *graph* nil)
+(def ^:dynamic *graph* nil)
+
+(defn open! []
+  (dorun (map layer/open (vals *graph*))))
+
+(defn close! []
+  (dorun (map layer/close (vals *graph*))))
 
 (defmacro with-graph [graph & forms]
   `(binding [*graph* ~graph]
-     (try (dorun (map layer/open (vals *graph*)))
+     (try (open!)
           ~@forms
-          (finally (dorun (map layer/close (vals *graph*)))))))
+          (finally (close!)))))
+
+(defmacro with-graph! [graph & forms]
+  `(let [graph# *graph*]
+     (alter-var-root #'*graph* (fn [_#] ~graph))
+     (try (open!)
+          ~@forms
+          (finally (close!)))
+     (alter-var-root #'*graph* (fn [_#] graph#))))
 
 (defmacro at-revision [rev & forms]
   `(binding [layer/*rev* ~rev]
@@ -40,8 +54,8 @@
       (set-property! layer key (apply f val args)))))
 
 (defn current-revision [& layers]
-  (apply max (for [layer (if (empty? layers) (keys *graph*) layers)]
-               (or (get-property layer :rev) 0))))
+  (apply max 0 (for [layer (if (empty? layers) (keys *graph*) layers)]
+                 (or (get-property layer :rev) 0))))
 
 (defn get-node     [layer id] (layer/get-node     (*graph* layer) id))
 (defn node-exists? [layer id] (layer/node-exists? (*graph* layer) id))
