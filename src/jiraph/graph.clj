@@ -125,11 +125,16 @@
 
 (defn get-incoming [layer id] (layer/get-incoming (*graph* layer) id))
 
-(defn field-to-layer [graph layers]
-  (reduce (fn [m layer]
-            (reduce #(assoc %1 %2 layer)
-                    m (layer/fields (graph layer))))
-          {} (reverse layers)))
+(defn field-to-layer
+  "Returns a mapping from field to layer for all the layers provided. If a field appears in more
+   than one layer, the first matching layer will be used. Fields are provided as keywords with
+   internal dashes, but a field-transform function that can be provided to change this."
+  [graph layers & [field-transform]]
+  (let [field-transform (or field-transform identity)]
+    (reduce (fn [m layer]
+              (reduce #(assoc %1 (field-transform %2) layer)
+                      m (layer/fields (graph layer))))
+            {} (reverse layers))))
 
 (defn- skip-past-revisions! [layer f]
   (let [rev (or (get-property layer :rev) 0)]
