@@ -141,7 +141,7 @@
       (when (db/add! db id data)
         (inc-count! layer)
         (set-len! layer id (alength data))
-        node)))
+        (f/load format data))))
 
   (append-node! [layer id attrs]
     (when-not (empty? attrs)
@@ -153,7 +153,7 @@
           (if (= -1 len)
             (inc-count! layer))
           (set-len! layer id (+ (max len 0) (alength data)))
-          node))))
+          (f/load format data)))))
 
   (update-node! [layer id f args]
     (with-transaction layer
@@ -164,7 +164,7 @@
         (if (nil? old)
           (inc-count! layer))
         (reset-len! layer id (alength data))
-        [old new])))
+        [old (f/load format data)])))
 
   (delete-node! [layer id]
     (with-transaction layer
