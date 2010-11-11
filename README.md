@@ -1,4 +1,4 @@
-Jiraph is an embedded graph database for clojure. It is extremely fast and can walk
+Jiraph is an embedded graph database for Clojure. It is extremely fast and can walk
 100,000 edges in about 3 seconds on my laptop. It uses Tokyo Cabinet for backend storage.
 
 ## Multi-layer Graph
