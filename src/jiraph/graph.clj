@@ -1,10 +1,20 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map update remove-keys-by-val remove-vals]])
+  (:use [useful :only [into-map update remove-keys-by-val remove-vals any]])
   (:require [jiraph.layer :as layer]
             [jiraph.tokyo-database :as tokyo]
             [jiraph.byte-append-layer :as byte-append-layer]))
 
 (def ^:dynamic *graph* nil)
+
+(defn edge-ids [node & [pred]]
+  (remove-keys-by-val
+   (if pred
+     (any :deleted (complement pred))
+     :deleted)
+   (:edges node)))
+
+(defn edges [node & [pred]]
+  (select-keys (:edges node) (edge-ids node pred)))
 
 (defn open! []
   (dorun (map layer/open (vals *graph*))))
@@ -88,8 +98,8 @@
   {:pre [(not (append-only? layer))]}
   (let [layer     (*graph* layer)
         [old new] (layer/update-node! layer id f args)]
-    (let [new-edges (set (remove-keys-by-val :deleted (:edges new)))
-          old-edges (set (remove-keys-by-val :deleted (:edges old)))]
+    (let [new-edges (set (edge-ids new))
+          old-edges (set (edge-ids old))]
       (doseq [to-id (remove old-edges new-edges)]
         (layer/add-incoming! layer to-id id))
       (doseq [to-id (remove new-edges old-edges)]
