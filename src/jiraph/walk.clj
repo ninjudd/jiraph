@@ -3,12 +3,12 @@
   (:require [jiraph.graph :as graph]))
 
 (defprotocol Walk "Jiraph walk protocol"
-  (traverse?     [walk step]              "Should this step be traversed and added to the follow queue?")
-  (add?          [walk step]              "Should this step's node be added to the walk results?")
-  (follow?       [walk step]              "Should the edges on this step's node be followed?")
-  (follow-layers [walk step]              "Returns the list of graph layers that should be followed for this step.")
-  (init-step     [walk step]              "Initialize the step that starts the walk.")
-  (reduce-step   [walk from-step to-step] "Update the current step based on the state of the previous step."))
+  (traverse?     [walk step] "Should this step be traversed and added to the follow queue?")
+  (add?          [walk step] "Should this step's node be added to the walk results?")
+  (follow?       [walk step] "Should the edges on this step's node be followed?")
+  (follow-layers [walk step] "Returns the list of graph layers that should be followed for this step.")
+  (init-step     [walk step] "Initialize the step that starts the walk.")
+  (update-step   [walk step] "Update the current step before traversing it based on the walk state."))
 
 (defrecord Step [id from-id layer source edge ids])
 
@@ -18,7 +18,7 @@
    :add?          (fn [walk step] true)
    :follow-layers (fn [walk step] (graph/layers))
    :init-step     (fn [walk step] step)
-   :reduce-step   (fn [walk from-step to-step] to-step)})
+   :update-step   (fn [walk step] step)})
 
 (defn walk-fn [[name f]]
   [name (if (fn? f) f (fn [& _] f))])
@@ -82,7 +82,7 @@
   [walk from-step layer [to-id edge]]
   (let [from-id (:id from-step)
         to-step (Step. to-id from-id layer from-step edge nil)]
-    (reduce-step walk from-step to-step)))
+    (update-step walk to-step)))
 
 (defn- make-layer-steps
   "Create steps for all outgoing edges on this layer for this step's node(s)."
