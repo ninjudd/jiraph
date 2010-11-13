@@ -9,8 +9,6 @@
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
            [clojure.lang LineNumberingPushbackReader]))
 
-(def *transactions* #{})
-
 (def meta-prefix     "_")
 (def internal-prefix "__")
 (def property-prefix "___")
@@ -56,13 +54,11 @@
   (let [db (.db layer)
         mf (.meta-format layer)
         key (meta-key id)]
-    (with-transaction layer
-      (->> (if rev
-             (let [len (db/len db key)]
-               (assoc attrs :mrev rev :mlen len))
-             attrs)
-           (f/dump mf)
-           (db/append! db key)))))
+    (->> (if rev
+           (assoc attrs :mrev rev :mlen (db/len db key))
+           attrs)
+         (f/dump mf)
+         (db/append! db key))))
 
 (defn- set-len! [layer id len]
   (if *rev*
@@ -123,17 +119,15 @@
   (node-exists? [layer id]
     (< 0 (len layer id *rev*)))
 
-  (transaction [layer f]
-    (if (contains? *transactions* layer)
-      (f)
-      (binding [*transactions* (conj *transactions* layer)]
-        (db/txn-begin db)
-        (try (let [result (f)]
-               (db/txn-commit db)
-               result)
-             (catch Throwable e
-               (db/txn-abort db)
-               (throw e))))))
+  (wrap-transaction [layer f]
+    (fn []
+      (db/txn-begin db)
+      (try (let [result (f)]
+             (db/txn-commit db)
+             result)
+           (catch Throwable e
+             (db/txn-abort db)
+             (throw e)))))
 
   (add-node! [layer id attrs]
     (let [node (make-node attrs)
@@ -145,34 +139,31 @@
 
   (append-node! [layer id attrs]
     (when-not (empty? attrs)
-      (with-transaction layer
-        (let [len  (db/len db id)
-              node (make-node attrs)
-              data (f/dump format node)]
-          (db/append! db id data)
-          (if (= -1 len)
-            (inc-count! layer))
-          (set-len! layer id (+ (max len 0) (alength data)))
-          (f/load format data)))))
+      (let [len  (db/len db id)
+            node (make-node attrs)
+            data (f/dump format node)]
+        (db/append! db id data)
+        (if (= -1 len)
+          (inc-count! layer))
+        (set-len! layer id (+ (max len 0) (alength data)))
+        (f/load format data))))
 
   (update-node! [layer id f args]
-    (with-transaction layer
-      (let [old  (get-node layer id)
-            new  (make-node (apply f old args))
-            data (f/dump format new)]
-        (db/put! db id data)
-        (if (nil? old)
-          (inc-count! layer))
-        (reset-len! layer id (alength data))
-        [old (f/load format data)])))
+    (let [old  (get-node layer id)
+          new  (make-node (apply f old args))
+          data (f/dump format new)]
+      (db/put! db id data)
+      (if (nil? old)
+        (inc-count! layer))
+      (reset-len! layer id (alength data))
+      [old (f/load format data)]))
 
   (delete-node! [layer id]
-    (with-transaction layer
-      (let [node (get-node layer id)]
-        (when (db/delete! db id)
-          (dec-count! layer)
-          (reset-len! layer id)
-          node))))
+    (let [node (get-node layer id)]
+      (when (db/delete! db id)
+        (dec-count! layer)
+        (reset-len! layer id)
+        node)))
 
   (get-revisions [layer id] (:rev (get-meta layer (meta-key id) *rev*)))
   (get-incoming  [layer id] (:in  (get-meta layer (meta-key id) *rev*)))

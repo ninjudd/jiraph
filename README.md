@@ -75,6 +75,42 @@ a sample node:
       (get-node :foo "robot-1"))
       ;; {:name "Bender", :edges {"human-1" {:type :friend}}}
 
+## Revisions
+
+You can use `at-revision` to mark changes with a given revision and rewind the state of
+the graph back to that revision later.
+
+    (with-graph g
+      (at-revision 1
+        (add-node! :foo "human-2" {:name "Ceruzzi"}))
+
+      (at-revision 2
+        (append-node! :foo "human-2" {:name "Hatcher"}))
+
+      (:name (get-node :foo "human-2")) ;; "Hatcher"
+
+      (at-revision 1
+        (:name (get-node :foo "human-2"))) ;; "Ceruzzi"
+
+      (:name (get-node :foo "human-2"))) ;; "Hatcher"
+
+
+You can only use at-revision to rewind a layer's state if the layer was updated using only
+add-node! and append-node!. All other update operations are destructive, and nodes modified
+with update-node!, assoc-node! or delete-node! will not exist if you use at revision to go
+back to before they were modified. To ensure that no destructive operations are permitted on
+a layer, you can set :append-only in the metadata on the graph (either a set of layer
+names that are append-only, or true for all layers). Even if a layer is marked append-only,
+you can still call compact-node! to reduce the storage requirement and remove historical data.
+
+Transactions also behave slightly different inside of at-revision. When with-transaction is
+complete, it sets the :rev property on current layer to the current-revision. Also only the 
+first transaction on a layer for a given revision will be applied. Subsequent transactions 
+are assumed to be duplicates. This permits cross-layer transactions to be performed by
+assigning the same revision number to all of them. Then if there is a failure in the middle
+of a revision, the entire revision can be reapplied and layers that have already been updated
+will be skipped.
+
 ## Performance
 
 For faster performance, Jiraph supports using protocol buffers for node slices and edge data.

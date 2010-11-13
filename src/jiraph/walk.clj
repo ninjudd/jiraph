@@ -1,5 +1,6 @@
 (ns jiraph.walk
-  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map]])
+  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map]]
+        [useful.string :only [dasherize]])
   (:require [jiraph.graph :as graph]))
 
 (defprotocol Walk "Jiraph walk protocol"
@@ -12,7 +13,7 @@
 
 (defrecord Step [id from-id layer source edge ids])
 
-(def default-walk-impl  
+(def default-walk-impl
   {:traverse?     (fn [walk step] true)
    :follow?       (fn [walk step] true)
    :add?          (fn [walk step] true)
@@ -24,12 +25,17 @@
   [name (if (fn? f) f (fn [& _] f))])
 
 (defmacro defwalk
-  "Define a new walk based on the default-walk-impl given custom method implementations as maps or key/value pairs."
+  "Define a new walk based on the default-walk-impl given custom method implementations as maps or key/value pairs.
+   Creates a type called name that satisfies the Walk protocol. Also creates a walk function called walk-name using
+   the dasherized version of name (e.g. type: Collaborators walk-fn: walk-collaborators)."
   [name & methods]
-  `(do (defrecord ~name ~'[focus-id steps nodes include? ids count to-follow sort-edges])
-       (extend ~name
-         Walk (into default-walk-impl
-                    (map walk-fn (into-map ~@methods))))))
+  (let [fn-name (symbol (str "walk-" (dasherize name)))]
+    `(do (defrecord ~name ~'[focus-id steps nodes include? ids count to-follow sort-edges])
+         (extend ~name
+           Walk (into default-walk-impl
+                      (map walk-fn (into-map ~@methods))))
+         (defn ~fn-name [& args#]
+           (apply walk ~name args#)))))
 
 (defn lookup-node
   "Get the specified node and cache it in the walk if it isn't already cached."
