@@ -110,8 +110,10 @@
 (defn- init-walk
   "Create an empty walk."
   [type focus-id opts]
-  (let [sort (or (:sort-edges opts) identity)
-        walk (construct type focus-id (transient {}) (atom (transient {})) (transient #{}) (transient []) 0 (queue) sort)
+  (let [walk (merge (construct type focus-id
+                               (transient {}) (atom (transient {})) (transient #{}) (transient [])
+                               0 (queue) identity)
+                    opts)
         step (init-step walk (Step. focus-id nil nil nil nil nil))]
     (traverse walk step)))
 
