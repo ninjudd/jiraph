@@ -151,6 +151,11 @@
   [layer id]
   (layer/get-node (*graph* layer) id))
 
+(defn get-edge
+  "Fetch an edge from node with id to to-id."
+  [layer id to-id]
+  (get-in (get-node layer id) [:edges to-id]))
+
 (defn node-exists?
   "Check if a node exists on this layer."
   [layer id]
