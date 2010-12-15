@@ -23,6 +23,9 @@
 (defn close! []
   (dorun (map layer/close (vals *graph*))))
 
+(defn set-graph! [graph]
+  (alter-var-root #'*graph* (fn [_] graph)))
+
 (defmacro with-graph [graph & forms]
   `(binding [*graph* ~graph]
      (try (open!)
@@ -31,11 +34,11 @@
 
 (defmacro with-graph! [graph & forms]
   `(let [graph# *graph*]
-     (alter-var-root #'*graph* (fn [_#] ~graph))
+     (set-graph! ~graph)
      (try (open!)
           ~@forms
           (finally (close!)))
-     (alter-var-root #'*graph* (fn [_#] graph#))))
+     (set-graph! graph#)))
 
 (defmacro at-revision
   "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
