@@ -1,0 +1,120 @@
+[22:25:10] dsantiago: ninjudd, so what other layers do you want?
+[22:25:30] ninjudd: berkeley db je would be nice
+[22:25:32] ninjudd: and redis perhaps
+[22:26:51] dsantiago: Hm, interesting. Can you do Redis in process?
+[22:27:03] ninjudd: no
+[22:27:05] ninjudd: but it would still be nice
+[22:27:30] ninjudd: I also want to do two different SQL layers
+[22:27:53] ninjudd: one that implements the layer protocol directly
+[22:28:00] ninjudd: and one that implements the byte database
+[22:28:20] dsantiago: Why do it both ways?
+[22:29:01] ninjudd: implementing byte database gives to append support
+[22:29:20] ninjudd: but you lose the ability to query by columns because everything is serialized into a single column
+[22:29:51] dsantiago: Oh, what is append support?
+[22:33:09] ninjudd: if you only use append-node! you can use at-revision to view past versions of the graph
+[22:33:59] dsantiago: Ah, OK. Is there any vacuuming or anything like that, or do you guarantee to keep around  the old versions?
+[22:34:21] ninjudd: all changes are written by appending to the end of the serialized node data
+[22:36:01] ninjudd: you can call compact-node! to remove old revisions
+[22:38:40] dsantiago: OK, so basically the CouchDB policy to old revisions.
+[22:44:10] ninjudd: you can't use couchdb revisions for fetching old versions though
+[22:44:31] ninjudd: I don't think
+[22:45:20] dsantiago: Sure you can.
+[22:46:07] dsantiago: Or wait, maybe I'm confused.
+[22:46:20] dsantiago: So you're halfway between CouchDB and HBase.
+[22:49:00] ninjudd: http://www.mail-archive.com/user@couchdb.apache.org/msg05484.html
+[22:49:03] sexpbot: "Re: revisions and CouchDB as Temporal database"
+[22:50:20] dsantiago: Yeah, I definitely knew they don't have an interpretable time-based meaning, and that there's no guarantee they'll stick around, but I thought you could query for old ones that hadn't been compacted yet.
+[22:51:20] ninjudd: I think you can
+[22:51:23] ninjudd: but you can't know when they will be compacted
+[22:51:40] dsantiago: Yeah, I just can't find anything on how to do it.
+[22:52:04] dsantiago: So are nodes and edges stored in different files?
+[22:52:38] ninjudd: no, edges are stored in the nodes
+[22:52:46] dsantiago: Oh. Then when it says that nodes are in all layers, and if there's several layers, you write the node to each of them?
+[22:53:02] ninjudd: though incoming edges are store separately in the meta-node
+[22:53:14] ninjudd: no, just that in theory, every node exists in all layers
+[22:54:01] ninjudd: but the data and edges are partitioned across layers
+[22:54:14] ninjudd: a given node may not have any data on a specific layer
+[22:54:32] dsantiago: Hm.
+[22:55:09] ninjudd: it is just a semantic distinction I guess. just helps me to think about it
+[23:00:04] dsantiago: I can never use anything until I understand it at a fairly low level.
+[23:02:09] dsantiago: Hm.
+[23:02:14] dsantiago: I don't like having to put a node type into its id.
+[23:04:01] dsantiago: Why can't I add a :type field?
+[23:04:05] ninjudd: isn't putting the type in the id optional?
+[23:05:04] dsantiago: Oh, I don't know, you said that was what you should do in the docs.
+[23:07:19] ninjudd: it is optional
+[23:07:44] ninjudd: conventional, not required
+[23:09:02] dsantiago: Does this have any sort of query support?
+[23:10:00] ninjudd: all queries are written as traversals
+[23:11:09] ninjudd: i may add some form of indexed layers for search-engine type queries too
+[23:11:26] dsantiago: Well, here's what I am thinking.
+[23:12:16] dsantiago: I wonder if you could say define a set of nodes, and then store a bunch of different graphs that are just the edges between those nodes.
+[23:12:38] dsantiago: Is there a sane way to do that in jiraph, or is that just not really how it is meant to work?
+[23:13:30] ninjudd: that fits pretty well
+[23:14:11] ninjudd: each graph could be a separate layer
+[23:14:22] dsantiago: Wouldn't that result in thousands of different files?
+[23:14:33] ninjudd: each graph is a different file
+[23:15:11] dsantiago: Right.
+[23:15:23] ninjudd: maybe I'm not understanding
+[23:16:12] dsantiago: I'm saying, say you wanted to make a game or something that is collaborative. And the game has a set of nodes, but the user fills in the edges. So each user has their own "graph" against the nodes.
+[23:16:45] ninjudd: that's fine. each use would have a separate layer
+[23:17:34] dsantiago: Right, and so if there were thousands of users, that would be thousands of files?
+[23:17:56] ninjudd: yes
+[23:18:04] dsantiago: Hm.
+[23:18:23] dsantiago: That seems wrong.
+[23:18:34] dsantiago: But I don't know why.
+[23:20:04] ninjudd: that's just if you use the tokyo cabinet layer
+[23:20:11] ninjudd: you could implement the SQL adapter with a schema like this
+[23:20:22] ninjudd: key, value, layer
+[23:20:43] ninjudd: then all layers would go in the same table
+[23:20:54] ninjudd: one record per node per layer
+[23:20:59] dsantiago: Yeah, hm. I wonder if the TC layer could be reimplemented to work that way too.
+[23:22:04] ninjudd: could have a version that uses: layer + id for key
+[23:22:09] dsantiago: Yeah.
+[23:23:01] ninjudd: but in our case, we want a separate file per layer
+[23:23:43] dsantiago: Presumably your layers are huge and you don't have so many of them.
+[23:23:54] ninjudd: perhaps I could add a prefix option in addition to path
+[23:24:01] ninjudd: then you could vary the prefix for your behavior or the path for mine
+[23:24:20] ninjudd: prefix would be placed before id when creating the lookup key
+[23:25:21] dsantiago: Hm, well, I kind of like the idea of just having different pluggable layers have totally different storage policy, but I don't know if that would hurt much.
+[23:25:29] ninjudd: more duplicate code I think
+[23:26:04] ninjudd: better to make it an option to the tokyo-database
+[23:28:14] dsantiago: Fair enough, fair enough.
+[23:29:24] dsantiago: Also, I see the term "protocol buffers" and run screaming.
+[23:30:05] ninjudd: hehe. optional
+[23:30:54] dsantiago: Oh, I know, it's just a reflex.
+[23:31:14] ninjudd: but much faster than the clojure reader
+[23:31:24] dsantiago: Don't you have to like compile Java code and sacrifice a goat or something?
+[23:31:34] dsantiago: generated Java
+[23:32:44] ninjudd: the disadvantage is that you have to specify your schema
+[23:32:49] ninjudd: it is easy with the clojure-protobuf cake plugin
+[23:32:51] ninjudd: cake proto
+[23:32:58] ninjudd: or just 'cake compile' 
+[23:32:59] ninjudd: proto adds itself as a dep of compile
+[23:33:04] dsantiago: What's a meta node?
+[23:33:23] ninjudd: stores revision information and incoming edges
+[23:35:01] dsantiago: Jiraph is actually a surprisingly small amount of code.
+[23:35:07] dsantiago: Does it get its own file, or what?
+[23:35:35] ninjudd: so you can traverse edges in the opposite direction
+[23:35:45] ninjudd: no
+[23:36:05] dsantiago: Every node just has a ghost node next to it that is the meta node?
+[23:36:07] ninjudd: only if you are using byte-append-layer
+[23:36:18] ninjudd: other layers can implement it differently
+[23:36:23] ninjudd: but the meta-node contains meta information about the node
+[23:37:03] ninjudd: say for example that node A has edges to B and C
+[23:37:33] ninjudd: node B and C may have no data, but the meta-nodes will still have incoming edges from A
+[23:37:43] dsantiago: Right.
+[23:37:53] dsantiago: I just don't see anything about meta nodes in Layer.
+[23:37:58] dsantiago: Or ByteDatabase.
+[23:37:59] dsantiago: So I'm wondering where they get written.
+[23:38:11] ninjudd: right
+[23:38:38] ninjudd: byte-append-layer
+[23:39:33] dsantiago: I see, you prefix the id and then just store it like another node.
+[23:39:43] dsantiago: So it's up to the implementations to update the metadata or not.
+[23:40:04] dsantiago: Seems they could just decline to implement that.
+[23:40:59] dsantiago: Well, except for get-revision I guess.
+[23:41:09] ninjudd: and get-incoming
+[23:41:55] ninjudd: like I said, they can implement that however they want
+[23:41:56] ninjudd: I used meta-nodes to implement it in byte-append-layer
+[23:42:02] dsantiago: I see.
+[23:42:22] ninjudd: a given layer can even choose not to implement append-node! if that doesn't make sense for them
