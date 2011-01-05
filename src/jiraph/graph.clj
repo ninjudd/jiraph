@@ -173,9 +173,11 @@
 (defn append-only?
   "Is the named layer marked append-only?"
   [layer]
-  (let [append-only (:append-only (meta *graph*))]
+  (if-let [append-only (:append-only (meta *graph*))]
     (or (true? append-only)
-        (contains? append-only layer))))
+        (contains? append-only layer))
+    (when-let [except (:append-only-except (meta *graph*))]
+      (not (contains? except layer)))))
 
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
