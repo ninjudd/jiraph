@@ -48,8 +48,9 @@
       (check (.tune hdb bnum apow fpow (tflags opts)))
       (check (.open hdb path (oflags opts)))))
 
-  (close [db] (.close hdb))
-  (sync! [db] (.sync  hdb))
+  (close     [db] (.close hdb))
+  (sync!     [db] (.sync  hdb))
+  (optimize! [db] (.optimize hdb))
   
   (get [db key] (.get  hdb (key-format key)))
   (len [db key] (.vsiz hdb (key-format key)))

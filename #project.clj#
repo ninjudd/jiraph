@@ -4,5 +4,5 @@
                  [tokyocabinet "1.23-SNAPSHOT"]
                  [clojure-useful "0.3.0-SNAPSHOT"]]
   :dev-dependencies [[clojure-protobuf "0.3.1"]
-                     [cake-autodoc "0.0.1-SNAPSHOT"]]
-  :tasks [protobuf.tasks cake-autodoc.tasks])
+                     [Cake-autodoc "0.0.1-SNAPSHOT"]]
+  :tasks [protobuf.tasks cake-autoDoc.tasks])

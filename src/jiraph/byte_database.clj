@@ -5,6 +5,7 @@
   (open       [db])
   (close      [db])
   (sync!      [db])
+  (optimize!  [db])
   (get        [db key])
   (len        [db key])
   (key-seq    [db])

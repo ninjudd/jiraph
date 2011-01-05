@@ -86,10 +86,11 @@
 (deftype ByteAppendLayer [db format meta-format]
   jiraph.layer/Layer
 
-  (open  [layer] (db/open  db))
-  (close [layer] (db/close db))
-  (sync! [layer] (db/sync! db))
-
+  (open      [layer] (db/open      db))
+  (close     [layer] (db/close     db))
+  (sync!     [layer] (db/sync!     db))
+  (optimize! [layer] (db/optimize! db))
+  
   (node-count [layer]
     (db/inc! db count-key 0))
 

@@ -59,6 +59,12 @@
   (with-each-layer layers
     (layer/sync! layer)))
 
+(defn optimize!
+  "Optimize the underlying storage for the specified layers, or all layers if none are specified."
+  [& layers]
+  (with-each-layer layers
+    (layer/optimize! layer)))
+
 (defn truncate!
   "Remove all nodes from the specified layers, or all layers if none are specified."
   [& layers]
