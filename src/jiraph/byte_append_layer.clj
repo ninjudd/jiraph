@@ -34,10 +34,12 @@
   [layer id rev]
   (if-not rev
     (db/len (.db layer) id)
-    (let [meta (get-meta layer (meta-key id) nil)]
-      (find-with (partial >= rev)
-                 (reverse (:rev meta))
-                 (reverse (:len meta))))))
+    (let [meta (get-meta layer (meta-key id) nil)
+          len  (find-with (partial >= rev)
+                          (reverse (:rev meta))
+                          (reverse (:len meta)))]
+      (when (and len (<= 0 len))
+        len))))
 
 (defn- meta-len
   "The byte length of the meta node at revision rev."
@@ -65,11 +67,11 @@
     (append-meta! layer id {:rev *rev* :len len})))
 
 (defn- reset-len! [layer id & [len]]
-  ;; Insert a nil length to indicate that all lengths before the current one are no longer valid.
+  ;; Insert a length of -1 to indicate that all lengths before the current one are no longer valid.
   (append-meta! layer id
     (if (and *rev* len)
-      {:rev [0 *rev*] :len [nil len]}
-      {:rev 0 :len nil})))
+      {:rev [0 *rev*] :len [-1 len]}
+      {:rev 0 :len -1})))
 
 (defn- inc-count! [layer]
   (db/inc! (.db layer) count-key 1))
@@ -86,10 +88,11 @@
 (deftype ByteAppendLayer [db format meta-format]
   jiraph.layer/Layer
 
-  (open  [layer] (db/open  db))
-  (close [layer] (db/close db))
-  (sync! [layer] (db/sync! db))
-
+  (open      [layer] (db/open      db))
+  (close     [layer] (db/close     db))
+  (sync!     [layer] (db/sync!     db))
+  (optimize! [layer] (db/optimize! db))
+  
   (node-count [layer]
     (db/inc! db count-key 0))
 

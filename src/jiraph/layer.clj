@@ -6,6 +6,7 @@
   (open             [layer]            "Open the layer file.")
   (close            [layer]            "Close the layer file.")
   (sync!            [layer]            "Flush all layer changes to the storage medium.")
+  (optimize!        [layer]            "Optimize underlying layer storage.")
   (truncate!        [layer]            "Removes all node data from the layer.")
   (node-count       [layer]            "Return the total number of nodes in this layer.")
   (node-ids         [layer]            "Return a lazy sequence of all node ids in this layer.")

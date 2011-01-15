@@ -23,6 +23,9 @@
 (defn close! []
   (dorun (map layer/close (vals *graph*))))
 
+(defn set-graph! [graph]
+  (alter-var-root #'*graph* (fn [_] graph)))
+
 (defmacro with-graph [graph & forms]
   `(binding [*graph* ~graph]
      (try (open!)
@@ -31,11 +34,11 @@
 
 (defmacro with-graph! [graph & forms]
   `(let [graph# *graph*]
-     (alter-var-root #'*graph* (fn [_#] ~graph))
+     (set-graph! ~graph)
      (try (open!)
           ~@forms
           (finally (close!)))
-     (alter-var-root #'*graph* (fn [_#] graph#))))
+     (set-graph! graph#)))
 
 (defmacro at-revision
   "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
@@ -55,6 +58,12 @@
   [& layers]
   (with-each-layer layers
     (layer/sync! layer)))
+
+(defn optimize!
+  "Optimize the underlying storage for the specified layers, or all layers if none are specified."
+  [& layers]
+  (with-each-layer layers
+    (layer/optimize! layer)))
 
 (defn truncate!
   "Remove all nodes from the specified layers, or all layers if none are specified."
@@ -151,6 +160,11 @@
   [layer id]
   (layer/get-node (*graph* layer) id))
 
+(defn get-edge
+  "Fetch an edge from node with id to to-id."
+  [layer id to-id]
+  (get-in (get-node layer id) [:edges to-id]))
+
 (defn node-exists?
   "Check if a node exists on this layer."
   [layer id]
@@ -159,9 +173,11 @@
 (defn append-only?
   "Is the named layer marked append-only?"
   [layer]
-  (let [append-only (:append-only (meta *graph*))]
+  (if-let [append-only (:append-only (meta *graph*))]
     (or (true? append-only)
-        (contains? append-only layer))))
+        (contains? append-only layer))
+    (when-let [except (:append-only-except (meta *graph*))]
+      (not (contains? except layer)))))
 
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
