@@ -1,7 +1,8 @@
 (ns jiraph.walk
   (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map]]
         [useful.string :only [dasherize]])
-  (:require [jiraph.graph :as graph]))
+  (:require [jiraph.graph :as graph]
+            [clojure.set :as set]))
 
 (defprotocol Walk "Jiraph walk protocol"
   (traverse?     [walk step] "Should this step be traversed and added to the follow queue?")
@@ -156,3 +157,9 @@
   "Return the shortest path to a given node in walk."
   [walk id]
   (make-path (first (get-in walk [:steps id]))))
+
+(defn intersection
+  "Helper function to return the intersection between the ids of two walks."
+  [walk1 walk2]
+  (set/intersection (set (:ids walk1))
+                    (set (:ids walk2))))
