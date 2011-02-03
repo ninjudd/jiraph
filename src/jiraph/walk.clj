@@ -129,7 +129,8 @@
 (defn walk
   "Perform a walk starting at focus-id using the given walk type (which must satisfy jiraph.walk/Walk).
    Supported opts:
-     :sort-edges - a fn to sort the outgoing edges for a given layer before traversing them"
+     :sort-edges - a fn to sort the outgoing edges for a given layer before traversing them
+     :limit      - the maximum number of steps to walk"
   [type focus-id & opts]
   (let [opts  (apply into-map opts)
         limit (opts :limit)]

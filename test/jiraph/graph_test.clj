@@ -63,6 +63,10 @@
           (at-revision 100
             (is (= node (get-node layer "3"))))))
 
+      (testing "get-node returns nil if node didn't exist at-revision"
+        (at-revision 99
+          (is (= nil (get-node layer "3")))))
+
       (testing "compact-node! removes revisions but leaves all-revisions"
         (let [old {:bar "cat" :baz [5 8] :rev 101}
               new {:bar "cat", :baz [5 8]}]
@@ -110,8 +114,8 @@
       (testing "past revisions are ignored inside of transactions"
         (at-revision 101
           (with-transaction layer
-            (add-node! layer "8" {:foo 9}))
-          (is (= 8 (:foo (get-node layer "8"))))))
+            (add-node! layer "8" {:foo 9})))
+        (is (= 8 (:foo (get-node layer "8")))))
 
       (testing "keeps track of incoming edges"
         (is (= #{} (get-incoming layer "1")))

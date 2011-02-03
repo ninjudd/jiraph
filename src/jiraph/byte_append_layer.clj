@@ -114,10 +114,10 @@
       val))
 
   (get-node [layer id]
-    (if-let [node (if-let [length (if *rev* (len layer id *rev*))]
-                    (f/load format (db/get db id) 0 length)
-                    (f/load format (db/get db id)))]
-      node))
+    (if *rev*
+      (when-let [length (len layer id *rev*)]
+        (f/load format (db/get db id) 0 length))
+      (f/load format (db/get db id))))
 
   (node-exists? [layer id]
     (< 0 (len layer id *rev*)))
