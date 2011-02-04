@@ -10,17 +10,19 @@
   (follow?       [walk step] "Should the edges on this step's node be followed?")
   (follow-layers [walk step] "Returns the list of graph layers that should be followed for this step.")
   (init-step     [walk step] "Initialize the step that starts the walk.")
-  (update-step   [walk step] "Update the current step before traversing it based on the walk state."))
+  (update-step   [walk step] "Update the current step before traversing it based on the walk state.")
+  (after-add     [walk step] "Hook for updating the walk after a node is added."))
 
 (defrecord Step [id from-id layer source edge ids])
 
 (def default-walk-impl
-  {:traverse?     (fn [walk step] true)
+  {:traverse?      (fn [walk step] true)
    :follow?       (fn [walk step] true)
    :add?          (fn [walk step] true)
    :follow-layers (fn [walk step] (graph/layers))
    :init-step     (fn [walk step] step)
-   :update-step   (fn [walk step] step)})
+   :update-step   (fn [walk step] step)
+   :after-add     (fn [walk step] walk)})
 
 (defn walk-fn [[name f]]
   [name (if (fn? f) f (fn [& _] f))])
@@ -72,7 +74,8 @@
       (-> walk
           (update-in [:include?] conj! id)
           (update-in [:ids]      conj! id)
-          (update-in [:count]    inc)))))
+          (update-in [:count]    inc)
+          (after-add step)))))
 
 (defn- traverse
   "Record this step as traversed and add it to the follow queue."
