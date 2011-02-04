@@ -16,7 +16,7 @@
 (defrecord Step [id from-id layer source edge ids])
 
 (def default-walk-impl
-  {:traverse?      (fn [walk step] true)
+  {:traverse?     (fn [walk step] true)
    :follow?       (fn [walk step] true)
    :add?          (fn [walk step] true)
    :follow-layers (fn [walk step] (graph/layers))
