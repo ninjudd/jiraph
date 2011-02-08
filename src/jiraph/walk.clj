@@ -13,7 +13,7 @@
   (update-step   [walk step] "Update the current step before traversing it based on the walk state.")
   (after-add     [walk step] "Hook for updating the walk after a node is added."))
 
-(defrecord Step [id from-id layer source edge ids])
+(defrecord Step [id from-id layer ^Step source edge ids])
 
 (def default-walk-impl
   {:traverse?     (fn [walk step] true)
