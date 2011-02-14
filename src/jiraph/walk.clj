@@ -6,12 +6,13 @@
 
 (defrecord Step      [id from-id layer source edge merge-ids data])
 (defrecord Walk      [focus-id steps nodes include? ids result-count to-follow terminated? traversal])
-(defrecord Traversal [traverse? add? follow? count? follow-layers init-step update-step sort-edges terminate?])
+(defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step sort-edges terminate?])
 
 (record-accessors Step Walk)
 
 (def default-traversal
   {:traverse?     true
+   :skip?         false
    :follow?       true
    :add?          true
    :count?        true
@@ -37,6 +38,7 @@
    Each traversal parameter can be a function or a constant value, which will be turned into a function.
    The default traversal parameters with their function signatures are:
      :traverse?     [walk step]  Should this step be traversed and added to the follow queue?
+     :skip?         [walk step]  Should this step be skipped at traversal time? (the opposite of traverse?)
      :follow?       [walk step]  Should this step's node be added to the walk results?
      :add?          [walk step]  Should the edges on this step's node be followed?
      :count?        [walk step]  Should this step's node be counted toward the limit after it is added?
@@ -105,6 +107,7 @@
     (assoc-record walk :terminated? true)
     (if (or (back? step)
             (walked? walk step)
+            (<< skip? walk step)
             (not (<< traverse? walk step)))
       walk
       (-> (update-record walk
