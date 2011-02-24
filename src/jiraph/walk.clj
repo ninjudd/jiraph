@@ -115,8 +115,8 @@
                 (not (<< traverse? walk step)))
           walk
           (-> (update-record walk
-                             (conj to-follow step)
-                             (update-in! steps [(id step)] conj-vec step))
+                (conj to-follow step)
+                (update-in! steps [(id step)] conj-vec step))
               (add-node step)))))))
 
 (defn- make-step
