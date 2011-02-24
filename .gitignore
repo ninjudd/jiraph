@@ -7,5 +7,6 @@ classes
 *.class
 *.java
 *~
+#*#
 *.swp
 pom.xml
