@@ -46,6 +46,10 @@
           fpow (or (:fpow opts) -1)]
       (.mkdirs (.getParentFile (java.io.File. path)))
       (check (.tune hdb bnum apow fpow (tflags opts)))
+      (when-let [rcnum (:cache opts)]
+        (check (.setcache hdb rcnum)))
+      (when-let [xmsiz (:xmsiz opts)]
+        (check (.setxmsiz hdb xmsiz)))
       (check (.open hdb path (oflags opts)))))
 
   (close     [db] (.close hdb))
