@@ -106,25 +106,28 @@
   (if (<< terminate? walk)
     (assoc-record walk :terminated? true)
     (if (or (back? step)
-            (walked? walk step)
-            (<< skip? walk step)
-            (not (<< traverse? walk step)))
+            (walked? walk step))
       walk
-      (-> (update-record walk
-            (conj to-follow step)
-            (update-in! steps [(id step)] conj-vec step))
-          (add-node step)))))
+      (let [step (if (initial? step)
+                   step
+                   (<< update-step walk step))]
+        (if (or (<< skip? walk step)
+                (not (<< traverse? walk step)))
+          walk
+          (-> (update-record walk
+                             (conj to-follow step)
+                             (update-in! steps [(id step)] conj-vec step))
+              (add-node step)))))))
 
 (defn- make-step
   "Create a new step from the previous step, layer and edge."
   [walk from-step layer [to-id edge]]
-  (<< update-step walk
-      (make-record Step
-        :id      to-id
-        :from-id (id from-step)
-        :layer   layer
-        :source  from-step
-        :edge    edge)))
+  (make-record Step
+    :id      to-id
+    :from-id (id from-step)
+    :layer   layer
+    :source  from-step
+    :edge    edge))
 
 (defn- make-layer-steps
   "Create steps for all outgoing edges on this layer for this step's node(s)."
