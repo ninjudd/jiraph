@@ -4,7 +4,7 @@
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
 
-(defrecord Step      [id from-id layer source edge merge-ids data])
+(defrecord Step      [id from-id layer source edge alt-ids data])
 (defrecord Walk      [focus-id steps nodes include? ids result-count to-follow terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step sort-edges terminate?])
 
@@ -43,8 +43,8 @@
      :add?          [walk step]  Should the edges on this step's node be followed?
      :count?        [walk step]  Should this step's node be counted toward the limit after it is added?
      :follow-layers [walk step]  Returns the list of graph layers that should be followed for this step.
-     :init-step     [walk step]  Initialize the step that starts the walk.
-     :update-step   [walk step]  Update the current step before traversing it based on the walk state.
+     :init-step     [walk step]  Initialize a new step after it is created.
+     :update-step   [walk step]  Update the current step before traversing it.
      :sort-edges    [walk edges] Sort the sequence of egdes for of a single node. Pass nil for unsorted.
      :terminate?    [walk]       Should the walk terminate (even if there are still steps in the follow queue)?"
   [name & opts]
@@ -108,9 +108,7 @@
     (if (or (back? step)
             (walked? walk step))
       walk
-      (let [step (if (initial? step)
-                   step
-                   (<< update-step walk step))]
+      (let [step (<< update-step walk step)]
         (if (or (<< skip? walk step)
                 (not (<< traverse? walk step)))
           walk
@@ -122,17 +120,18 @@
 (defn- make-step
   "Create a new step from the previous step, layer and edge."
   [walk from-step layer [to-id edge]]
-  (make-record Step
-    :id      to-id
-    :from-id (id from-step)
-    :layer   layer
-    :source  from-step
-    :edge    edge))
+  (<< init-step walk
+      (make-record Step
+        :id      to-id
+        :from-id (id from-step)
+        :layer   layer
+        :source  from-step
+        :edge    edge)))
 
 (defn- make-layer-steps
   "Create steps for all outgoing edges on this layer for this step's node(s)."
   [walk step layer]
-  (let [ids   (or (merge-ids step) [(id step)])
+  (let [ids   (or (alt-ids step) [(id step)])
         nodes (map (partial lookup-node walk layer) ids)
         edges (mapcat :edges nodes)]
     (map (partial make-step walk step layer)
@@ -160,8 +159,7 @@
                :result-count 0
                :to-follow    (queue)
                :traversal    traversal)
-        step (<< init-step walk
-                 (make-record Step :id focus-id))]
+        step (<< init-step walk (make-record Step :id focus-id))]
     (traverse walk step)))
 
 (defn- persist-walk!
