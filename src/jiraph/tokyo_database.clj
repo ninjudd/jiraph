@@ -1,6 +1,6 @@
 (ns jiraph.tokyo-database
   (:use [useful :only [into-map]])
-  (:require jiraph.byte-database)  
+  (:require jiraph.byte-database)
   (:import [tokyocabinet HDB]))
 
 (def compress
@@ -26,7 +26,7 @@
 (defmacro check [form]
   `(or ~form
        (case (.ecode ~'hdb)
-         ~HDB/EKEEP false
+         ~HDB/EKEEP  false
          ~HDB/ENOREC false
          (throw (java.io.IOException. (.errmsg ~'hdb) )))))
 
@@ -55,19 +55,19 @@
   (close     [db] (.close hdb))
   (sync!     [db] (.sync  hdb))
   (optimize! [db] (.optimize hdb))
-  
+
   (get [db key] (.get  hdb (key-format key)))
   (len [db key] (.vsiz hdb (key-format key)))
 
   (key-seq [db]
     (.iterinit hdb)
     (key-seq* hdb))
-    
+
   (add!    [db key val] (check (.putkeep hdb (key-format key) (bytes val))))
   (put!    [db key val] (check (.put     hdb (key-format key) (bytes val))))
   (append! [db key val] (check (.putcat  hdb (key-format key) (bytes val))))
   (inc!    [db key i]   (.addint hdb (key-format key) i))
-  
+
   (delete!   [db key] (check (.out    hdb (key-format key))))
   (truncate! [db]     (check (.vanish hdb)))
 

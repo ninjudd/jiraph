@@ -186,6 +186,8 @@
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/add-node! layer id (into-map attrs))]
+      (when-not node
+        (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
       (doseq [[to-id edge] (:edges node)]
         (when-not (:deleted edge)
           (layer/add-incoming! layer to-id id)))

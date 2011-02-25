@@ -13,11 +13,12 @@
     (doseq [layer (layers)]
       (truncate! layer)
 
-      (testing "add-node! won't overwrite existing node"
+      (testing "add-node! throws exception and doesn't overwrite existing node"
         (let [node {:foo 2 :bar "three"}]
           (is (= node (add-node! layer "1" node)))
           (is (= node (get-node layer "1")))
-          (is (= nil  (add-node! layer "1" {:foo 8})))
+          (is (thrown-with-msg? java.io.IOException #"already exists"
+                (add-node! layer "1" {:foo 8})))
           (is (= node (get-node layer "1")))))
 
       (testing "assoc-node! modifies specific attributes"
