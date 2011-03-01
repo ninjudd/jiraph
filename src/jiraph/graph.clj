@@ -37,8 +37,8 @@
      (set-graph! ~graph)
      (try (open!)
           ~@forms
-          (finally (close!)))
-     (set-graph! graph#)))
+          (finally (close!)
+                   (set-graph! graph#)))))
 
 (defmacro at-revision
   "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
