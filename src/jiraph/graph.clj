@@ -6,6 +6,7 @@
 
 (def ^{:dynamic true} *graph* nil)
 (def ^{:dynamic true} *transactions* #{})
+(def ^{:dynamic true} *verbose* nil)
 
 (defn edge-ids [node & [pred]]
   (remove-keys-by-val
@@ -17,11 +18,21 @@
 (defn edges [node & [pred]]
   (select-keys (:edges node) (edge-ids node pred)))
 
+(defmacro with-each-layer
+  "Execute forms with layer bound to each layer specified or all layers if layers is empty."
+  [layers & forms]
+  `(doseq [[~'layer-name ~'layer] (if (empty? ~layers) *graph* (select-keys *graph* ~layers))]
+     (when *verbose*
+       (println (format "%-20s %s"~'layer-name (apply str (map pr-str '~forms)))))
+     ~@forms))
+
 (defn open! []
-  (dorun (map layer/open (vals *graph*))))
+  (with-each-layer []
+    (layer/open layer)))
 
 (defn close! []
-  (dorun (map layer/close (vals *graph*))))
+  (with-each-layer []
+    (layer/close layer)))
 
 (defn set-graph! [graph]
   (alter-var-root #'*graph* (fn [_] graph)))
@@ -47,12 +58,6 @@
   `(binding [layer/*rev* ~rev]
      ~@forms))
 
-(defmacro with-each-layer
-  "Execute forms with layer bound to each layer specified or all layers if an layers is empty."
-  [layers & forms]
-  `(doseq [~'layer (if (empty? ~layers) (vals *graph*) (map *graph* ~layers))]
-     ~@forms))
-
 (defn sync!
   "Flush changes for the specified layers to the storage medium, or all layers if none are specified."
   [& layers]
@@ -74,7 +79,7 @@
 (defn node-ids
   "Return a lazy sequence of all node ids in this layer."
   [layer]
-  (layer/node-ids   (*graph* layer)))
+  (layer/node-ids (*graph* layer)))
 
 (defn node-count
   "Return the total number of nodes in this layer."
