@@ -21,7 +21,9 @@
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
   [layers & forms]
-  `(doseq [[~'layer-name ~'layer] (if (empty? ~layers) *graph* (select-keys *graph* ~layers))]
+  `(doseq [[~'layer-name ~'layer] (cond (keyword? ~layers) [~layers (*graph* ~layers)]
+                                        (empty?   ~layers) *graph*
+                                        :else              (select-keys *graph* ~layers))]
      (when *verbose*
        (println (format "%-20s %s"~'layer-name (apply str (map pr-str '~forms)))))
      ~@forms))
@@ -58,9 +60,14 @@
   `(retro/at-revision ~rev ~@forms))
 
 (defmacro with-transaction
-  "Execute forms within a transaction on the named layer."
-  [layer & forms]
-  `((retro/wrap-transaction (*graph* ~layer) (fn [] ~@forms))))
+  "Execute forms within a transaction on the named layer/layers."
+  [layers & forms]
+  `((reduce
+     retro/wrap-transaction
+     (fn [] ~@forms)
+     (cond (keyword? ~layers) [(*graph* ~layers)]
+           (empty?   ~layers) (vals *graph*)
+           :else              (map *graph* ~layers)))))
 
 (def abort-transaction retro/abort-transaction)
 

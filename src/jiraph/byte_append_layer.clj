@@ -170,7 +170,7 @@
   retro.core/WrappedTransactional
 
   (txn-wrap [layer f]
-    (retro.core/wrap-txn db f))
+    (retro.core/wrapped-txn f db))
 
   retro.core/Revisioned
 
