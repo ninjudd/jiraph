@@ -1,6 +1,6 @@
 (ns jiraph.tokyo-database
   (:use [useful :only [into-map]])
-  (:require jiraph.byte-database)
+  (:require jiraph.byte-database retro.core)
   (:import [tokyocabinet HDB]))
 
 (def compress
@@ -71,9 +71,11 @@
   (delete!   [db key] (check (.out    hdb (key-format key))))
   (truncate! [db]     (check (.vanish hdb)))
 
-  (txn-begin  [db] (.tranbegin  hdb))
-  (txn-commit [db] (.trancommit hdb))
-  (txn-abort  [db] (.tranabort  hdb)))
+  retro.core/Transactional
+
+  (txn-begin    [db] (.tranbegin  hdb))
+  (txn-commit   [db] (.trancommit hdb))
+  (txn-rollback [db] (.tranabort  hdb)))
 
 (defn make [& opts]
   (let [opts (into-map opts)]

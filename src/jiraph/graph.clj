@@ -1,11 +1,11 @@
 (ns jiraph.graph
   (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any]])
   (:require [jiraph.layer :as layer]
+            [retro.core :as retro]
             [jiraph.tokyo-database :as tokyo]
             [jiraph.byte-append-layer :as byte-append-layer]))
 
 (def ^{:dynamic true} *graph* nil)
-(def ^{:dynamic true} *transactions* #{})
 (def ^{:dynamic true} *verbose* nil)
 
 (defn edge-ids [node & [pred]]
@@ -53,10 +53,16 @@
 
 (defmacro at-revision
   "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
-   revision, or rewind the state of the graph to a given revision. See the README for more information."
+   revision, or rewind the state of the graph to a given revision."
   [rev & forms]
-  `(binding [layer/*rev* ~rev]
-     ~@forms))
+  `(retro/at-revision ~rev ~@forms))
+
+(defmacro with-transaction
+  "Execute forms within a transaction on the named layer."
+  [layer & forms]
+  `((retro/wrap-transaction (*graph* ~layer) (fn [] ~@forms))))
+
+(def abort-transaction retro/abort-transaction)
 
 (defn sync!
   "Flush changes for the specified layers to the storage medium, or all layers if none are specified."
@@ -95,58 +101,6 @@
   "Store a layer-wide property."
   [layer key val]
   (layer/set-property! (*graph* layer) key val))
-
-(defn- skip-past-revisions
-  "Takes a layer name and a function and wraps it in a new function that skips it if the current
-   revision has already been applied on this layer, also setting the revision property on the layer
-   upon executing the function."
-  [layer f]
-  (fn []
-    (if-not layer/*rev*
-      (f)
-      (let [rev (or (get-property layer :rev) 0)]
-        (if (<= layer/*rev* rev)
-          (printf "skipping revision: revision [%s] <= current revision [%s]\n" layer/*rev* rev)
-          (let [result (f)]
-            (if layer/*rev*
-              (set-property! layer :rev layer/*rev*))
-            result))))))
-
-(defn- ignore-nested-transactions
-  "Takes a layer name and two functions, one that's wrapped in a transaction and one that's not,
-   returning a new fn that calls the transactional fn if not currently in a transaction or otherwise
-   calls the plain fn."
-  [layer f f-txn]
-  (fn []
-    (if (contains? *transactions* layer)
-      (f)
-      (binding [*transactions* (conj *transactions* layer)]
-        (f-txn)))))
-
-(defn- catch-rollbacks
-  "Takes a function and wraps it in a new function that catches the exception thrown by abort-transaction."
-  [f]
-  (fn []
-    (try (f)
-         (catch javax.transaction.TransactionRolledbackException e))))
-
-(defn abort-transaction
-  "Throws an exception that will be caught by catch-rollbacks to abort the transaction."
-  []
-  (throw (javax.transaction.TransactionRolledbackException.)))
-
-(defn wrap-transaction
-  "Takes a function and returns a new function wrapped in a transaction on the named layer."
-  [layer f]
-  (->> (layer/wrap-transaction (*graph* layer) f)
-       (catch-rollbacks)
-       (skip-past-revisions layer)
-       (ignore-nested-transactions layer f)))
-
-(defmacro with-transaction
-  "Execute forms withing a transaction on the named layer."
-  [layer & forms]
-  `((wrap-transaction ~layer (fn [] ~@forms))))
 
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
@@ -187,7 +141,7 @@
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer id & attrs]
-  {:pre [(if (append-only? layer) layer/*rev* true)]}
+  {:pre [(if (append-only? layer) retro/*revision* true)]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/add-node! layer id (into-map attrs))]
@@ -201,7 +155,7 @@
 (defn append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer id & attrs]
-  {:pre [(if (append-only? layer) layer/*rev* true)]}
+  {:pre [(if (append-only? layer) retro/*revision* true)]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/append-node! layer id (into-map attrs))]

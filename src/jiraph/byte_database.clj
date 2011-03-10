@@ -14,7 +14,4 @@
   (append!    [db key val])
   (inc!       [db key i])
   (delete!    [db key])
-  (truncate!  [db])
-  (txn-begin  [db])
-  (txn-commit [db])
-  (txn-abort  [db]))
+  (truncate!  [db]))
