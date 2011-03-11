@@ -2,7 +2,7 @@
   (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
-            [ruminate.tokyo-db :as tokyo]
+            [ruminate.tokyo :as tokyo]
             [jiraph.byte-append-layer :as byte-append-layer]))
 
 (def ^{:dynamic true} *graph* nil)

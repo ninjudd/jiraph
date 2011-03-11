@@ -1,7 +1,7 @@
 (ns jiraph.graph-test
   (:use clojure.test jiraph.graph)
   (:require [jiraph.byte-append-layer :as bal]
-            [ruminate.tokyo-db :as tokyo]
+            [ruminate.tokyo :as tokyo]
             [jiraph.reader-append-format :as raf]
             [jiraph.protobuf-append-format :as paf])
   (:import [jiraph Test$Node]))
