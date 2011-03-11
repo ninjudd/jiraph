@@ -2,7 +2,7 @@
   (:use clojure.test jiraph.graph
         [jiraph.walk :only [defwalk path paths limit]])
   (:require [jiraph.byte-append-layer :as bal]
-            [jiraph.tokyo-database :as tokyo]
+            [ruminate.tokyo-db :as tokyo]
             [jiraph.reader-append-format :as raf]
             [jiraph.protobuf-append-format :as paf])
   (:import [jiraph Test$Node]))
