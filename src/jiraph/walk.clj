@@ -1,11 +1,11 @@
 (ns jiraph.walk
-  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map]]
+  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map or-max map-reduce]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
 
-(defrecord Step      [id from-id layer source edge alt-ids data])
-(defrecord Walk      [focus-id steps node-accessor include? ids result-count to-follow terminated? traversal])
+(defrecord Step      [id from-id layer source edge alt-ids rev data])
+(defrecord Walk      [focus-id steps node-accessor include? ids result-count to-follow max-rev terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step sort-edges terminate?])
 
 (record-accessors Step Walk)
@@ -111,27 +111,31 @@
           walk
           (-> (update-record walk
                 (conj to-follow step)
-                (update-in! steps [(id step)] conj-vec step))
+                (update-in! steps [(id step)] conj-vec step)
+                (or-max max-rev (:rev step)))
               (add-node step)))))))
 
 (defn- make-step
   "Create a new step from the previous step, layer and edge."
-  [walk from-step layer [to-id edge]]
+  [walk from-step layer rev [to-id edge]]
   (<< init-step walk
       (make-record Step
         :id      to-id
         :from-id (id from-step)
         :layer   layer
         :source  from-step
-        :edge    edge)))
+        :edge    edge
+        :rev     rev)))
 
 (defn- make-layer-steps
   "Create steps for all outgoing edges on this layer for this step's node(s)."
   [walk step layer]
-  (let [ids   (or (alt-ids step) [(id step)])
-        nodes (map (partial get-node walk layer) ids)
-        edges (mapcat :edges nodes)]
-    (map (partial make-step walk step layer)
+  (let [ids         (or (alt-ids step) [(id step)])
+        [nodes rev] (map-reduce (partial get-node walk layer)
+                                #(or-max %1 (:rev %2)) nil
+                                ids)
+        edges       (mapcat :edges nodes)]
+    (map (partial make-step walk step layer rev)
          (or (<< sort-edges walk edges)
              edges))))
 

@@ -13,6 +13,8 @@ message Foo {
   repeated Entry  num_map = 6 [(map) = true];
 
   optional Foo nested = 7;
+
+  optional int32 rev = 8;
 }
 
 message Item {

@@ -47,5 +47,14 @@
         (is (= nil (path walk "6")))
         (is (= ["1" "2"]   (map :id (path walk "2"))))
         (is (= [["1" "2"]] (map (partial map :id) (paths walk "2"))))
-        (is (= [["1"]]     (map (partial map :id) (paths walk "1"))))))))
+        (is (= [["1"]]     (map (partial map :id) (paths walk "1"))))))
+
+    (testing "max-rev"
+      (at-revision 33
+        (append-node! :foo "1" {:edges {"8" {:a "one"}}}))
+      (let [walk (full-walk "1")]
+        (is (= 8 (:result-count walk)))
+        (is (= ["1" "2" "3" "8" "4" "5" "6" "7"] (:ids walk)))
+        (is (= ["1" "8"] (map :id (path walk "8"))))
+        (is (= 33  (:max-rev walk)))))))
 
