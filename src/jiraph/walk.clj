@@ -5,7 +5,7 @@
             [clojure.set :as set]))
 
 (defrecord Step      [id from-id layer source edge alt-ids data])
-(defrecord Walk      [focus-id steps nodes include? ids result-count to-follow terminated? traversal])
+(defrecord Walk      [focus-id steps node-accessor include? ids result-count to-follow terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step sort-edges terminate?])
 
 (record-accessors Step Walk)
@@ -61,13 +61,10 @@
   (fn [walk]
     (<= num (result-count walk))))
 
-(defn lookup-node
-  "Get the specified node and cache it in the walk if it isn't already cached."
+(defn get-node
+  "Get the specified node using the memoized function stored in the walk."
   [walk layer id]
-  (or (@(nodes walk) [id layer])
-      (let [node (graph/get-node layer id)]
-        (swap! (nodes walk) assoc-in! [[id layer]] node)
-        node)))
+  ((node-accessor walk) layer id))
 
 (defn walked?
   "Has this step already been traversed?"
@@ -132,7 +129,7 @@
   "Create steps for all outgoing edges on this layer for this step's node(s)."
   [walk step layer]
   (let [ids   (or (alt-ids step) [(id step)])
-        nodes (map (partial lookup-node walk layer) ids)
+        nodes (map (partial get-node walk layer) ids)
         edges (mapcat :edges nodes)]
     (map (partial make-step walk step layer)
          (or (<< sort-edges walk edges)
@@ -151,21 +148,20 @@
   "Create an empty walk."
   [traversal focus-id]
   (let [walk (make-record Walk
-               :focus-id     focus-id
-               :steps        (transient {})
-               :nodes        (atom (transient {}))
-               :include?     (transient #{})
-               :ids          (transient [])
-               :result-count 0
-               :to-follow    (queue)
-               :traversal    traversal)
+               :focus-id      focus-id
+               :steps         (transient {})
+               :node-accessor (memoize graph/get-node)
+               :include?      (transient #{})
+               :ids           (transient [])
+               :result-count  0
+               :to-follow     (queue)
+               :traversal     traversal)
         step (<< init-step walk (make-record Step :id focus-id))]
     (traverse walk step)))
 
 (defn- persist-walk!
   "Transform a transient walk into a persistent walk once the walk is complete."
   [^Walk walk]
-  (swap! (nodes walk) persistent!)
   (update-record walk
     (persistent! include?)
     (persistent! steps)
