@@ -19,7 +19,7 @@
    :follow-layers (fn [walk step]  (graph/layers))
    :init-step     (fn [walk step]  step)
    :update-step   (fn [walk step]  step)
-   :sort-edges    (fn [walk edges] (sort edges))
+   :sort-edges    (fn [walk edges] (sort-by first edges))
    :terminate?    false})
 
 (defn traversal-fn [[key val]]
