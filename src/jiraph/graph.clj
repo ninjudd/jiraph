@@ -53,6 +53,11 @@
           (finally (close!)
                    (set-graph! graph#)))))
 
+(defn wrap-bindings
+  "Wrap the given function with the current graph context."
+  [f]
+  (useful/wrap-bindings [#'jiraph.graph/*graph* #'jiraph.graph/*verbose* #'retro/*revision*] f))
+
 (defmacro at-revision
   "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
    revision, or rewind the state of the graph to a given revision."
