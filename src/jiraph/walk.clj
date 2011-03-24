@@ -182,11 +182,17 @@
     (loop [^Walk walk (init-walk traversal focus-id)]
       (if (empty? (to-follow walk))
         (persist-walk! walk)
-        (recur (reduce traverse
-                       (assoc-record walk :to-follow (queue))
-                       (apply concat
-                              (map (partial follow walk)
-                                   (to-follow walk)))))))))
+        (recur
+         (if *parallel-follow*
+           (reduce traverse
+                   (assoc-record walk :to-follow (queue))
+                   (apply concat
+                          (pcollect graph/wrap-bindings
+                                    (partial follow walk)
+                                    (to-follow walk))))
+           (reduce traverse
+                   (update-record walk (pop to-follow))
+                   (follow walk (first (to-follow walk))))))))))
 
 (defn- make-path
   "Given a step, construct a path from the walk focus to this step's node."
