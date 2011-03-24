@@ -1,8 +1,11 @@
 (ns jiraph.walk
-  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map or-max map-reduce]]
+  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map or-max map-reduce pcollect]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
+
+(def ^{:doc "Should steps be followed in parallel for increased performance?"}
+  *parallel-follow* false)
 
 (defrecord Step      [id from-id layer source edge alt-ids rev data])
 (defrecord Walk      [focus-id steps node-accessor include? ids result-count to-follow max-rev terminated? traversal])
@@ -140,13 +143,11 @@
              edges))))
 
 (defn- follow
-  "Create and traverse steps for all outgoing edges on this step."
+  "Create steps for all outgoing edges on this step."
   [walk step]
-  (if-not (<< follow? walk step)
-    walk
-    (reduce traverse walk
-            (mapcat (partial make-layer-steps walk step)
-                    (<< follow-layers walk step)))))
+  (when (<< follow? walk step)
+    (mapcat (partial make-layer-steps walk step)
+            (<< follow-layers walk step))))
 
 (defn- init-walk
   "Create an empty walk."
@@ -174,10 +175,14 @@
 (defn walk
   "Perform a walk starting at focus-id using traversal which should be of type jiraph.walk.Traversal."
   [focus-id traversal]
-  (loop [^Walk walk (init-walk traversal focus-id)]
-    (if-let [step (first (to-follow walk))]
-      (recur (follow (update-record walk (pop to-follow)) step))
-      (persist-walk! walk))))
+  (let [map (if *parallel-follow* pcollect map)]
+    (loop [^Walk walk (init-walk traversal focus-id)]
+      (if (empty? (to-follow walk))
+        (persist-walk! walk)
+        (recur (reduce traverse
+                       (assoc-record walk :to-follow (queue))
+                       (apply concat
+                              (map (partial follow walk) (to-follow walk)))))))))
 
 (defn- make-path
   "Given a step, construct a path from the walk focus to this step's node."
