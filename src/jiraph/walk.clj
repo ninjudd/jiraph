@@ -189,11 +189,11 @@
                    (apply concat (map (partial follow walk) steps)))))))))
 
 (defn- make-path
-  "Given a step, construct a path from the walk focus to this step's node."
+  "Given a step, construct a path of steps from the walk focus to this step's node."
   [step]
   (loop [step step, path nil]
     (if step
-      (recur (:source step) (conj path step))
+      (recur (source step) (conj path step))
       path)))
 
 (defn paths
