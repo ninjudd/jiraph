@@ -1,6 +1,5 @@
 (ns jiraph.walk
-  (:use [useful :only [assoc-in! update-in! queue conj-vec update construct into-map or-max map-reduce
-                       pcollect *pcollect-thread-num*]]
+  (:use [useful :only [assoc-in! update-in! conj-vec update construct into-map or-max map-reduce pcollect *pcollect-thread-num*]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
@@ -50,7 +49,7 @@
      :init-step     [walk step]  Initialize a new step after it is created.
      :update-step   [walk step]  Update the current step before traversing it.
      :sort-edges    [walk edges] Sort the sequence of egdes for of a single node. Pass nil for unsorted.
-     :terminate?    [walk]       Should the walk terminate (even if there are still steps in the follow queue)?"
+     :terminate?    [walk]       Should the walk terminate (even if there are still unfollowed steps)?"
   [name & opts]
   `(let [traversal# (into (make-record Traversal)
                           (map traversal-fn (into-map default-traversal ~@opts)))]
@@ -114,7 +113,7 @@
                 (not (<< traverse? walk step)))
           walk
           (-> (update-record walk
-                (conj to-follow step)
+                (conj! to-follow step)
                 (update-in! steps [(id step)] conj-vec step)
                 (or-max max-rev (:rev step)))
               (add-node step)))))))
@@ -160,7 +159,7 @@
                :include?      (transient #{})
                :ids           (transient [])
                :result-count  0
-               :to-follow     (queue)
+               :to-follow     (transient [])
                :traversal     traversal)
         step (<< init-step walk (make-record Step :id focus-id))]
     (traverse walk step)))
@@ -171,7 +170,8 @@
   (update-record walk
     (persistent! include?)
     (persistent! steps)
-    (persistent! ids)))
+    (persistent! ids)
+    (persistent! to-follow)))
 
 (defn walk
   "Perform a walk starting at focus-id using traversal which should be of type jiraph.walk.Traversal."
@@ -180,19 +180,13 @@
               (partial pcollect graph/wrap-bindings)
               map)]
     (loop [^Walk walk (init-walk traversal focus-id)]
-      (if (empty? (to-follow walk))
-        (persist-walk! walk)
-        (recur
-         (if *parallel-follow*
-           (reduce traverse
-                   (assoc-record walk :to-follow (queue))
-                   (apply concat
-                          (pcollect graph/wrap-bindings
-                                    (partial follow walk)
-                                    (to-follow walk))))
-           (reduce traverse
-                   (update-record walk (pop to-follow))
-                   (follow walk (first (to-follow walk))))))))))
+      (let [steps (persistent! (to-follow walk))
+            walk  (assoc-record walk :to-follow (transient []))]
+        (if (empty? steps)
+          (persist-walk! walk)
+          (recur
+           (reduce traverse walk
+                   (apply concat (map (partial follow walk) steps)))))))))
 
 (defn- make-path
   "Given a step, construct a path from the walk focus to this step's node."
