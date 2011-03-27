@@ -2,7 +2,7 @@
   :description "embedded graph db library for clojure"
   :dependencies [[clojure "1.2.0"]
                  [clojure-useful "0.3.3"]
-                 [ruminate "0.5.1-SNAPSHOT"]
+                 [masai "0.5.1-SNAPSHOT"]
                  [retro "0.5.0"]]
   :dev-dependencies [[clojure-protobuf "0.3.4"]]
   :tasks [protobuf.tasks])

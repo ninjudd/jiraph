@@ -3,7 +3,7 @@
   (:use jiraph.layer
         [retro.core :as retro]
         [useful :only [find-with]])
-  (:require [ruminate.db :as db]
+  (:require [masai.db :as db]
             [jiraph.byte-append-format :as f]
             [jiraph.reader-append-format :as reader-append-format]
             [jiraph.protobuf-append-format :as protobuf-append-format])
