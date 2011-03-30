@@ -9,7 +9,7 @@
 
 (defrecord Step      [id from-id layer source edge alt-ids rev data])
 (defrecord Walk      [focus-id steps node-accessor include? ids result-count to-follow max-rev terminated? traversal])
-(defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step sort-edges terminate?])
+(defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step extract-edges terminate?])
 
 (record-accessors Step Walk)
 
@@ -22,7 +22,7 @@
    :follow-layers (fn [walk step]  (graph/layers))
    :init-step     (fn [walk step]  step)
    :update-step   (fn [walk step]  step)
-   :sort-edges    (fn [walk edges] (sort-by first edges))
+   :extract-edges (fn [walk nodes] (sort-by first (mapcat :edges nodes)))
    :terminate?    false})
 
 (defn traversal-fn [[key val]]
@@ -48,7 +48,7 @@
      :follow-layers [walk step]  Returns the list of graph layers that should be followed for this step.
      :init-step     [walk step]  Initialize a new step after it is created.
      :update-step   [walk step]  Update the current step before traversing it.
-     :sort-edges    [walk edges] Sort the sequence of egdes for of a single node. Pass nil for unsorted.
+     :extract-edges [walk nodes] Extract a sequence of edges from a group of nodes.
      :terminate?    [walk]       Should the walk terminate (even if there are still unfollowed steps)?"
   [name & opts]
   `(let [traversal# (into (make-record Traversal)
@@ -136,11 +136,9 @@
   (let [ids         (or (alt-ids step) [(id step)])
         [nodes rev] (map-reduce (partial get-node walk layer)
                                 #(or-max %1 (:rev %2)) nil
-                                ids)
-        edges       (mapcat :edges nodes)]
+                                ids)]
     (map (partial make-step walk step layer rev)
-         (or (<< sort-edges walk edges)
-             edges))))
+         (<< extract-edges walk nodes))))
 
 (defn- follow
   "Create steps for all outgoing edges on this step."
