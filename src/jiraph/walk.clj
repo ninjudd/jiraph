@@ -191,8 +191,8 @@
   [step]
   (loop [step step, path nil]
     (if step
-      (recur (source step) (conj path step))
-      path)))
+      (recur (source step) (conj path (dissoc step :source)))
+      (when path (vec path)))))
 
 (defn paths
   "Return all paths to a given node in walk."
