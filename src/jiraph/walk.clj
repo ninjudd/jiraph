@@ -186,12 +186,12 @@
            (reduce traverse walk
                    (apply concat (map (partial follow walk) steps)))))))))
 
-(defn- make-path
+(defn make-path
   "Given a step, construct a path of steps from the walk focus to this step's node."
   [step]
-  (loop [step step, path nil]
+  (loop [^Step step step, path nil]
     (if step
-      (recur (source step) (conj path (dissoc step :source)))
+      (recur (source step) (conj path (assoc-record step :source nil)))
       (when path (vec path)))))
 
 (defn paths
