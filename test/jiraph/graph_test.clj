@@ -131,18 +131,29 @@
         (is (= #{"4"} (get-incoming layer "2")))
         (is (= #{"4"} (get-incoming layer "3"))))
 
-      (testing "keeps track of incoming edges inside with revsions"
+      (testing "keeps track of incoming edges inside at-revision"
+        (at-revision 199 (is (= nil (get-incoming layer "11"))))
+
         (at-revision 200
           (is (add-node! layer "10" {:edges {"11" {:a "one"}}})))
+
         (is (= #{"10"} (get-incoming layer "11")))
+        (at-revision 199 (is (= nil (get-incoming layer "11"))))
+
         (at-revision 201
           (is (add-node! layer "12" {:edges {"11" {:a "one"}}})))
+
         (is (= #{"10" "12"} (get-incoming layer "11")))
+        (at-revision 199 (is (= nil (get-incoming layer "11"))))
+        (at-revision 200 (is (= #{"10"} (get-incoming layer "11"))))
+
         (at-revision 202
           (is (add-node! layer "13" {:edges {"11" {:a "one"}}})))
+
         (is (= #{"10" "12" "13"} (get-incoming layer "11")))
-        (at-revision 200
-          (is (= #{"10"} (get-incoming layer "11"))))))))
+        (at-revision 199 (is (= nil (get-incoming layer "11"))))
+        (at-revision 200 (is (= #{"10"} (get-incoming layer "11"))))
+        (at-revision 201 (is (= #{"10" "12"} (get-incoming layer "11"))))))))
 
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))

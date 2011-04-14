@@ -27,7 +27,9 @@
   (let [db (.db layer)
         mf (.meta-format layer)]
     (if rev
-      (f/load mf (db/get db key) 0 (meta-len layer key rev))
+      (let [len (meta-len layer key rev)]
+        (when (< 0 len)
+          (f/load mf (db/get db key) 0 len)))
       (f/load mf (db/get db key)))))
 
 (defn- len
@@ -45,11 +47,11 @@
 (defn- meta-len
   "The byte length of the meta node at revision rev."
   [layer key rev]
-  (or (if rev
+  (or (when rev
         (let [meta (get-meta layer key nil)]
           ;; Must shift meta lengths by one since they store the length of the previous revision.
           (find-with (partial >= rev)
-                     (reverse (:mrev meta))
+                     (reverse (cons 0 (:mrev meta)))
                      (cons nil (reverse (:mlen meta))))))
       (db/len (.db layer) key)))
 
