@@ -131,6 +131,11 @@
   [layer id]
   (layer/get-node (*graph* layer) id))
 
+(defn get-in-node
+  "Fetch data from inside a node."
+  [layer keys]
+  (get-in (get-node layer (first keys)) (rest keys)))
+
 (defn get-edge
   "Fetch an edge from node with id to to-id."
   [layer id to-id]
