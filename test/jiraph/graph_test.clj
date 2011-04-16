@@ -119,7 +119,7 @@
         (is (= 8 (:foo (get-node layer "8")))))
 
       (testing "keeps track of incoming edges"
-        (is (= #{} (get-incoming layer "1")))
+        (is (empty? (get-incoming layer "1")))
         (is (add-node! layer "4" {:edges {"1" {:a "one"}}}))
         (is (= #{"4"} (get-incoming layer "1")))
         (is (add-node! layer "5" {:edges {"1" {:b "two"}}}))
