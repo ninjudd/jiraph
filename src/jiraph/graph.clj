@@ -129,7 +129,8 @@
 (defn get-node
   "Fetch a node's data from this layer."
   [layer id]
-  (layer/get-node (*graph* layer) id))
+  (when-let [node (layer/get-node (*graph* layer) id)]
+    (assoc node :id id)))
 
 (defn get-in-node
   "Fetch data from inside a node."

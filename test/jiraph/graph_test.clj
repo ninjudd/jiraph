@@ -16,21 +16,21 @@
       (testing "add-node! throws exception and doesn't overwrite existing node"
         (let [node {:foo 2 :bar "three"}]
           (is (= node (add-node! layer "1" node)))
-          (is (= node (get-node layer "1")))
+          (is (= (assoc node :id "1") (get-node layer "1")))
           (is (thrown-with-msg? java.io.IOException #"already exists"
                 (add-node! layer "1" {:foo 8})))
-          (is (= node (get-node layer "1")))))
+          (is (= (assoc node :id "1") (get-node layer "1")))))
 
       (testing "assoc-node! modifies specific attributes"
         (let [old {:foo 2 :bar "three"}
               new {:foo 54 :bar "three" :baz [1 2 3]}]
           (is (= [old new] (assoc-node! layer "1" {:foo 54 :baz [1 2 3]})))
-          (is (= new (get-node layer "1")))))
+          (is (= (assoc new :id "1") (get-node layer "1")))))
 
       (testing "assoc-node! creates node if it doesn't exist"
         (let [node {:foo 9 :bar "the answer"}]
           (is (= [nil node] (assoc-node! layer "2" {:foo 9 :bar "the answer"})))
-          (is (= node (get-node layer "2")))))
+          (is (= (assoc node :id "2") (get-node layer "2")))))
 
       (testing "node-ids, node-count and node-exists?"
         (is (= #{"2" "1"} (set (node-ids layer))))
@@ -44,25 +44,25 @@
         (let [node1 {:foo 54 :bar "three" :baz [1 2 3]}]
           (let [node2 {:foo 54 :bar "three"}]
             (is (= [node1 node2] (update-node! layer "1" dissoc :baz)))
-            (is (= node2 (get-node layer "1")))
+            (is (= (assoc node2 :id "1") (get-node layer "1")))
             (let [node3 {:foo 54 :bar "three" :baz [5]}]
               (is (= [node2 node3] (update-node! layer "1" assoc :baz [5])))
-              (is (= node3 (get-node layer "1")))
+              (is (= (assoc node3 :id "1") (get-node layer "1")))
               (let [node4 {:foo 54 :baz [5]}]
                 (is (= [node3 node4] (update-node! layer "1" select-keys [:foo :baz])))
-                (is (= node4 (get-node layer "1"))))))))
+                (is (= (assoc node4 :id "1") (get-node layer "1"))))))))
 
       (testing "append-node! supports viewing old revisions"
         (let [node  {:bar "cat" :baz [5] :rev 100}
               attrs {:baz [8] :rev 101}]
           (at-revision 100
             (is (= node (append-node! layer "3" (dissoc node :rev))))
-            (is (= node (get-node layer "3"))))
+            (is (= (assoc node :id "3") (get-node layer "3"))))
           (at-revision 101
             (is (= attrs (append-node! layer "3" (dissoc attrs :rev))))
-            (is (= {:bar "cat" :baz [5 8] :rev 101} (get-node layer "3"))))
+            (is (= {:id "3" :bar "cat" :baz [5 8] :rev 101} (get-node layer "3"))))
           (at-revision 100
-            (is (= node (get-node layer "3"))))))
+            (is (= (assoc node :id "3") (get-node layer "3"))))))
 
       (testing "get-node returns nil if node didn't exist at-revision"
         (at-revision 99
@@ -85,18 +85,18 @@
         (let [node {:foo 7 :bar "seven"}]
           (with-transaction layer
             (is (= node (add-node! layer "7" node)))
-            (is (= node (get-node layer "7")))
+            (is (= (assoc node :id "7") (get-node layer "7")))
             (abort-transaction))
           (is (= nil (get-node layer "7")))
           (is (thrown? Error
                        (with-transaction layer
                          (is (= node (add-node! layer "7" node)))
-                         (is (= node (get-node layer "7")))
+                         (is (= (assoc node :id "7") (get-node layer "7")))
                          (throw (Error.)))))
           (is (= nil (get-node layer "7")))
           (with-transaction layer
             (is (= node (add-node! layer "7" node))))
-          (is (= node (get-node layer "7")))))
+          (is (= (assoc node :id "7") (get-node layer "7")))))
 
       (testing "layer-wide properties"
         (is (= nil (get-property layer :foo)))
