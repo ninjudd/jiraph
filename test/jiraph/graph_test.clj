@@ -1,7 +1,7 @@
 (ns jiraph.graph-test
   (:use clojure.test jiraph.graph)
   (:require [jiraph.byte-append-layer :as bal]
-            [jiraph.tokyo-database :as tokyo]
+            [masai.tokyo :as tokyo]
             [jiraph.reader-append-format :as raf]
             [jiraph.protobuf-append-format :as paf])
   (:import [jiraph Test$Node]))
@@ -13,11 +13,12 @@
     (doseq [layer (layers)]
       (truncate! layer)
 
-      (testing "add-node! won't overwrite existing node"
+      (testing "add-node! throws exception and doesn't overwrite existing node"
         (let [node {:foo 2 :bar "three"}]
           (is (= node (add-node! layer "1" node)))
           (is (= node (get-node layer "1")))
-          (is (= nil  (add-node! layer "1" {:foo 8})))
+          (is (thrown-with-msg? java.io.IOException #"already exists"
+                (add-node! layer "1" {:foo 8})))
           (is (= node (get-node layer "1")))))
 
       (testing "assoc-node! modifies specific attributes"
@@ -62,6 +63,10 @@
             (is (= {:bar "cat" :baz [5 8] :rev 101} (get-node layer "3"))))
           (at-revision 100
             (is (= node (get-node layer "3"))))))
+
+      (testing "get-node returns nil if node didn't exist at-revision"
+        (at-revision 99
+          (is (= nil (get-node layer "3")))))
 
       (testing "compact-node! removes revisions but leaves all-revisions"
         (let [old {:bar "cat" :baz [5 8] :rev 101}
@@ -110,8 +115,8 @@
       (testing "past revisions are ignored inside of transactions"
         (at-revision 101
           (with-transaction layer
-            (add-node! layer "8" {:foo 9}))
-          (is (= 8 (:foo (get-node layer "8"))))))
+            (add-node! layer "8" {:foo 9})))
+        (is (= 8 (:foo (get-node layer "8")))))
 
       (testing "keeps track of incoming edges"
         (is (= #{} (get-incoming layer "1")))
@@ -139,11 +144,9 @@
         (at-revision 200
           (is (= #{"10"} (get-incoming layer "11"))))))))
 
-(deftest map-field-to-layer
+(deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
-           :b (bal/make (tokyo/make {:path "/tmp/jiraph-test-b"   :create true}) (raf/make {:bam 1 :bap 2}))
-           :c (bal/make (tokyo/make {:path "/tmp/jiraph-test-c"   :create true}) (raf/make {:one 1 :two 2}))}]
-    (is (= {:baz :a, :bar :a, :foo :a,
-            :bap :b, :bam :b,
-            :two :c, :one :c}
-           (field-to-layer g [:a :b :c])))))
+           :b (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true}) (raf/make {:bam 1 :bap 2}))
+           :c (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true}) (raf/make {:one 1 :two 2 :foo 3}))}]
+    (is (= {:baz [:a] :bar [:a] :foo [:a :c] :bap [:b] :bam [:b] :two [:c] :one [:c]}
+           (fields-to-layers g [:a :b :c])))))

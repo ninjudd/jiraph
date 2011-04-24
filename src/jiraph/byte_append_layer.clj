@@ -1,8 +1,9 @@
 (ns jiraph.byte-append-layer
   (:refer-clojure :exclude [sync count])
   (:use jiraph.layer
+        [retro.core :as retro]
         [useful :only [find-with]])
-  (:require [jiraph.byte-database :as db]
+  (:require [masai.db :as db]
             [jiraph.byte-append-format :as f]
             [jiraph.reader-append-format :as reader-append-format]
             [jiraph.protobuf-append-format :as protobuf-append-format])
@@ -63,14 +64,14 @@
          (db/append! db key))))
 
 (defn- set-len! [layer id len]
-  (if *rev*
-    (append-meta! layer id {:rev *rev* :len len})))
+  (if *revision*
+    (append-meta! layer id {:rev *revision* :len len})))
 
 (defn- reset-len! [layer id & [len]]
   ;; Insert a length of -1 to indicate that all lengths before the current one are no longer valid.
   (append-meta! layer id
-    (if (and *rev* len)
-      {:rev [0 *rev*] :len [-1 len]}
+    (if (and *revision* len)
+      {:rev [0 *revision*] :len [-1 len]}
       {:rev 0 :len -1})))
 
 (defn- inc-count! [layer]
@@ -81,8 +82,8 @@
 
 (defn- make-node [attrs]
   (let [attrs (dissoc attrs :id)]
-    (if *rev*
-      (assoc attrs :rev *rev*)
+    (if *revision*
+      (assoc attrs :rev *revision*)
       (dissoc attrs :rev))))
 
 (deftype ByteAppendLayer [db format meta-format]
@@ -92,7 +93,7 @@
   (close     [layer] (db/close     db))
   (sync!     [layer] (db/sync!     db))
   (optimize! [layer] (db/optimize! db))
-  
+
   (node-count [layer]
     (db/inc! db count-key 0))
 
@@ -114,23 +115,13 @@
       val))
 
   (get-node [layer id]
-    (if-let [node (if-let [length (if *rev* (len layer id *rev*))]
-                    (f/load format (db/get db id) 0 length)
-                    (f/load format (db/get db id)))]
-      node))
+    (if *revision*
+      (when-let [length (len layer id *revision*)]
+        (f/load format (db/get db id) 0 length))
+      (f/load format (db/get db id))))
 
   (node-exists? [layer id]
-    (< 0 (len layer id *rev*)))
-
-  (wrap-transaction [layer f]
-    (fn []
-      (db/txn-begin db)
-      (try (let [result (f)]
-             (db/txn-commit db)
-             result)
-           (catch Throwable e
-             (db/txn-abort db)
-             (throw e)))))
+    (< 0 (len layer id *revision*)))
 
   (add-node! [layer id attrs]
     (let [node (make-node attrs)
@@ -168,13 +159,26 @@
         (reset-len! layer id)
         node)))
 
-  (get-revisions [layer id] (:rev (get-meta layer (meta-key id) *rev*)))
-  (get-incoming  [layer id] (:in  (get-meta layer (meta-key id) *rev*)))
+  (get-revisions [layer id] (:rev (get-meta layer (meta-key id) *revision*)))
+  (get-incoming  [layer id] (:in  (get-meta layer (meta-key id) *revision*)))
 
-  (add-incoming!  [layer id from-id] (append-meta! layer id {:in {from-id true}}  *rev*))
-  (drop-incoming! [layer id from-id] (append-meta! layer id {:in {from-id false}} *rev*))
+  (add-incoming!  [layer id from-id] (append-meta! layer id {:in {from-id true}}  *revision*))
+  (drop-incoming! [layer id from-id] (append-meta! layer id {:in {from-id false}} *revision*))
 
-  (truncate! [layer] (db/truncate! db)))
+  (truncate! [layer] (db/truncate! db))
+
+  retro.core/WrappedTransactional
+
+  (txn-wrap [layer f]
+    (retro.core/wrapped-txn f db))
+
+  retro.core/Revisioned
+
+  (get-revision [layer]
+    (get-property layer :rev))
+
+  (set-revision! [layer rev]
+    (set-property! layer :rev rev)))
 
 (defn make [db & [format meta-format]]
   (let [format (or format (reader-append-format/make))]

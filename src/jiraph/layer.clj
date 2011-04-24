@@ -1,7 +1,5 @@
 (ns jiraph.layer)
 
-(def *rev* nil)
-
 (defprotocol Layer "Jiraph layer protocol"
   (open             [layer]            "Open the layer file.")
   (close            [layer]            "Close the layer file.")
@@ -13,7 +11,6 @@
   (fields           [layer]            "A list of canonical fields stored in this layer. Can be empty.")
   (get-property     [layer key]        "Fetch a layer-wide property.")
   (set-property!    [layer key val]    "Store a layer-wide property.")
-  (wrap-transaction [layer f]          "Wrap fn f in a transaction. Returns a fn that aborts on any exception.")
   (get-node         [layer id]         "Fetch a node.")
   (node-exists?     [layer id]         "Check if a node exists on this layer.")
   (add-node!        [layer id attrs]   "Add a node with the given id and attrs if it doesn't already exist.")
