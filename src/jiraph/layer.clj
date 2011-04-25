@@ -15,7 +15,7 @@
   (node-exists?     [layer id]         "Check if a node exists on this layer.")
   (add-node!        [layer id attrs]   "Add a node with the given id and attrs if it doesn't already exist.")
   (append-node!     [layer id attrs]   "Append attrs to a node or create it if it doesn't exist.")
-  (update-node!     [layer id f args]  "Update a node with (apply f node args).")
+  (update-node!     [layer id f args]  "Update a node with (apply f node args), and return [old new].")
   (delete-node!     [layer id]         "Remove a node from the layer (incoming links remain).")
   (get-revisions    [layer id]         "Return all revision ids for a given node.")
   (get-incoming     [layer id]         "Return the ids of all nodes that have an incoming edge to this one.")

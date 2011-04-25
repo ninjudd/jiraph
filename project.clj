@@ -5,4 +5,5 @@
                  [masai "0.5.1-SNAPSHOT"]
                  [retro "0.5.0"]]
   :dev-dependencies [[clojure-protobuf "0.3.4"]]
-  :tasks [protobuf.tasks])
+  :tasks [protobuf.tasks]
+  :java-compile {:target "1.7"})
