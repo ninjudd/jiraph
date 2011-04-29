@@ -4,11 +4,10 @@
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
 
-(def ^{:doc "Should steps be followed in parallel for increased performance?"}
-  *parallel-follow* false)
+(def ^{:doc "Should steps be followed in parallel?"} *parallel-follow* false)
 
 (defrecord Step      [id from-id layer source edge alt-ids rev data])
-(defrecord Walk      [focus-id steps node-accessor include? ids result-count to-follow max-rev terminated? traversal])
+(defrecord Walk      [focus-id steps include? ids result-count to-follow max-rev terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step extract-edges terminate?])
 
 (record-accessors Step Walk)
@@ -63,11 +62,6 @@
   [num]
   (fn [walk]
     (<= num (result-count walk))))
-
-(defn get-node
-  "Get the specified node using the memoized function stored in the walk."
-  [walk layer id]
-  ((node-accessor walk) layer id))
 
 (defn walked?
   "Has this step already been traversed?"
@@ -134,7 +128,7 @@
   "Create steps for all outgoing edges on this layer for this step's node(s)."
   [walk step layer]
   (let [ids         (or (alt-ids step) [(id step)])
-        [nodes rev] (map-reduce (partial get-node walk layer)
+        [nodes rev] (map-reduce (partial graph/get-node layer)
                                 #(or-max %1 (:rev %2)) nil
                                 ids)]
     (map (partial make-step walk step layer rev)
@@ -151,14 +145,13 @@
   "Create an empty walk."
   [traversal focus-id]
   (let [walk (make-record Walk
-               :focus-id      focus-id
-               :steps         (transient {})
-               :node-accessor (memoize graph/get-node)
-               :include?      (transient #{})
-               :ids           (transient [])
-               :result-count  0
-               :to-follow     (transient [])
-               :traversal     traversal)
+               :focus-id     focus-id
+               :steps        (transient {})
+               :include?     (transient #{})
+               :ids          (transient [])
+               :result-count 0
+               :to-follow    (transient [])
+               :traversal    traversal)
         step (<< init-step walk (make-record Step :id focus-id))]
     (traverse walk step)))
 
@@ -177,14 +170,15 @@
   (let [map (if *parallel-follow*
               (partial pcollect graph/wrap-bindings)
               map)]
-    (loop [^Walk walk (init-walk traversal focus-id)]
-      (let [steps (persistent! (to-follow walk))
-            walk  (assoc-record walk :to-follow (transient []))]
-        (if (empty? steps)
-          (persist-walk! walk)
-          (recur
-           (reduce traverse walk
-                   (apply concat (map (partial follow walk) steps)))))))))
+    (graph/with-caching
+      (loop [^Walk walk (init-walk traversal focus-id)]
+        (let [steps (persistent! (to-follow walk))
+              walk  (assoc-record walk :to-follow (transient []))]
+          (if (empty? steps)
+            (persist-walk! walk)
+            (recur
+             (reduce traverse walk
+                     (apply concat (map (partial follow walk) steps))))))))))
 
 (defn make-path
   "Given a step, construct a path of steps from the walk focus to this step's node."
