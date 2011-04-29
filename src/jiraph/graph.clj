@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any]])
+  (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any memoize-deref]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
             [masai.tokyo :as tokyo]
@@ -253,3 +253,15 @@
 
 (defn layer [path]
   (byte-append-layer/make (tokyo/make {:path path :create true})))
+
+(defn wrap-caching [f]
+  (let [vars [#'jiraph.graph/*graph* #'retro/*revision*]]
+    (fn []
+      (binding [get-node          (memoize-deref vars get-node)
+                get-incoming      (memoize-deref vars get-incoming)
+                get-revisions     (memoize-deref vars get-revisions)
+                get-all-revisions (memoize-deref vars get-all-revisions)]
+        (f)))))
+
+(defmacro with-caching [& forms]
+  `((wrap-caching (fn [] ~@forms))))

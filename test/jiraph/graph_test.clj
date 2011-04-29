@@ -68,6 +68,12 @@
         (at-revision 99
           (is (= nil (get-node layer "3")))))
 
+      (testing "with-caching"
+        (with-caching
+          (is (= {:id "3" :bar "cat" :baz [5 8] :rev 101} (get-node layer "3")))
+          (at-revision 100
+            (is (= {:id "3" :bar "cat" :baz [5] :rev 100} (get-node layer "3"))))))
+
       (testing "compact-node! removes revisions but leaves all-revisions"
         (let [old {:bar "cat" :baz [5 8] :rev 101}
               new {:bar "cat", :baz [5 8]}]
