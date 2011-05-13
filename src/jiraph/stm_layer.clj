@@ -16,6 +16,11 @@
           meta
           edges))
 
+(defn destroy-incoming
+  "Get rid of all incoming edges on an id."
+  [meta from-id edges]
+  (reduce (fn [meta to-id] (update-in meta [to-id :in] disj from-id)) meta edges))
+
 (defn get-meta [layer id] (get @(.meta layer) id))
 
 (defn reverse-compare
@@ -110,6 +115,8 @@
                        new (make-node (assoc (apply f old args) :id id))]
                    (wipe-revs layer id)
                    (drop-neg layer id)
+                   (ref-set meta (destroy-incoming @meta id (:in (get-meta layer id))))
+                   (ref-set meta (update-incoming @meta id (:edges new)))
                    (alter data assoc id new)
                    (map #(dissoc % :id) [old new]))))
   
@@ -126,6 +133,14 @@
 
   (get-revisions [layer id] (-> layer (get-meta id) :all-revs))
 
+  (get-incoming [layer id] (-> layer (get-meta id) :in))
+
+  (add-incoming! [layer id from-id]
+                 (dosync (ref-set meta (update-incoming @meta id {from-id true}))))
+
+  (drop-incoming! [layer id from-id]
+                  (dosync (ref-set meta (update-incoming @meta id {from-id false}))))
+
   retro.core/Revisioned
   
   (get-revision [layer] (get-property layer :rev))
@@ -137,4 +152,4 @@
   (txn-wrap [layer f] #(dosync (f))))
 
 (defn make []
-  (STMLayer. (ref {}) (ref {}) (ref {})))
+  (STMLayer. (ref {}) (ref {}) (ref {}))) 
