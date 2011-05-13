@@ -1,6 +1,7 @@
 (ns jiraph.graph-test
   (:use clojure.test jiraph.graph)
   (:require [jiraph.byte-append-layer :as bal]
+            [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
             [jiraph.reader-append-format :as raf]
             [jiraph.protobuf-append-format :as paf])
@@ -9,7 +10,8 @@
 (deftest each-layer
   (with-graph
     {:tr (layer "/tmp/jiraph-test-tokyo-reader")
-     :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))}
+     :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))
+     :stm (stm/make)}
     (doseq [layer (layers)]
       (truncate! layer)
 
