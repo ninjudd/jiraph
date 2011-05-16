@@ -10,9 +10,20 @@
 
 (defn update-incoming [meta from-id edges]
   (reduce (fn [meta [to-id edge]]
-            (if (:deleted edge)
-              (update-in meta [to-id :in] disj from-id)
-              (update-in meta [to-id :in] conj-set from-id)))
+            (let [rev-path [to-id :revs *revision* :in]
+                  manipulate
+                  (fn [to-vec]
+                    (if (:deleted edge)
+                      (update-in meta to-vec disj from-id)
+                      (update-in meta to-vec conj-set from-id)))]
+              (adjoin
+               (when *revision*
+                 (update-in
+                  (manipulate rev-path)
+                  rev-path
+                  into
+                  (get-in meta [to-id :in])))
+               (manipulate [to-id :in]))))
           meta
           edges))
 
@@ -104,7 +115,7 @@
                   (let [id-meta (get-meta layer id)]
                     (when-not (:in id-meta)
                       (alter meta assoc id (assoc id-meta :in #{}))))
-                  (ref-set meta (update-incoming @meta id (:edges node)))
+                  (alter meta update-incoming id (:edges node))
                   (when *revision* (modify-rev layer id node))
                   (alter data into {id node}))
                  node)))
@@ -116,7 +127,7 @@
                    (wipe-revs layer id)
                    (drop-neg layer id)
                    (ref-set meta (destroy-incoming @meta id (:in (get-meta layer id))))
-                   (ref-set meta (update-incoming @meta id (:edges new)))
+                   (alter meta update-incoming id (:edges new))
                    (alter data assoc id new)
                    (map #(dissoc % :id) [old new]))))
   
@@ -128,18 +139,23 @@
                      (let [old (dissoc (get-node layer id) :id)
                            return (if *revision* (modify-rev layer id node) node)]
                        (alter data adjoin {id node})
-                       (ref-set meta (update-incoming @meta id (:edges node)))
+                       (alter meta update-incoming id (:edges node))
                        node)))))
 
   (get-revisions [layer id] (-> layer (get-meta id) :all-revs))
 
-  (get-incoming [layer id] (-> layer (get-meta id) :in))
-
+  (get-incoming [layer id]
+                (get-in
+                 (get-meta layer id)
+                 (if *revision*
+                   [:revs *revision* :in]
+                   [:in])))
+  
   (add-incoming! [layer id from-id]
-                 (dosync (ref-set meta (update-incoming @meta id {from-id true}))))
+                 (dosync (alter meta update-incoming id {from-id true})))
 
   (drop-incoming! [layer id from-id]
-                  (dosync (ref-set meta (update-incoming @meta id {from-id false}))))
+                  (dosync (alter meta update-incoming id {from-id false})))
 
   retro.core/Revisioned
   
