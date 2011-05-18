@@ -3,8 +3,8 @@
         [jiraph.walk :only [defwalk path paths limit *parallel-follow*]])
   (:require [jiraph.byte-append-layer :as bal]
             [masai.tokyo :as tokyo]
-            [jiraph.reader-append-format :as raf]
-            [jiraph.protobuf-append-format :as paf])
+            [cereal.reader :as raf]
+            [cereal.protobuf :as paf])
   (:import [jiraph Test$Node]))
 
 (def test-graph
