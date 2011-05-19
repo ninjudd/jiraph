@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any]])
+  (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any memoize-deref]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
             [masai.tokyo :as tokyo]
@@ -7,6 +7,7 @@
 
 (def ^{:dynamic true} *graph* nil)
 (def ^{:dynamic true} *verbose* nil)
+(def ^{:dynamic true} *use-outer-cache* nil)
 
 (defn edge-ids [node & [pred]]
   (remove-keys-by-val
@@ -52,11 +53,6 @@
           ~@forms
           (finally (close!)
                    (set-graph! graph#)))))
-
-(defn wrap-bindings
-  "Wrap the given function with the current graph context."
-  [f]
-  (useful/wrap-bindings [#'jiraph.graph/*graph* #'jiraph.graph/*verbose* #'retro/*revision*] f))
 
 (defmacro at-revision
   "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
@@ -129,7 +125,13 @@
 (defn get-node
   "Fetch a node's data from this layer."
   [layer id]
-  (layer/get-node (*graph* layer) id))
+  (when-let [node (layer/get-node (*graph* layer) id)]
+    (assoc node :id id)))
+
+(defn get-in-node
+  "Fetch data from inside a node."
+  [layer keys]
+  (get-in (get-node layer (first keys)) (rest keys)))
 
 (defn get-edge
   "Fetch an edge from node with id to to-id."
@@ -247,3 +249,29 @@
 
 (defn layer [path]
   (byte-append-layer/make (tokyo/make {:path path :create true})))
+
+(defn wrap-caching
+  "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
+   are collapsed so only the outer cache is used."
+  [f]
+  (let [vars [#'jiraph.graph/*graph* #'retro/*revision*]]
+    (fn []
+      (if *use-outer-cache*
+        (f)
+        (binding [*use-outer-cache* true
+                  get-node          (memoize-deref vars get-node)
+                  get-incoming      (memoize-deref vars get-incoming)
+                  get-revisions     (memoize-deref vars get-revisions)
+                  get-all-revisions (memoize-deref vars get-all-revisions)]
+          (f))))))
+
+(defmacro with-caching
+  "Enable caching for the given forms. See wrap-caching."
+  [& forms]
+  `((wrap-caching (fn [] ~@forms))))
+
+(defn wrap-bindings
+  "Wrap the given function with the current graph context."
+  [f]
+  (useful/wrap-bindings [#'get-node #'get-incoming #'get-revisions #'get-all-revisions
+                         #'*graph* #'*verbose* #'*use-outer-cache* #'retro/*revision*] f))
