@@ -44,7 +44,15 @@
 
 (defn flip [f & args] (apply f (reverse args)))
 
-(defn modify-rev
+(defn create-rev
+  "Create a revision."
+  [layer id node]
+  (alter (.meta layer) adjoin {id {:all-revs [*revision*]}})
+  (get-in
+   (alter (.meta layer) assoc-in [id :revs *revision*] node)
+   [id :revs *revision*]))
+
+(defn append-rev
   "Modify a revision."
   [layer id node]
   (get-in
@@ -57,10 +65,6 @@
                 :all-revs [*revision*]}}
            {id {:revs {*revision* node}}}))
    [id :revs *revision*]))
-
-(defn drop-neg
-  "Drop a negative number onto the end of the all-revs seq."
-  [layer id] (alter (.meta layer) update-in [id :all-revs] conj -1))
 
 (defn wipe-revs
   "Collapse all of an id's revisions."
@@ -116,31 +120,34 @@
                     (when-not (:in id-meta)
                       (alter meta assoc id (assoc id-meta :in #{}))))
                   (alter meta update-incoming id (:edges node))
-                  (when *revision* (modify-rev layer id node))
+                  (when *revision* (append-rev layer id node))
                   (alter data into {id node}))
                  node)))
   
   (update-node! [layer id f args]
                 (dosync
+                 (initiate-revs layer id)
                  (let [old (get-node layer id)
-                       new (make-node (assoc (apply f old args) :id id))]
-                   (wipe-revs layer id)
-                   (drop-neg layer id)
-                   (ref-set meta (destroy-incoming @meta id (:in (get-meta layer id))))
-                   (alter meta update-incoming id (:edges new))
+                       new (make-node (apply f old args))]
+                   (when *revision* (create-rev layer id new))
                    (alter data assoc id new)
+                   (alter meta update-incoming id (:edges new))
                    (map #(dissoc % :id) [old new]))))
   
-  (append-node! [layer id attrs]
+  #_(append-node! [layer id attrs]
                 (let [node (make-node attrs)]
                   (when-not (empty? attrs)
                     (dosync
                      (initiate-revs layer id)
-                     (let [old (dissoc (get-node layer id) :id)
-                           return (if *revision* (modify-rev layer id node) node)]
+                     (let [old (dissoc (get-node layer id) :id)]
+                       (when *revision* (append-rev layer id node))
                        (alter data adjoin {id node})
                        (alter meta update-incoming id (:edges node))
                        node)))))
+
+  (append-node! [layer id attrs]
+                (update-node! layer id adjoin [attrs])
+                (make-node attrs))
 
   (get-revisions [layer id] (-> layer (get-meta id) :all-revs))
 
