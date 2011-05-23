@@ -97,15 +97,15 @@
 
       (testing ":rev property stores max committed revision"
         (at-revision 102
-                     (with-transaction layer
-                       (add-node! layer "8" {:foo 8}))
-                     (is (= 8 (:foo (get-node layer "8"))))
-                     (is (= 102 (get-property layer :rev)))))
+          (with-transaction layer
+            (add-node! layer "8" {:foo 8}))
+          (is (= 8 (:foo (get-node layer "8"))))
+          (is (= 102 (get-property layer :rev)))))
 
       (testing "past revisions are ignored inside of transactions"
         (at-revision 101
-                     (with-transaction layer
-                       (add-node! layer "8" {:foo 9})))
+          (with-transaction layer
+            (add-node! layer "8" {:foo 9})))
         (is (= 8 (:foo (get-node layer "8")))))
 
       (testing "keeps track of incoming edges"
@@ -122,22 +122,21 @@
 
       (testing "keeps track of incoming edges inside at-revision"
         (at-revision 199 (is (= nil (get-incoming layer "11"))))
-
         (at-revision 200
-                     (is (add-node! layer "10" {:edges {"11" {:a "one"}}})))
+          (is (add-node! layer "10" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10"} (get-incoming layer "11")))
         (at-revision 199 (is (= nil (get-incoming layer "11"))))
 
         (at-revision 201
-                     (is (add-node! layer "12" {:edges {"11" {:a "one"}}})))
+          (is (add-node! layer "12" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10" "12"} (get-incoming layer "11")))
         (at-revision 199 (is (= nil (get-incoming layer "11"))))
         (at-revision 200 (is (= #{"10"} (get-incoming layer "11"))))
 
         (at-revision 202
-                     (is (add-node! layer "13" {:edges {"11" {:a "one"}}})))
+          (is (add-node! layer "13" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10" "12" "13"} (get-incoming layer "11")))
         (at-revision 199 (is (= nil (get-incoming layer "11"))))
