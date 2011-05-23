@@ -93,9 +93,10 @@
   (close [layer] nil)
   (sync! [layer] nil)
 
-  (truncate! [layer] (dosync (ref-set data {})
-                             (ref-set meta {})
-                             (ref-set properties {})))
+  (truncate! [layer]
+    (dosync (ref-set data {})
+            (ref-set meta {})
+            (ref-set properties {})))
 
   (node-count [layer] (count @data))
 
@@ -106,64 +107,53 @@
   (set-property! [layer key val] (dosync ((alter properties assoc key val) key)))
 
   (get-node [layer id]
-            (when-let [rev (if *revision* (get-rev layer id) (get @data id))]
-              (assoc rev :id id)))
+    (when-let [rev (if *revision* (get-rev layer id) (get @data id))]
+      (assoc rev :id id)))
 
   (node-exists? [layer id] (contains? @data id))
 
   (add-node! [layer id attrs]
-             (let [node (make-node attrs)]
-               (when-not (node-exists? layer id)
-                 (dosync
-                  (initiate-revs layer id)
-                  (let [id-meta (get-meta layer id)]
-                    (when-not (:in id-meta)
-                      (alter meta assoc id (assoc id-meta :in #{}))))
-                  (alter meta update-incoming id (:edges node))
-                  (when *revision* (append-rev layer id node))
-                  (alter data into {id node}))
-                 node)))
+    (let [node (make-node attrs)]
+      (when-not (node-exists? layer id)
+        (dosync
+         (initiate-revs layer id)
+         (let [id-meta (get-meta layer id)]
+           (when-not (:in id-meta)
+             (alter meta assoc id (assoc id-meta :in #{}))))
+         (alter meta update-incoming id (:edges node))
+         (when *revision* (append-rev layer id node))
+         (alter data into {id node}))
+        node)))
   
   (update-node! [layer id f args]
-                (dosync
-                 (initiate-revs layer id)
-                 (let [old (get-node layer id)
-                       new (make-node (apply f old args))]
-                   (when *revision* (create-rev layer id new))
-                   (alter data assoc id new)
-                   (alter meta update-incoming id (:edges new))
-                   (map #(dissoc % :id) [old new]))))
-  
-  #_(append-node! [layer id attrs]
-                (let [node (make-node attrs)]
-                  (when-not (empty? attrs)
-                    (dosync
-                     (initiate-revs layer id)
-                     (let [old (dissoc (get-node layer id) :id)]
-                       (when *revision* (append-rev layer id node))
-                       (alter data adjoin {id node})
-                       (alter meta update-incoming id (:edges node))
-                       node)))))
+    (dosync
+     (initiate-revs layer id)
+     (let [old (get-node layer id)
+           new (make-node (apply f old args))]
+       (when *revision* (create-rev layer id new))
+       (alter data assoc id new)
+       (alter meta update-incoming id (:edges new))
+       (map #(dissoc % :id) [old new]))))
 
   (append-node! [layer id attrs]
-                (update-node! layer id adjoin [attrs])
-                (make-node attrs))
+    (update-node! layer id adjoin [attrs])
+    (make-node attrs))
 
   (get-revisions [layer id] (-> layer (get-meta id) :all-revs))
 
   (get-incoming [layer id]
-                (get-in
-                 (get-meta layer id)
-                 (if *revision*
-                   [:revs *revision* :in]
-                   [:in])))
+    (get-in
+     (get-meta layer id)
+     (if *revision*
+       [:revs *revision* :in]
+       [:in])))
   
   (add-incoming! [layer id from-id]
-                 (dosync (alter meta update-incoming id {from-id true})))
-
+    (dosync (alter meta update-incoming id {from-id true})))
+  
   (drop-incoming! [layer id from-id]
-                  (dosync (alter meta update-incoming id {from-id false})))
-
+    (dosync (alter meta update-incoming id {from-id false})))
+  
   retro.core/Revisioned
   
   (get-revision [layer] (get-property layer :rev))
