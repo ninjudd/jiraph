@@ -1,7 +1,7 @@
 (ns jiraph.walk-test
   (:use clojure.test jiraph.graph
         [jiraph.walk :only [defwalk path paths limit *parallel-follow*]])
-  (:require [jiraph.byte-append-layer :as bal]
+  (:require [jiraph.masai-layer :as bal]
             [masai.tokyo :as tokyo]
             [jiraph.reader-append-format :as raf]
             [jiraph.protobuf-append-format :as paf])

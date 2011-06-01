@@ -1,6 +1,6 @@
 (ns jiraph.graph-test
   (:use clojure.test jiraph.graph)
-  (:require [jiraph.byte-append-layer :as bal]
+  (:require [jiraph.masai-layer :as bal]
             [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
             [jiraph.reader-append-format :as raf]
