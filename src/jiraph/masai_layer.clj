@@ -1,4 +1,4 @@
-(ns jiraph.byte-append-layer
+(ns jiraph.masai-layer
   (:refer-clojure :exclude [sync count])
   (:use jiraph.layer
         [retro.core :as retro]

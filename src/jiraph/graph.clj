@@ -3,7 +3,7 @@
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
             [masai.tokyo :as tokyo]
-            [jiraph.byte-append-layer :as byte-append-layer]))
+            [jiraph.masai-layer :as masai-layer]))
 
 (def ^{:dynamic true} *graph* nil)
 (def ^{:dynamic true} *verbose* nil)
@@ -248,7 +248,7 @@
           {} layers))
 
 (defn layer [path]
-  (byte-append-layer/make (tokyo/make {:path path :create true})))
+  (masai-layer/make (tokyo/make {:path path :create true})))
 
 (defn wrap-caching
   "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
