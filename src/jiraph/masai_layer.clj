@@ -4,9 +4,9 @@
         [retro.core :as retro]
         [useful :only [find-with]])
   (:require [masai.db :as db]
-            [jiraph.byte-append-format :as f]
-            [jiraph.reader-append-format :as reader-append-format]
-            [jiraph.protobuf-append-format :as protobuf-append-format])
+            [cereal.format :as f]
+            [cereal.reader :as reader-append-format]
+            [cereal.protobuf :as protobuf-append-format])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
            [clojure.lang LineNumberingPushbackReader]))
 
@@ -29,8 +29,8 @@
     (if rev
       (let [len (meta-len layer key rev)]
         (when (< 0 len)
-          (f/load mf (db/get db key) 0 len)))
-      (f/load mf (db/get db key)))))
+          (f/decode mf (db/get db key) 0 len)))
+      (f/decode mf (db/get db key)))))
 
 (defn- len
   "The byte length of the node at revision rev."
@@ -62,7 +62,7 @@
     (->> (if rev
            (assoc attrs :mrev rev :mlen (db/len db key))
            attrs)
-         (f/dump mf)
+         (f/encode mf)
          (db/append! db key))))
 
 (defn- set-len! [layer id len]
@@ -119,40 +119,40 @@
   (get-node [layer id]
     (if *revision*
       (when-let [length (len layer id *revision*)]
-        (f/load format (db/get db id) 0 length))
-      (f/load format (db/get db id))))
+        (f/decode format (db/get db id) 0 length))
+      (f/decode format (db/get db id))))
 
   (node-exists? [layer id]
     (< 0 (len layer id *revision*)))
 
   (add-node! [layer id attrs]
     (let [node (make-node attrs)
-          data (f/dump format node)]
+          data (f/encode format node)]
       (when (db/add! db id data)
         (inc-count! layer)
         (set-len! layer id (alength data))
-        (f/load format data))))
+        (f/decode format data))))
 
   (append-node! [layer id attrs]
     (when-not (empty? attrs)
       (let [len  (db/len db id)
             node (make-node attrs)
-            data (f/dump format node)]
+            data (f/encode format node)]
         (db/append! db id data)
         (if (= -1 len)
           (inc-count! layer))
         (set-len! layer id (+ (max len 0) (alength data)))
-        (f/load format data))))
+        (f/decode format data))))
 
   (update-node! [layer id f args]
     (let [old  (get-node layer id)
           new  (make-node (apply f old args))
-          data (f/dump format new)]
+          data (f/encode format new)]
       (db/put! db id data)
       (if (nil? old)
         (inc-count! layer))
       (reset-len! layer id (alength data))
-      [old (f/load format data)]))
+      [old (f/decode format data)]))
 
   (delete-node! [layer id]
     (let [node (get-node layer id)]
@@ -187,7 +187,7 @@
     (ByteAppendLayer.
      db format
      (or meta-format
-         (cond (instance? jiraph.reader-append-format.ReaderAppendFormat format)
+         (cond (instance? cereal.reader.ReaderFormat format)
                (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
-               (instance? jiraph.protobuf-append-format.ProtobufAppendFormat format)
+               (instance? cereal.protobuf.ProtobufFormat format)
                (protobuf-append-format/make jiraph.Meta$Node))))))
