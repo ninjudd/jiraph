@@ -88,7 +88,7 @@
       (assoc attrs :rev *revision*)
       (dissoc attrs :rev))))
 
-(deftype ByteAppendLayer [db format meta-format]
+(deftype MasaiLayer [db format meta-format]
   jiraph.layer/Layer
 
   (open      [layer] (db/open      db))
@@ -184,7 +184,7 @@
 
 (defn make [db & [format meta-format]]
   (let [format (or format (reader-append-format/make))]
-    (ByteAppendLayer.
+    (MasaiLayer.
      db format
      (or meta-format
          (cond (instance? cereal.reader.ReaderFormat format)
