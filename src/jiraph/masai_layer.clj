@@ -2,11 +2,10 @@
   (:refer-clojure :exclude [sync count])
   (:use jiraph.layer
         [retro.core :as retro]
-        [useful :only [find-with]])
+        [useful :only [find-with if-ns]])
   (:require [masai.db :as db]
             [cereal.format :as f]
-            [cereal.reader :as reader-append-format]
-            [cereal.protobuf :as protobuf-append-format])
+            [cereal.reader :as reader-append-format])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
            [clojure.lang LineNumberingPushbackReader]))
 
@@ -182,12 +181,17 @@
   (set-revision! [layer rev]
     (set-property! layer :rev rev)))
 
+(if-ns (:require protobuf [cereal.protobuf :as protobuf])
+       (defn protobuf-make [format]
+         (when (instance? cereal.protobuf.ProtobufFormat format)
+           (protobuf/make jiraph.Meta$Node)))
+       (def protobuf-make (constantly nil)))
+
 (defn make [db & [format meta-format]]
   (let [format (or format (reader-append-format/make))]
     (MasaiLayer.
      db format
      (or meta-format
-         (cond (instance? cereal.reader.ReaderFormat format)
-               (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
-               (instance? cereal.protobuf.ProtobufFormat format)
-               (protobuf-append-format/make jiraph.Meta$Node))))))
+         (if (instance? cereal.reader.ReaderFormat format)
+           (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
+           (protobuf-make format))))))
