@@ -23,7 +23,7 @@
 
 (declare meta-len)
 (defn- get-meta [layer key rev]
-  (let [db (.db layer)
+  (let [db (:db layer)
         mf (.meta-format layer)]
     (if rev
       (let [len (meta-len layer key rev)]
@@ -35,7 +35,7 @@
   "The byte length of the node at revision rev."
   [layer id rev]
   (if-not rev
-    (db/len (.db layer) id)
+    (db/len (:db layer) id)
     (let [meta (get-meta layer (meta-key id) nil)
           len  (find-with (partial >= rev)
                           (reverse (:rev meta))
@@ -87,7 +87,7 @@
       (assoc attrs :rev *revision*)
       (dissoc attrs :rev))))
 
-(deftype MasaiLayer [db format meta-format]
+(defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
 
   (open      [layer] (db/open      db))
@@ -102,7 +102,7 @@
     (remove #(.startsWith % meta-prefix) (db/key-seq db)))
 
   (fields [layer]
-    (remove #(or (contains? #{:id :edges :rev} %)
+    (remove #(or (contains? #{:id :edges :edge :rev} %)
                  (.startsWith (str %) "_"))
             (f/fields format)))
 
