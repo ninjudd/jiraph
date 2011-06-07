@@ -117,6 +117,21 @@
         (is (= #{"4"} (get-incoming layer-name "2")))
         (is (= #{"4"} (get-incoming layer-name "3")))))))
 
+(deftest edge
+  (with-graph
+    (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "can handle :edge"
+        (is (empty? (get-incoming layer-name "1")))
+        (is (add-node! layer-name "4" {:edge {:id "1"}}))
+        (is (= #{"4"} (get-incoming layer-name "1")))
+        (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
+        (is (= #{"4"} (get-incoming layer-name "2")))
+        (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
+        (is (compact-node! layer-name "4"))
+        (is (= #{} (get-incoming layer-name "2")))))))
+
 (deftest revisions
   (with-graph (make-graph)
     (with-each-layer all

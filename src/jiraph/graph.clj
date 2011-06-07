@@ -9,15 +9,32 @@
 (def ^{:dynamic true} *verbose* nil)
 (def ^{:dynamic true} *use-outer-cache* nil)
 
+(defn single-edge?
+  "Is the named layer marked single-edge?"
+  [layer]
+  (layer/single-edge? (*graph* layer)))
+
+(defn- get-edges [node]
+  (or (:edge node) (:edges node)))
+
+(defn- edges-okay? [layer node]
+  (if (layer/single-edge? (*graph* layer))
+    (boolean
+     (or (not (:edges node))
+         (-> node :edge :id)))
+    (not (:edge node))))
+
 (defn edge-ids [node & [pred]]
-  (remove-keys-by-val
-   (if pred
-     (any :deleted (complement pred))
-     :deleted)
-   (:edges node)))
+  (if-let [edge (:edge node)]
+    [(:id edge)]
+    (remove-keys-by-val
+     (if pred
+       (any :deleted (complement pred))
+       :deleted)
+     (:edges node))))
 
 (defn edges [node & [pred]]
-  (select-keys (:edges node) (edge-ids node pred)))
+  (select-keys (get-edges node) (edge-ids node pred)))
 
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
@@ -136,7 +153,10 @@
 (defn get-edge
   "Fetch an edge from node with id to to-id."
   [layer id to-id]
-  (get-in (get-node layer id) [:edges to-id]))
+  (let [edges (get-edges (get-node id))]
+    (if (layer/single-edge? layer)
+      (and (= to-id (:id edges)) edges)
+      (edges to-id))))
 
 (defn node-exists?
   "Check if a node exists on this layer."
@@ -146,48 +166,59 @@
 (defn append-only?
   "Is the named layer marked append-only?"
   [layer]
-  (if-let [append-only (:append-only (meta *graph*))]
-    (or (true? append-only)
-        (contains? append-only layer))
-    (when-let [except (:append-only-except (meta *graph*))]
-      (not (contains? except layer)))))
+  (layer/append-only? (*graph* layer)))
 
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer id & attrs]
-  {:pre [(if (append-only? layer) retro/*revision* true)]}
+  {:pre [(if (append-only? layer) retro/*revision* true)
+         (edges-okay? layer (into-map attrs))]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/add-node! layer id (into-map attrs))]
       (when-not node
         (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
-      (doseq [[to-id edge] (:edges node)]
-        (when-not (:deleted edge)
-          (layer/add-incoming! layer to-id id)))
+      (let [edges (get-edges node)]
+        (if (layer/single-edge? layer)
+          (when-not (:deleted edges)
+            (layer/add-incoming! layer (:id edges) id))
+          (doseq [[to-id edge] edges]
+            (when-not (:deleted edge)
+              (layer/add-incoming! layer to-id id)))))
       node)))
 
 (defn append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer id & attrs]
-  {:pre [(if (append-only? layer) retro/*revision* true)]}
+  {:pre [(if (append-only? layer) retro/*revision* true)
+         (edges-okay? layer (into-map attrs))]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/append-node! layer id (into-map attrs))]
-      (doseq [[to-id edge] (:edges node)]
-        (if (:deleted edge)
-          (layer/drop-incoming! layer to-id id)
-          (layer/add-incoming!  layer to-id id)))
+      (let [edges (get-edges node)]
+        (if (layer/single-edge? layer)
+          (let [to-id (:id edges)]
+            (if (:deleted edges)
+              (layer/drop-incoming! layer to-id id)
+              (layer/add-incoming!  layer to-id id)))
+          (doseq [[to-id edge] (:edges node)]
+            (if (:deleted edge)
+              (layer/drop-incoming! layer to-id id)
+              (layer/add-incoming!  layer to-id id)))))
       node)))
 
 (def ^{:dynamic true :private true} *compacting* false)
 
 (defn update-node!
   "Update a node by calling function f with the old value and any supplied args."
-  [layer id f & args]
-  {:pre [(or (not (append-only? layer)) *compacting*)]}
-  (with-transaction layer
-    (let [layer     (*graph* layer)
+  [layer-name id f & args]
+  {:pre [(or (not (append-only? layer-name)) *compacting*)]}
+  (with-transaction layer-name
+    (let [layer     (*graph* layer-name)
           [old new] (layer/update-node! layer id f args)]
+      (when-not (edges-okay? layer-name new)
+        (layer/update-node! layer id (constantly old) nil)
+        (throw (Exception. "Can't write :edges when :single-edge is true.")))
       (let [new-edges (set (edge-ids new))
             old-edges (set (edge-ids old))]
         (doseq [to-id (remove old-edges new-edges)]
@@ -215,7 +246,9 @@
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
   [layer id]
   (binding [*compacting* true]
-    (update-node! layer id update :edges (partial remove-vals :deleted))))
+    (if (single-edge? layer)
+      (update-node! layer id update :edge #(when-not (:deleted %) %))
+      (update-node! layer id update :edges (partial remove-vals :deleted)))))
 
 (defn layers
   "Return the names of all layers in the current graph."

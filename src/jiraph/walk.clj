@@ -18,10 +18,14 @@
    :follow?       true
    :add?          true
    :count?        true
-   :follow-layers (fn [walk step]  (graph/layers))
-   :init-step     (fn [walk step]  step)
-   :update-step   (fn [walk step]  step)
-   :extract-edges (fn [walk nodes] (sort-by first (mapcat :edges nodes)))
+   :follow-layers (fn [walk step] (graph/layers))
+   :init-step     (fn [walk step] step)
+   :update-step   (fn [walk step] step)
+   :extract-edges (fn [walk nodes]
+                    (sort-by first (mapcat #(if-let [edge (:edge %)]
+                                              edge
+                                              (:edges %))
+                                           nodes)))
    :terminate?    false})
 
 (defn traversal-fn [[key val]]
@@ -114,15 +118,19 @@
 
 (defn- make-step
   "Create a new step from the previous step, layer and edge."
-  [walk from-step layer rev [to-id edge]]
-  (<< init-step walk
-      (make-record Step
-        :id      to-id
-        :from-id (id from-step)
-        :layer   layer
-        :source  from-step
-        :edge    edge
-        :rev     rev)))
+  [walk from-step layer rev edge]
+  (let [map-edge (apply hash-map edge)
+        single-id (:id map-edge)
+        to-id (or single-id (first edge))
+        edge (if single-id map-edge (second edge))]
+    (<< init-step walk
+        (make-record Step
+                     :id      to-id
+                     :from-id (id from-step)
+                     :layer   layer
+                     :source  from-step
+                     :edge    edge
+                     :rev     rev))))
 
 (defn- make-layer-steps
   "Create steps for all outgoing edges on this layer for this step's node(s)."
