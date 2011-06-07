@@ -1,5 +1,19 @@
 (ns jiraph.layer)
 
+(defn single-edge?
+  "Is the named layer marked single-edge?"
+  [layer]
+  (-> layer meta :single-edge true?))
+
+(defn append-only?
+  "Is the named layer marked append-only?"
+  [layer]
+  (if-let [append-only (:append-only (meta layer))]
+    (or (true? append-only)
+        (contains? append-only layer))
+    (when-let [except (:append-only-except (meta layer))]
+      (not (contains? except layer)))))
+
 (defprotocol Layer "Jiraph layer protocol"
   (open             [layer]            "Open the layer file.")
   (close            [layer]            "Close the layer file.")
