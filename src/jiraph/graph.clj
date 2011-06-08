@@ -218,7 +218,7 @@
           [old new] (layer/update-node! layer id f args)]
       (when-not (edges-okay? layer-name new)
         (layer/update-node! layer id (constantly old) nil)
-        (throw (Exception. "Can't write :edges when :single-edge is true.")))
+        (throw (AssertionError. "Assert failed: (edges-okay? layer-name new)")))
       (let [new-edges (set (edge-ids new))
             old-edges (set (edge-ids old))]
         (doseq [to-id (remove old-edges new-edges)]
