@@ -168,6 +168,12 @@
   [layer]
   (layer/append-only? (*graph* layer)))
 
+(defn layers-with-type
+  "Get a list of layers whose :types metadata contains type."
+  [type]
+  (for [[name layer] *graph* :when (some #{type} (-> layer meta :types))]
+    name))
+
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer id & attrs]
