@@ -1,5 +1,6 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any memoize-deref]])
+  (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any memoize-deref]]
+        [clojure.string :only [split]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
             [masai.tokyo :as tokyo]
@@ -17,12 +18,33 @@
 (defn- get-edges [node]
   (or (:edge node) (:edges node)))
 
+(defn- split-id [s] (split s #"-"))
+
+(defn- safely-split-id [s]
+  (when (< 1 (count (filter (partial = \-) s)))
+    (throw (Exception. "IDs cannot contain more than one dash (-).")))
+  (let [split-s (split-id s)]
+    split-s))
+
+(defn- matches-schema [id layer kind]
+  (let [layer (*graph* layer)]
+    (if-let [types (-> layer meta kind seq)]
+      (let [[id _] (safely-split-id id)]
+        (some (partial = id) types))
+      true)))
+
 (defn- edges-okay? [layer node]
-  (if (layer/single-edge? (*graph* layer))
-    (boolean
-     (or (not (:edges node))
-         (-> node :edge :id)))
-    (not (:edge node))))
+  (boolean
+   (if (single-edge? layer)
+     (and (not (:edges node))
+          (if-let [edge (:edge node)]
+            (-> edge :id (matches-schema layer :edge-types))
+            true))
+     (and (not (:edge node))
+          (if-let [edges (:edges node)]
+            (every? (comp not nil?)
+                    (map #(matches-schema % layer :edge-types) (keys edges)))
+            true)))))
 
 (defn edge-ids [node & [pred]]
   (if-let [edge (:edge node)]
@@ -178,7 +200,8 @@
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer id & attrs]
   {:pre [(if (append-only? layer) retro/*revision* true)
-         (edges-okay? layer (into-map attrs))]}
+         (edges-okay? layer (into-map attrs))
+         (matches-schema id layer :types)]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/add-node! layer id (into-map attrs))]
@@ -197,7 +220,8 @@
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer id & attrs]
   {:pre [(if (append-only? layer) retro/*revision* true)
-         (edges-okay? layer (into-map attrs))]}
+         (edges-okay? layer (into-map attrs))
+         (matches-schema id layer :types)]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/append-node! layer id (into-map attrs))]
@@ -217,20 +241,21 @@
 
 (defn update-node!
   "Update a node by calling function f with the old value and any supplied args."
-  [layer-name id f & args]
-  {:pre [(or (not (append-only? layer-name)) *compacting*)]}
-  (with-transaction layer-name
-    (let [layer     (*graph* layer-name)
-          [old new] (layer/update-node! layer id f args)]
-      (when-not (edges-okay? layer-name new)
-        (layer/update-node! layer id (constantly old) nil)
+  [layer id f & args]
+  {:pre [(or (not (append-only? layer)) *compacting*)
+         (matches-schema id layer :types)]}
+  (with-transaction layer
+    (let [layer-obj     (*graph* layer)
+          [old new] (layer/update-node! layer-obj id f args)]
+      (when-not (edges-okay? layer new)
+        (layer/update-node! layer-obj id (constantly old) nil)
         (throw (AssertionError. "Assert failed: (edges-okay? layer-name new)")))
       (let [new-edges (set (edge-ids new))
             old-edges (set (edge-ids old))]
         (doseq [to-id (remove old-edges new-edges)]
-          (layer/add-incoming! layer to-id id))
+          (layer/add-incoming! layer-obj to-id id))
         (doseq [to-id (remove new-edges old-edges)]
-          (layer/drop-incoming! layer to-id id)))
+          (layer/drop-incoming! layer-obj to-id id)))
       [old new])))
 
 (defn delete-node!

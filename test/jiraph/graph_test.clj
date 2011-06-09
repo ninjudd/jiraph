@@ -232,6 +232,23 @@
         (is (assoc-node! layer-name "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
         (is (empty? (get-incoming layer-name "1")))))))
 
+(deftest schema
+  (with-graph
+    (into {} (for [[k v] (make-graph)]
+               [k (with-meta v {:types ["foo" "bar"] :edge-types ["bar"]})]))
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "adheres to the schema"
+        (is (add-node! layer-name "bar-1" {:a "b"}))
+        (is (add-node! layer-name "foo-1" {:edges {"bar-1" {:b "2"}}}))
+        (is (thrown? AssertionError (add-node! layer-name "baz-1" {:a "b"})))
+        (is (thrown? AssertionError (update-node! layer-name "baz-1" {:a "b"})))
+        (is (thrown? AssertionError (append-node! layer-name "baz-1" {:a "b"}))))
+
+      (testing "can't have more than a single dash in an id"
+        (is (thrown-with-msg? Exception  #"IDs cannot contain"
+              (add-node! layer-name "foo-bar-baz-1" {:a "b"})))))))
+
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
            :b (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true}) (raf/make {:bam 1 :bap 2}))
