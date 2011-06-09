@@ -247,7 +247,10 @@
 
       (testing "can't have more than a single dash in an id"
         (is (thrown-with-msg? Exception  #"IDs cannot contain"
-              (add-node! layer-name "foo-bar-baz-1" {:a "b"})))))))
+              (add-node! layer-name "foo-bar-baz-1" {:a "b"}))))
+
+      (testing "can find layers with a specific type"
+        (is (= [:tr :tp :stm] (layers-with-type "foo")))))))
 
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
