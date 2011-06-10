@@ -192,7 +192,7 @@
 (defn layers-with-type
   "Get a list of layers whose :types metadata contains type."
   [type]
-  (for [[name layer] *graph* :when (some #{type} (-> layer meta :types))]
+  (for [[name layer] *graph* :when (some #{type} (layer-meta name :types))]
     name))
 
 (defn add-node!
@@ -265,6 +265,16 @@
     (if (single-edge? layer-name)
       (update-node! layer-name id update :edge #(when-not (:deleted %) %))
       (update-node! layer-name id update :edges (partial remove-vals :deleted)))))
+
+(defn schema
+  "Get the schema for layers that contain type."
+  [type]
+  (into
+   {}
+   (map
+    (fn [layer-name]
+      [layer-name (into {} (layer/schema (*graph* layer-name)))])
+    (layers-with-type type))))
 
 (defn layers
   "Return the names of all layers in the current graph."

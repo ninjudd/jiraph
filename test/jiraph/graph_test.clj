@@ -232,7 +232,7 @@
         (is (assoc-node! layer-name "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
         (is (empty? (get-incoming layer-name "1")))))))
 
-(deftest schema
+(deftest adhere-schema
   (with-graph
     (into {} (for [[k v] (make-graph)]
                [k (with-meta v {:types ["foo" "bar"] :edge-types ["bar"]})]))

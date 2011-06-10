@@ -106,6 +106,9 @@
                  (.startsWith (str %) "_"))
             (f/fields format)))
 
+  (schema [layer]
+    (fields layer))
+
   (get-property  [layer key]
     (if-let [bytes (db/get db (property-key key))]
       (read-string (String. bytes))))
