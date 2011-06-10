@@ -28,14 +28,14 @@
   (key (meta (*graph* layer))))
 
 (defn- types-valid? [id types]
-  (boolean
+  (true?
    (if-let [types (seq types)]
      (let [[id _] (split-id id)]
        (some (partial = id) types))
      true)))
 
 (defn- edges-valid? [layer node]
-  (boolean
+  (true?
    (let [edge-types (layer-meta layer :edge-types)]
      (if (single-edge? layer)
        (and (not (:edges node))
