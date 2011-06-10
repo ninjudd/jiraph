@@ -8,11 +8,7 @@
 (defn append-only?
   "Is the named layer marked append-only?"
   [layer]
-  (if-let [append-only (:append-only (meta layer))]
-    (or (true? append-only)
-        (contains? append-only layer))
-    (when-let [except (:append-only-except (meta layer))]
-      (not (contains? except layer)))))
+  (true? (:append-only (meta layer))))
 
 (defprotocol Layer "Jiraph layer protocol"
   (open             [layer]            "Open the layer file.")
@@ -34,4 +30,5 @@
   (get-revisions    [layer id]         "Return all revision ids for a given node.")
   (get-incoming     [layer id]         "Return the ids of all nodes that have an incoming edge to this one.")
   (add-incoming!    [layer id from-id] "Add an incoming edge record on id for from-id.")
-  (drop-incoming!   [layer id from-id] "Remove the incoming edge record on id for from-id."))
+  (drop-incoming!   [layer id from-id] "Remove the incoming edge record on id for from-id.")
+  (schema           [layer type]))
