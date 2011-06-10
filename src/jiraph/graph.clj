@@ -15,45 +15,49 @@
   [layer]
   (layer/single-edge? (*graph* layer)))
 
-(defn- get-edges [node]
-  (or (:edge node) (:edges node)))
+(defn get-edges [node]
+  (if-let [edge (:edge node)]
+    {(:id edge) edge}
+    (:edges node)))
 
 (defn- split-id [s] (split s #"-"))
 
-(defn- safely-split-id [s]
-  (when (< 1 (count (filter (partial = \-) s)))
-    (throw (Exception. "IDs cannot contain more than one dash (-).")))
-  (let [split-s (split-id s)]
-    split-s))
+(defn layer-meta
+  "Fetch a metadata key from a layer."
+  [layer key]
+  (key (meta (*graph* layer))))
 
-(defn- matches-schema [id layer kind]
-  (let [layer (*graph* layer)]
-    (if-let [types (-> layer meta kind seq)]
-      (let [[id _] (safely-split-id id)]
-        (some (partial = id) types))
-      true)))
-
-(defn- edges-okay? [layer node]
+(defn- types-valid? [id types]
   (boolean
-   (if (single-edge? layer)
-     (and (not (:edges node))
-          (if-let [edge (:edge node)]
-            (-> edge :id (matches-schema layer :edge-types))
-            true))
-     (and (not (:edge node))
-          (if-let [edges (:edges node)]
-            (every? (comp not nil?)
-                    (map #(matches-schema % layer :edge-types) (keys edges)))
-            true)))))
+   (if-let [types (seq types)]
+     (let [[id _] (split-id id)]
+       (some (partial = id) types))
+     true)))
+
+(defn- edges-valid? [layer node]
+  (boolean
+   (let [edge-types (layer-meta layer :edge-types)]
+     (if (single-edge? layer)
+       (and (not (:edges node))
+            (if-let [edge (:edge node)]
+              (-> edge :id (types-valid? edge-types))
+              true))
+       (and (not (:edge node))
+            (if-let [edges (:edges node)]
+              (every? (comp not nil?)
+                      (map #(types-valid? % edge-types) (keys edges)))
+              true))))))
+
+(defn- schema-valid? [layer id node]
+  (and (edges-valid? layer node)
+       (types-valid? id (layer-meta layer :types))))
 
 (defn edge-ids [node & [pred]]
-  (if-let [edge (:edge node)]
-    [(:id edge)]
-    (remove-keys-by-val
-     (if pred
-       (any :deleted (complement pred))
-       :deleted)
-     (:edges node))))
+  (remove-keys-by-val
+   (if pred
+     (any :deleted (complement pred))
+     :deleted)
+   (get-edges node)))
 
 (defn edges [node & [pred]]
   (select-keys (get-edges node) (edge-ids node pred)))
@@ -175,10 +179,7 @@
 (defn get-edge
   "Fetch an edge from node with id to to-id."
   [layer id to-id]
-  (let [edges (get-edges (get-node id))]
-    (if (layer/single-edge? layer)
-      (and (= to-id (:id edges)) edges)
-      (edges to-id))))
+  ((get-edges (get-node id)) to-id))
 
 (defn node-exists?
   "Check if a node exists on this layer."
@@ -200,41 +201,29 @@
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer id & attrs]
   {:pre [(if (append-only? layer) retro/*revision* true)
-         (edges-okay? layer (into-map attrs))
-         (matches-schema id layer :types)]}
+         (schema-valid? layer id (into-map attrs))]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/add-node! layer id (into-map attrs))]
       (when-not node
         (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
-      (let [edges (get-edges node)]
-        (if (layer/single-edge? layer)
-          (when-not (:deleted edges)
-            (layer/add-incoming! layer (:id edges) id))
-          (doseq [[to-id edge] edges]
-            (when-not (:deleted edge)
-              (layer/add-incoming! layer to-id id)))))
+      (doseq [[to-id edge] (get-edges node)]
+        (when-not (:deleted edge)
+          (layer/add-incoming! layer to-id id)))
       node)))
 
 (defn append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer id & attrs]
   {:pre [(if (append-only? layer) retro/*revision* true)
-         (edges-okay? layer (into-map attrs))
-         (matches-schema id layer :types)]}
+         (schema-valid? layer id (into-map attrs))]}
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/append-node! layer id (into-map attrs))]
-      (let [edges (get-edges node)]
-        (if (layer/single-edge? layer)
-          (let [to-id (:id edges)]
-            (if (:deleted edges)
-              (layer/drop-incoming! layer to-id id)
-              (layer/add-incoming!  layer to-id id)))
-          (doseq [[to-id edge] (:edges node)]
-            (if (:deleted edge)
-              (layer/drop-incoming! layer to-id id)
-              (layer/add-incoming!  layer to-id id)))))
+      (doseq [[to-id edge] (get-edges node)]
+        (if (:deleted edge)
+          (layer/drop-incoming! layer to-id id)
+          (layer/add-incoming!  layer to-id id)))
       node)))
 
 (def ^{:dynamic true :private true} *compacting* false)
@@ -242,14 +231,12 @@
 (defn update-node!
   "Update a node by calling function f with the old value and any supplied args."
   [layer id f & args]
-  {:pre [(or (not (append-only? layer)) *compacting*)
-         (matches-schema id layer :types)]}
+  {:pre [(or (not (append-only? layer)) *compacting*)]}
   (with-transaction layer
     (let [layer-obj     (*graph* layer)
           [old new] (layer/update-node! layer-obj id f args)]
-      (when-not (edges-okay? layer new)
-        (layer/update-node! layer-obj id (constantly old) nil)
-        (throw (AssertionError. "Assert failed: (edges-okay? layer-name new)")))
+      (when-not (schema-valid? layer id new)
+        (throw (AssertionError. "Assert failed: (schema-valid? layer id new)")))
       (let [new-edges (set (edge-ids new))
             old-edges (set (edge-ids old))]
         (doseq [to-id (remove old-edges new-edges)]
@@ -264,7 +251,7 @@
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/delete-node! layer id)]
-      (doseq [[to-id edge] (:edges node)]
+      (doseq [[to-id edge] (get-edges node)]
         (if-not (:deleted edge)
           (layer/drop-incoming! layer to-id id))))))
 

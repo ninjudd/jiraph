@@ -245,10 +245,6 @@
         (is (thrown? AssertionError (update-node! layer-name "baz-1" {:a "b"})))
         (is (thrown? AssertionError (append-node! layer-name "baz-1" {:a "b"}))))
 
-      (testing "can't have more than a single dash in an id"
-        (is (thrown-with-msg? Exception  #"IDs cannot contain"
-              (add-node! layer-name "foo-bar-baz-1" {:a "b"}))))
-
       (testing "can find layers with a specific type"
         (is (= [:tr :tp :stm] (layers-with-type "foo")))))))
 
