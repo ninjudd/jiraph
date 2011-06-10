@@ -28,17 +28,18 @@ message Entry {
 }
 
 message Edge {
-  required string to_id   = 1;
+  optional string id      = 1;
   optional string a       = 2;
   optional string b       = 3;
   optional bool   deleted = 4;
 }
 
 message Node {
-  optional string id    = 1;
-  repeated Edge   edges = 2 [(map_by) = "to_id"];
-  optional int32  rev   = 3;
-  optional int32  foo   = 4;
-  optional string bar   = 5;
-  repeated int32  baz   = 6;
+  optional string id      = 1;
+  repeated Edge   edges   = 2 [(map_by) = "id"];
+  optional Edge   edge    = 3;
+  optional int32  rev     = 5;
+  optional int32  foo     = 6;
+  optional string bar     = 7;
+  repeated int32  baz     = 8;
 }

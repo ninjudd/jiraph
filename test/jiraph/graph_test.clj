@@ -128,7 +128,7 @@
         (is (= #{"4"} (get-incoming layer-name "1")))
         (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
         (is (= #{"4"} (get-incoming layer-name "2")))
-        (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
+        (is (update-node! layer-name "4" (constantly {:edge {:deleted true}})))
         (is (compact-node! layer-name "4"))
         (is (= #{} (get-incoming layer-name "2")))))))
 
@@ -170,7 +170,7 @@
                        (add-node! layer-name "8" {:foo 9})))
         (is (= 8 (:foo (get-node layer-name "8")))))
 
-      
+
 
       (testing "keeps track of incoming edges inside at-revision"
         (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
@@ -220,7 +220,7 @@
           (is (add-node! layer-name "1" old))
           (is (= [old new] (assoc-node! layer-name "1" {:foo 54 :baz [1 2 3]})))
           (is (= (assoc new :id "1") (get-node layer-name "1")))))
-      
+
       (testing "assoc-node! creates node if it doesn't exist"
         (let [node {:foo 9 :bar "the answer"}]
           (is (= [nil node] (assoc-node! layer-name "2" {:foo 9 :bar "the answer"})))
