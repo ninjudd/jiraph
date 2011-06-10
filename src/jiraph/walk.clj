@@ -21,7 +21,7 @@
    :follow-layers (fn [walk step] (graph/layers))
    :init-step     (fn [walk step] step)
    :update-step   (fn [walk step] step)
-   :extract-edges (fn [walk nodes] (sort-by first (mapcat #(graph/get-edges %) nodes)))
+   :extract-edges (fn [walk nodes] (sort-by first (mapcat graph/edges nodes)))
    :terminate?    false})
 
 (defn traversal-fn [[key val]]

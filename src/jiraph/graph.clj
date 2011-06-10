@@ -15,11 +15,6 @@
   [layer]
   (layer/single-edge? (*graph* layer)))
 
-(defn get-edges [node]
-  (if-let [edge (:edge node)]
-    {(:id edge) edge}
-    (:edges node)))
-
 (defn- split-id [s] (split s #"-"))
 
 (defn layer-meta
@@ -52,15 +47,18 @@
   (and (edges-valid? layer node)
        (types-valid? id (layer-meta layer :types))))
 
-(defn edge-ids [node & [pred]]
-  (remove-keys-by-val
-   (if pred
-     (any :deleted (complement pred))
-     :deleted)
-   (get-edges node)))
+(defn edges
+  "Gets edges from a node. Returns all edges, including deleted ones."
+  [node]
+  (if-let [edge (:edge node)]
+    {(:id edge) edge}
+    (:edges node)))
 
-(defn edges [node & [pred]]
-  (select-keys (get-edges node) (edge-ids node pred)))
+(defn select-edge-ids [pred node]
+  (remove-keys-by-val (complement pred) (edges node)))
+
+(defn select-edges [pred node]
+  (select-keys (edges node) (select-edge-ids node pred)))
 
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
@@ -179,7 +177,7 @@
 (defn get-edge
   "Fetch an edge from node with id to to-id."
   [layer id to-id]
-  ((get-edges (get-node id)) to-id))
+  ((edges (get-node id)) to-id))
 
 (defn node-exists?
   "Check if a node exists on this layer."
@@ -207,7 +205,7 @@
           node  (layer/add-node! layer id (into-map attrs))]
       (when-not node
         (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
-      (doseq [[to-id edge] (get-edges node)]
+      (doseq [[to-id edge] (edges node)]
         (when-not (:deleted edge)
           (layer/add-incoming! layer to-id id)))
       node)))
@@ -220,7 +218,7 @@
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/append-node! layer id (into-map attrs))]
-      (doseq [[to-id edge] (get-edges node)]
+      (doseq [[to-id edge] (edges node)]
         (if (:deleted edge)
           (layer/drop-incoming! layer to-id id)
           (layer/add-incoming!  layer to-id id)))
@@ -237,8 +235,8 @@
           [old new] (layer/update-node! layer-obj id f args)]
       (when-not (schema-valid? layer id new)
         (throw (AssertionError. "Assert failed: (schema-valid? layer id new)")))
-      (let [new-edges (set (edge-ids new))
-            old-edges (set (edge-ids old))]
+      (let [new-edges (set (keys (edges new)))
+            old-edges (set (keys (edges old)))]
         (doseq [to-id (remove old-edges new-edges)]
           (layer/add-incoming! layer-obj to-id id))
         (doseq [to-id (remove new-edges old-edges)]
@@ -251,7 +249,7 @@
   (with-transaction layer
     (let [layer (*graph* layer)
           node  (layer/delete-node! layer id)]
-      (doseq [[to-id edge] (get-edges node)]
+      (doseq [[to-id edge] (edges node)]
         (if-not (:deleted edge)
           (layer/drop-incoming! layer to-id id))))))
 
