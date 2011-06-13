@@ -104,7 +104,7 @@
   (fields [layer]
     (remove #(or (contains? #{:id :edges :edge :rev} %)
                  (.startsWith (str %) "_"))
-            (f/fields format)))
+            (keys (f/fields format))))
 
   (schema [layer]
     (fields layer))
