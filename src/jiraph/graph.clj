@@ -24,23 +24,21 @@
     {(:id edge) edge}
     (:edges node)))
 
-(defn- type-valid? [types id]
-  (true? (if-let [types (seq types)]
-           (some (partial = (first (split-id id)))
-                 types)
-           true)))
-
 (defn- edges-valid? [layer-name node]
-  (and (not (if (layer-meta layer-name :single-edge)
-              (:edges node)
-              (:edge node)))
+  (not (if (layer-meta layer-name :single-edge)
+         (:edges node)
+         (:edge node))))
+
+(defn- type-valid? [types id]
+  (or (empty? types)
+      (some (partial = (first (split-id id)))
+            types)))
+
+(defn- schema-valid? [layer-name id node]
+  (and (type-valid? (layer-meta layer-name :types) id)
        (every? true?
                (map (partial type-valid? (layer-meta layer-name :edge-types))
                     (keys (edges node))))))
-
-(defn- schema-valid? [layer-name id node]
-  (and (edges-valid? layer-name node)
-       (type-valid? (layer-meta layer-name :types) id)))
 
 (defn filter-edge-ids [pred node]
   (filter-keys-by-val pred (edges node)))
@@ -181,31 +179,35 @@
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer-name id & attrs]
-  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)
-         (schema-valid? layer-name id (into-map attrs))]}
-  (with-transaction layer-name
-    (let [layer (*graph* layer-name)
-          node  (layer/add-node! layer id (into-map attrs))]
-      (when-not node
-        (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
-      (doseq [[to-id edge] (edges node)]
-        (when-not (:deleted edge)
-          (layer/add-incoming! layer to-id id)))
-      node)))
+  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
+  (let [attrs (into-map attrs)]
+    (assert (schema-valid? layer-name id attrs))
+    (assert (edges-valid? layer-name attrs))
+    (with-transaction layer-name
+      (let [layer (*graph* layer-name)
+            node  (layer/add-node! layer id attrs)]
+        (when-not node
+          (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
+        (doseq [[to-id edge] (edges node)]
+          (when-not (:deleted edge)
+            (layer/add-incoming! layer to-id id)))
+        node))))
 
 (defn append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer-name id & attrs]
-  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)
-         (schema-valid? layer-name id (into-map attrs))]}
-  (with-transaction layer-name
-    (let [layer (*graph* layer-name)
-          node  (layer/append-node! layer id (into-map attrs))]
-      (doseq [[to-id edge] (edges node)]
-        (if (:deleted edge)
-          (layer/drop-incoming! layer to-id id)
-          (layer/add-incoming!  layer to-id id)))
-      node)))
+  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
+  (let [attrs (into-map attrs)]
+    (assert (schema-valid? layer-name id attrs))
+    (assert (edges-valid? layer-name attrs))
+    (with-transaction layer-name
+      (let [layer (*graph* layer-name)
+            node  (layer/append-node! layer id attrs)]
+        (doseq [[to-id edge] (edges node)]
+          (if (:deleted edge)
+            (layer/drop-incoming! layer to-id id)
+            (layer/add-incoming!  layer to-id id)))
+        node))))
 
 (def ^{:dynamic true :private true} *compacting* false)
 
@@ -216,8 +218,8 @@
   (with-transaction layer-name
     (let [layer     (*graph* layer-name)
           [old new] (layer/update-node! layer id f args)]
-      (when-not (schema-valid? layer-name id new)
-        (throw (AssertionError. "Assert failed: (schema-valid? layer id new)")))
+      (assert (schema-valid? layer-name id new))
+      (assert (edges-valid? layer-name new))
       (let [new-edges (set (keys (edges new)))
             old-edges (set (keys (edges old)))]
         (doseq [to-id (remove old-edges new-edges)]

@@ -141,7 +141,7 @@
             node (make-node attrs)
             data (f/encode format node)]
         (db/append! db id data)
-        (if (= -1 len)
+        (when (= -1 len)
           (inc-count! layer))
         (set-len! layer id (+ (max len 0) (alength data)))
         (f/decode format data))))
@@ -151,7 +151,7 @@
           new  (make-node (apply f old args))
           data (f/encode format new)]
       (db/put! db id data)
-      (if (nil? old)
+      (when (nil? old)
         (inc-count! layer))
       (reset-len! layer id (alength data))
       [old (f/decode format data)]))
