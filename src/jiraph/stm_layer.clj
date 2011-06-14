@@ -38,7 +38,7 @@
   "Modify a revision."
   [layer id node]
   (get-in
-   (alter (:meta layer)
+   (alter (.meta layer)
           adjoin
           (adjoin
            {id {:revs {*revision*
@@ -85,7 +85,7 @@
   (node-ids [layer] (keys @data))
 
   (get-property [layer key] (get @properties key))
-  
+
   (set-property! [layer key val] (dosync ((alter properties assoc key val) key)))
 
   (get-node [layer id]
@@ -105,7 +105,7 @@
          (when *revision* (append-rev layer id node))
          (alter data into {id node}))
         node)))
-  
+
   (update-node! [layer id f args]
     (dosync
      (initiate-revs layer id)
@@ -127,15 +127,15 @@
      (if *revision*
        [:revs *revision* :in]
        [:in])))
-  
+
   (add-incoming! [layer id from-id]
     (dosync (alter meta update-incoming layer id from-id :add)))
-  
+
   (drop-incoming! [layer id from-id]
     (dosync (alter meta update-incoming layer id from-id :drop)))
-  
+
   retro.core/Revisioned
-  
+
   (get-revision [layer] (get-property layer :rev))
 
   (set-revision! [layer rev] (set-property! layer :rev rev))
@@ -145,4 +145,4 @@
   (txn-wrap [layer f] #(dosync (f))))
 
 (defn make []
-  (STMLayer. (ref {}) (ref {}) (ref {}))) 
+  (STMLayer. (ref {}) (ref {}) (ref {})))
