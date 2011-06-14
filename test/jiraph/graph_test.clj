@@ -117,6 +117,21 @@
         (is (= #{"4"} (get-incoming layer-name "2")))
         (is (= #{"4"} (get-incoming layer-name "3")))))))
 
+(deftest edge
+  (with-graph
+    (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "can handle :edge"
+        (is (empty? (get-incoming layer-name "1")))
+        (is (add-node! layer-name "4" {:edge {:id "1"}}))
+        (is (= #{"4"} (get-incoming layer-name "1")))
+        (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
+        (is (= #{"4"} (get-incoming layer-name "2")))
+        (is (update-node! layer-name "4" (constantly {:edge {:deleted true}})))
+        (is (compact-node! layer-name "4"))
+        (is (= #{} (get-incoming layer-name "2")))))))
+
 (deftest revisions
   (with-graph (make-graph)
     (with-each-layer all
@@ -155,7 +170,7 @@
                        (add-node! layer-name "8" {:foo 9})))
         (is (= 8 (:foo (get-node layer-name "8")))))
 
-      
+
 
       (testing "keeps track of incoming edges inside at-revision"
         (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
@@ -205,7 +220,7 @@
           (is (add-node! layer-name "1" old))
           (is (= [old new] (assoc-node! layer-name "1" {:foo 54 :baz [1 2 3]})))
           (is (= (assoc new :id "1") (get-node layer-name "1")))))
-      
+
       (testing "assoc-node! creates node if it doesn't exist"
         (let [node {:foo 9 :bar "the answer"}]
           (is (= [nil node] (assoc-node! layer-name "2" {:foo 9 :bar "the answer"})))
@@ -216,6 +231,22 @@
         (is (= #{"4"} (get-incoming layer-name "1")))
         (is (assoc-node! layer-name "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
         (is (empty? (get-incoming layer-name "1")))))))
+
+(deftest adhere-schema
+  (with-graph
+    (into {} (for [[k v] (make-graph)]
+               [k (with-meta v {:types ["foo" "bar"] :edge-types ["bar"]})]))
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "adheres to the schema"
+        (is (add-node! layer-name "bar-1" {:a "b"}))
+        (is (add-node! layer-name "foo-1" {:edges {"bar-1" {:b "2"}}}))
+        (is (thrown? AssertionError (add-node! layer-name "baz-1" {:a "b"})))
+        (is (thrown? AssertionError (update-node! layer-name "baz-1" {:a "b"})))
+        (is (thrown? AssertionError (append-node! layer-name "baz-1" {:a "b"}))))
+
+      (testing "can find layers with a specific type"
+        (is (= [:tr :tp :stm] (layers-with-type "foo")))))))
 
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))

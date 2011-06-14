@@ -87,7 +87,7 @@
       (assoc attrs :rev *revision*)
       (dissoc attrs :rev))))
 
-(deftype MasaiLayer [db format meta-format]
+(defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
 
   (open      [layer] (db/open      db))
@@ -102,9 +102,12 @@
     (remove #(.startsWith % meta-prefix) (db/key-seq db)))
 
   (fields [layer]
-    (remove #(or (contains? #{:id :edges :rev} %)
+    (remove #(or (contains? #{:id :edges :edge :rev} %)
                  (.startsWith (str %) "_"))
-            (f/fields format)))
+            (keys (f/fields format))))
+
+  (schema [layer]
+    (fields layer))
 
   (get-property  [layer key]
     (if-let [bytes (db/get db (property-key key))]
@@ -138,7 +141,7 @@
             node (make-node attrs)
             data (f/encode format node)]
         (db/append! db id data)
-        (if (= -1 len)
+        (when (= -1 len)
           (inc-count! layer))
         (set-len! layer id (+ (max len 0) (alength data)))
         (f/decode format data))))
@@ -148,7 +151,7 @@
           new  (make-node (apply f old args))
           data (f/encode format new)]
       (db/put! db id data)
-      (if (nil? old)
+      (when (nil? old)
         (inc-count! layer))
       (reset-len! layer id (alength data))
       [old (f/decode format data)]))
