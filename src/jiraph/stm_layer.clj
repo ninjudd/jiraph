@@ -38,7 +38,7 @@
   "Modify a revision."
   [layer id node]
   (get-in
-   (alter (.meta layer)
+   (alter (:meta layer)
           adjoin
           (adjoin
            {id {:revs {*revision*
