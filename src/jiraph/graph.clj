@@ -24,22 +24,23 @@
     {(:id edge) edge}
     (:edges node)))
 
-(defn- types-valid? [id types]
+(defn- type-valid? [types id]
   (true? (if-let [types (seq types)]
-           (let [type (first (split-id id))]
-             (some (partial = type) types))
+           (some (partial = (first (split-id id)))
+                 types)
            true)))
 
 (defn- edges-valid? [layer-name node]
-  (let [edge-types (layer-meta layer-name :edge-types)]
-    (every? true?
-            (for [id (keys (edges node))]
-              (types-valid? id edge-types)))))
+  (and (not (if (layer-meta layer-name :single-edge)
+              (:edges node)
+              (:edge node)))
+       (every? true?
+               (map (partial type-valid? (layer-meta layer-name :edge-types))
+                    (keys (edges node))))))
 
 (defn- schema-valid? [layer-name id node]
   (and (edges-valid? layer-name node)
-       (types-valid? id (layer-meta layer-name :types))))
-
+       (type-valid? (layer-meta layer-name :types) id)))
 
 (defn filter-edge-ids [pred node]
   (filter-keys-by-val pred (edges node)))
