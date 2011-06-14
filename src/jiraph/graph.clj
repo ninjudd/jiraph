@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map conj-vec update remove-keys-by-val remove-vals any memoize-deref]]
+  (:use [useful :only [into-map conj-vec update filter-keys-by-val remove-vals any memoize-deref]]
         [clojure.string :only [split]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
@@ -17,31 +17,6 @@
   [layer-name key]
   (key (meta (*graph* layer-name))))
 
-(defn- types-valid? [id types]
-  (true?
-   (if-let [types (seq types)]
-     (let [[id _] (split-id id)]
-       (some (partial = id) types))
-     true)))
-
-(defn- edges-valid? [layer-name node]
-  (true?
-   (let [edge-types (layer-meta layer-name :edge-types)]
-     (if (layer-meta layer-name :single-edge)
-       (and (not (:edges node))
-            (if-let [edge (:edge node)]
-              (-> edge :id (types-valid? edge-types))
-              true))
-       (and (not (:edge node))
-            (if-let [edges (:edges node)]
-              (every? (comp not nil?)
-                      (map #(types-valid? % edge-types) (keys edges)))
-              true))))))
-
-(defn- schema-valid? [layer-name id node]
-  (and (edges-valid? layer-name node)
-       (types-valid? id (layer-meta layer-name :types))))
-
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
   [node]
@@ -49,11 +24,28 @@
     {(:id edge) edge}
     (:edges node)))
 
-(defn select-edge-ids [pred node]
-  (remove-keys-by-val (complement pred) (edges node)))
+(defn- types-valid? [id types]
+  (true? (if-let [types (seq types)]
+           (let [type (first (split-id id))]
+             (some (partial = type) types))
+           true)))
 
-(defn select-edges [pred node]
-  (select-keys (edges node) (select-edge-ids node pred)))
+(defn- edges-valid? [layer-name node]
+  (let [edge-types (layer-meta layer-name :edge-types)]
+    (every? true?
+            (for [id (keys (edges node))]
+              (types-valid? id edge-types)))))
+
+(defn- schema-valid? [layer-name id node]
+  (and (edges-valid? layer-name node)
+       (types-valid? id (layer-meta layer-name :types))))
+
+
+(defn filter-edge-ids [pred node]
+  (filter-keys-by-val pred (edges node)))
+
+(defn filter-edges [pred node]
+  (select-keys (edges node) (filter-edge-ids node pred)))
 
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
@@ -259,12 +251,10 @@
 (defn schema
   "Get the schema for layers that contain type."
   [type]
-  (into
-   {}
-   (map
-    (fn [layer-name]
-      [layer-name (into {} (layer/schema (*graph* layer-name)))])
-    (layers-with-type type))))
+  (into {}
+        (map (fn [layer-name]
+               [layer-name (into {} (layer/schema (*graph* layer-name)))])
+             (layers-with-type type))))
 
 (defn layers
   "Return the names of all layers in the current graph."
