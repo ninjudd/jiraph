@@ -10,11 +10,6 @@
 (def ^{:dynamic true} *verbose* nil)
 (def ^{:dynamic true} *use-outer-cache* nil)
 
-(defn single-edge?
-  "Is the named layer marked single-edge?"
-  [layer-name]
-  (layer/single-edge? (*graph* layer-name)))
-
 (defn- split-id [s] (split s #"-"))
 
 (defn layer-meta
@@ -32,7 +27,7 @@
 (defn- edges-valid? [layer-name node]
   (true?
    (let [edge-types (layer-meta layer-name :edge-types)]
-     (if (single-edge? layer-name)
+     (if (layer-meta layer-name :single-edge)
        (and (not (:edges node))
             (if-let [edge (:edge node)]
               (-> edge :id (types-valid? edge-types))
@@ -184,11 +179,6 @@
   [layer-name id]
   (layer/node-exists? (*graph* layer-name) id))
 
-(defn append-only?
-  "Is the named layer marked append-only?"
-  [layer-name]
-  (layer/append-only? (*graph* layer-name)))
-
 (defn layers-with-type
   "Get a list of layers whose :types metadata contains type."
   [type]
@@ -198,7 +188,7 @@
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer-name id & attrs]
-  {:pre [(if (append-only? layer-name) retro/*revision* true)
+  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)
          (schema-valid? layer-name id (into-map attrs))]}
   (with-transaction layer-name
     (let [layer (*graph* layer-name)
@@ -213,7 +203,7 @@
 (defn append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer-name id & attrs]
-  {:pre [(if (append-only? layer-name) retro/*revision* true)
+  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)
          (schema-valid? layer-name id (into-map attrs))]}
   (with-transaction layer-name
     (let [layer (*graph* layer-name)
@@ -229,7 +219,7 @@
 (defn update-node!
   "Update a node by calling function f with the old value and any supplied args."
   [layer-name id f & args]
-  {:pre [(or (not (append-only? layer-name)) *compacting*)]}
+  {:pre [(or (not (layer-meta layer-name :append-only)) *compacting*)]}
   (with-transaction layer-name
     (let [layer     (*graph* layer-name)
           [old new] (layer/update-node! layer id f args)]
@@ -262,7 +252,7 @@
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
   [layer-name id]
   (binding [*compacting* true]
-    (if (single-edge? layer-name)
+    (if (layer-meta layer-name :single-edge)
       (update-node! layer-name id update :edge #(when-not (:deleted %) %))
       (update-node! layer-name id update :edges (partial remove-vals :deleted)))))
 
