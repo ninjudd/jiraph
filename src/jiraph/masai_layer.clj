@@ -129,16 +129,6 @@
         (set-len! layer id (alength data))
         (f/decode format data))))
 
-  #_(update-node! [layer id f args]
-    (let [old  (get-node layer id)
-          new  (make-node (apply f old args))
-          data (f/encode format new)]
-      (db/put! db id data)
-      (when (nil? old)
-        (inc-count! layer))
-      (reset-len! layer id (alength data))
-      [old (f/decode format data)]))
-
   (set-node! [layer id attrs]
     (let [data (f/encode format (make-node attrs))]
       (db/put! db id data)
