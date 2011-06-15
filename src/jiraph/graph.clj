@@ -264,6 +264,11 @@
   []
   (keys *graph*))
 
+(defn layer-exists?
+  "Does the named layer exist in the current graph?"
+  [layer-name]
+  (contains? *graph* layer-name))
+
 (defn get-all-revisions
   "Return a seq of all revisions that have ever modified this node on this layer, even if the data has been
    subsequently compacted."
