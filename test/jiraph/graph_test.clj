@@ -129,7 +129,6 @@
         (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
         (is (= #{"4"} (get-incoming layer-name "2")))
         (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
-        (is (compact-node! layer-name "4"))
         (is (= #{} (get-incoming layer-name "2")))))))
 
 (deftest revisions
@@ -247,6 +246,8 @@
 
       (testing "can find layers with a specific type"
         (is (= [:tr :tp :stm] (layers-with-type "foo")))))))
+
+(deftest edges-valid)
 
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
