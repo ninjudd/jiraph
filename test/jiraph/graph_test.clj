@@ -247,7 +247,16 @@
       (testing "can find layers with a specific type"
         (is (= [:tr :tp :stm] (layers-with-type "foo")))))))
 
-(deftest edges-valid)
+(deftest edges-valid
+  (with-graph {:stm1 (stm/make)
+               :stm2 (with-meta (stm/make) {:single-edge true})}
+    (map truncate! (keys *graph*))
+    (testing "behaves properly when :single-edge is false"
+      (is (not (edges-valid? :stm1 {:edge {:id "1"}})))
+      (is (edges-valid? :stm1 {:edges {"1" {:a "b"}}})))
+    (testing "behaves properly when :single-edge is true"
+      (is (edges-valid? :stm2 {:edge {:id "1"}}))
+      (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))

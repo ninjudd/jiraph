@@ -24,7 +24,7 @@
     {(:id edge) edge}
     (:edges node)))
 
-(defn- edges-valid? [layer-name node]
+(defn edges-valid? [layer-name node]
   (not (if (layer-meta layer-name :single-edge)
          (:edges node)
          (:edge node))))
