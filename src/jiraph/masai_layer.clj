@@ -81,12 +81,6 @@
 (defn- dec-count! [layer]
   (db/inc! (.db layer) count-key -1))
 
-(defn- make-node [attrs]
-  (let [attrs (dissoc attrs :id)]
-    (if *revision*
-      (assoc attrs :rev *revision*)
-      (dissoc attrs :rev))))
-
 (defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
 
@@ -135,18 +129,7 @@
         (set-len! layer id (alength data))
         (f/decode format data))))
 
-  (append-node! [layer id attrs]
-    (when-not (empty? attrs)
-      (let [len  (db/len db id)
-            node (make-node attrs)
-            data (f/encode format node)]
-        (db/append! db id data)
-        (when (= -1 len)
-          (inc-count! layer))
-        (set-len! layer id (+ (max len 0) (alength data)))
-        (f/decode format data))))
-
-  (update-node! [layer id f args]
+  #_(update-node! [layer id f args]
     (let [old  (get-node layer id)
           new  (make-node (apply f old args))
           data (f/encode format new)]
@@ -155,6 +138,12 @@
         (inc-count! layer))
       (reset-len! layer id (alength data))
       [old (f/decode format data)]))
+
+  (set-node! [layer id attrs]
+    (let [data (f/encode format (make-node attrs))]
+      (db/put! db id data)
+      (reset-len! layer id (alength data))
+      (f/decode format data)))
 
   (delete-node! [layer id]
     (let [node (get-node layer id)]
@@ -170,6 +159,19 @@
   (drop-incoming! [layer id from-id] (append-meta! layer id {:in {from-id false}} *revision*))
 
   (truncate! [layer] (db/truncate! db))
+
+  jiraph.layer.Append
+
+  (append-node! [layer id attrs]
+    (when-not (empty? attrs)
+      (let [len  (db/len db id)
+            node (make-node attrs)
+            data (f/encode format node)]
+        (db/append! db id data)
+        (when (= -1 len)
+          (inc-count! layer))
+        (set-len! layer id (+ (max len 0) (alength data)))
+        (f/decode format data))))
 
   retro.core/WrappedTransactional
 

@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map conj-vec update filter-keys-by-val remove-vals any memoize-deref]]
+  (:use [useful :only [into-map conj-vec update filter-keys-by-val remove-vals any memoize-deref adjoin]]
         [clojure.string :only [split]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
@@ -193,22 +193,6 @@
             (layer/add-incoming! layer to-id id)))
         node))))
 
-(defn append-node!
-  "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
-  [layer-name id & attrs]
-  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
-  (let [attrs (into-map attrs)]
-    (assert (schema-valid? layer-name id attrs))
-    (assert (edges-valid? layer-name attrs))
-    (with-transaction layer-name
-      (let [layer (*graph* layer-name)
-            node  (layer/append-node! layer id attrs)]
-        (doseq [[to-id edge] (edges node)]
-          (if (:deleted edge)
-            (layer/drop-incoming! layer to-id id)
-            (layer/add-incoming!  layer to-id id)))
-        node))))
-
 (def ^{:dynamic true :private true} *compacting* false)
 
 (defn update-node!
@@ -216,17 +200,37 @@
   [layer-name id f & args]
   {:pre [(or (not (layer-meta layer-name :append-only)) *compacting*)]}
   (with-transaction layer-name
-    (let [layer     (*graph* layer-name)
-          [old new] (layer/update-node! layer id f args)]
+    (let [layer (*graph* layer-name)
+          old   (layer/get-node layer id)
+          new   (layer/set-node! layer id (apply f old args))]
       (assert (schema-valid? layer-name id new))
       (assert (edges-valid? layer-name new))
-      (let [new-edges (set (keys (edges new)))
+      (let [new-edges (set (filter-edge-ids (complement :deleted) new))
             old-edges (set (keys (edges old)))]
         (doseq [to-id (remove old-edges new-edges)]
           (layer/add-incoming! layer to-id id))
         (doseq [to-id (remove new-edges old-edges)]
           (layer/drop-incoming! layer to-id id)))
-      [old new])))
+      [(dissoc old :id) new])))
+
+(defn append-node!
+  "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
+  [layer-name id & attrs]
+  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
+  (let [node (into-map attrs)
+        layer (*graph* layer-name)]
+    (assert (schema-valid? layer-name id node))
+    (assert (edges-valid? layer-name node))
+    (if (instance? jiraph.layer.Append layer)
+      (with-transaction layer-name
+        (let [node (layer/append-node! layer id node)]
+          (doseq [[to-id edge] (:edges node)]
+            (if (:deleted edge)
+              (layer/drop-incoming! layer to-id id)
+              (layer/add-incoming!  layer to-id id)))
+          node))
+      (do (apply update-node! layer-name id adjoin attrs)
+          (layer/make-node node)))))
 
 (defn delete-node!
   "Remove a node from a layer (incoming links remain)."
@@ -241,7 +245,10 @@
 (defn assoc-node!
   "Associate attrs with a node."
   [layer-name id & attrs]
-  (apply update-node! layer-name id merge attrs))
+  (let [layer (*graph* layer-name)]
+    (if (instance? jiraph.layer.Assoc layer)
+      (layer/assoc-node! layer id (into-map attrs))
+      (apply update-node! layer-name id merge attrs))))
 
 (defn compact-node!
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
