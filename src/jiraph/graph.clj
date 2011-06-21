@@ -12,10 +12,16 @@
 
 (defn- split-id [s] (split s #"-"))
 
+(defn layer [layer-name]
+  (if *graph*
+    (or (get *graph* layer-name)
+        (throw (java.io.IOException. (format "attempt to use a layer without an open graph"))))
+    (throw (java.io.IOException. (format "cannot find layer %s in open graph" layer-name)))))
+
 (defn layer-meta
   "Fetch a metadata key from a layer."
   [layer-name key]
-  (key (meta (*graph* layer-name))))
+  (key (meta (layer layer-name))))
 
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
@@ -49,7 +55,7 @@
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
   [layers & forms]
-  `(doseq [[~'layer-name ~'layer] (cond (keyword? ~layers) [~layers (*graph* ~layers)]
+  `(doseq [[~'layer-name ~'layer] (cond (keyword? ~layers) [~layers (layer ~layers)]
                                         (empty?   ~layers) *graph*
                                         :else              (select-keys *graph* ~layers))]
      (when *verbose*
@@ -93,9 +99,9 @@
   `((reduce
      retro/wrap-transaction
      (fn [] ~@forms)
-     (cond (keyword? ~layers) [(*graph* ~layers)]
+     (cond (keyword? ~layers) [(layer ~layers)]
            (empty?   ~layers) (vals *graph*)
-           :else              (map *graph* ~layers)))))
+           :else              (map layer ~layers)))))
 
 (def abort-transaction retro/abort-transaction)
 
@@ -120,22 +126,22 @@
 (defn node-ids
   "Return a lazy sequence of all node ids in this layer."
   [layer-name]
-  (layer/node-ids (*graph* layer-name)))
+  (layer/node-ids (layer layer-name)))
 
 (defn node-count
   "Return the total number of nodes in this layer."
   [layer-name]
-  (layer/node-count (*graph* layer-name)))
+  (layer/node-count (layer layer-name)))
 
 (defn get-property
   "Fetch a layer-wide property."
   [layer-name key]
-  (layer/get-property (*graph* layer-name) key))
+  (layer/get-property (layer layer-name) key))
 
 (defn set-property!
   "Store a layer-wide property."
   [layer-name key val]
-  (layer/set-property! (*graph* layer-name) key val))
+  (layer/set-property! (layer layer-name) key val))
 
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
@@ -152,7 +158,7 @@
 (defn get-node
   "Fetch a node's data from this layer."
   [layer-name id]
-  (when-let [node (layer/get-node (*graph* layer-name) id)]
+  (when-let [node (layer/get-node (layer layer-name) id)]
     (assoc node :id id)))
 
 (defn get-in-node
@@ -168,7 +174,7 @@
 (defn node-exists?
   "Check if a node exists on this layer."
   [layer-name id]
-  (layer/node-exists? (*graph* layer-name) id))
+  (layer/node-exists? (layer layer-name) id))
 
 (defn layers-with-type
   "Get a list of layers whose :types metadata contains type."
@@ -184,7 +190,7 @@
     (assert (schema-valid? layer-name id attrs))
     (assert (edges-valid? layer-name attrs))
     (with-transaction layer-name
-      (let [layer (*graph* layer-name)
+      (let [layer (layer layer-name)
             node  (layer/add-node! layer id attrs)]
         (when-not node
           (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
@@ -201,7 +207,7 @@
     (assert (schema-valid? layer-name id attrs))
     (assert (edges-valid? layer-name attrs))
     (with-transaction layer-name
-      (let [layer (*graph* layer-name)
+      (let [layer (layer layer-name)
             node  (layer/append-node! layer id attrs)]
         (doseq [[to-id edge] (edges node)]
           (if (:deleted edge)
@@ -216,7 +222,7 @@
   [layer-name id f & args]
   {:pre [(or (not (layer-meta layer-name :append-only)) *compacting*)]}
   (with-transaction layer-name
-    (let [layer     (*graph* layer-name)
+    (let [layer     (layer layer-name)
           [old new] (layer/update-node! layer id f args)]
       (assert (schema-valid? layer-name id new))
       (assert (edges-valid? layer-name new))
@@ -232,7 +238,7 @@
   "Remove a node from a layer (incoming links remain)."
   [layer-name id]
   (with-transaction layer-name
-    (let [layer (*graph* layer-name)
+    (let [layer (layer layer-name)
           node  (layer/delete-node! layer id)]
       (doseq [[to-id edge] (edges node)]
         (if-not (:deleted edge)
@@ -256,7 +262,7 @@
   [type]
   (into {}
         (map (fn [layer-name]
-               [layer-name (into {} (layer/schema (*graph* layer-name)))])
+               [layer-name (into {} (layer/schema (layer layer-name)))])
              (layers-with-type type))))
 
 (defn layers
@@ -273,18 +279,18 @@
   "Return a seq of all revisions that have ever modified this node on this layer, even if the data has been
    subsequently compacted."
   [layer-name id]
-  (filter pos? (layer/get-revisions (*graph* layer-name) id)))
+  (filter pos? (layer/get-revisions (layer layer-name) id)))
 
 (defn get-revisions
   "Return a seq of all revisions with data for this node."
   [layer-name id]
   (reverse
-   (take-while pos? (reverse (layer/get-revisions (*graph* layer-name) id)))))
+   (take-while pos? (reverse (layer/get-revisions (layer layer-name) id)))))
 
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer-name id]
-  (layer/get-incoming (*graph* layer-name) id))
+  (layer/get-incoming (layer layer-name) id))
 
 (defn fields-to-layers
   "Return a mapping from field to layers for all the layers provided. Fields can appear in more than one layer."
@@ -294,7 +300,7 @@
                     m (layer/fields (graph layer))))
           {} layers))
 
-(defn layer [path]
+(defn make-layer [path]
   (masai-layer/make (tokyo/make {:path path :create true})))
 
 (defn wrap-caching

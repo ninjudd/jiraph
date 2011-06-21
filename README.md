@@ -45,9 +45,9 @@ a sample node:
     (use 'jiraph.graph)
 
     (def g
-      {:foo (layer "/tmp/foo")
-       :bar (layer "/tmp/bar")
-       :baz (layer "/tmp/baz")})
+      {:foo (make-layer "/tmp/foo")
+       :bar (make-layer "/tmp/bar")
+       :baz (make-layer "/tmp/baz")})
 
     (with-graph g
       (add-node! :foo "human-1" {:name "Justin"  :edges {"human-2" {:type :spouse}}})
@@ -104,8 +104,8 @@ names that are append-only, or true for all layers). Even if a layer is marked a
 you can still call compact-node! to reduce the storage requirement and remove historical data.
 
 Transactions also behave slightly different inside of at-revision. When with-transaction is
-complete, it sets the :rev property on current layer to the current-revision. Also only the 
-first transaction on a layer for a given revision will be applied. Subsequent transactions 
+complete, it sets the :rev property on current layer to the current-revision. Also only the
+first transaction on a layer for a given revision will be applied. Subsequent transactions
 are assumed to be duplicates. This permits cross-layer transactions to be performed by
 assigning the same revision number to all of them. Then if there is a failure in the middle
 of a revision, the entire revision can be reapplied and layers that have already been updated
