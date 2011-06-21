@@ -12,7 +12,9 @@
 
 (defn- split-id [s] (split s #"-"))
 
-(defn layer [layer-name]
+(defn layer
+  "Return the layer for a given name from *graph*."
+  [layer-name]
   (if *graph*
     (or (get *graph* layer-name)
         (throw (java.io.IOException. (format "attempt to use a layer without an open graph"))))
