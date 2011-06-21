@@ -17,8 +17,8 @@
   [layer-name]
   (if *graph*
     (or (get *graph* layer-name)
-        (throw (java.io.IOException. (format "attempt to use a layer without an open graph"))))
-    (throw (java.io.IOException. (format "cannot find layer %s in open graph" layer-name)))))
+        (throw (java.io.IOException. (format "cannot find layer %s in open graph" layer-name))))
+    (throw (java.io.IOException. (format "attempt to use a layer without an open graph")))))
 
 (defn layer-meta
   "Fetch a metadata key from a layer."
