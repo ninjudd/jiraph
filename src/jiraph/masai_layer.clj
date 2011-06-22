@@ -81,6 +81,9 @@
 (defn- dec-count! [layer]
   (db/inc! (.db layer) count-key -1))
 
+(defn apply-fn [f id]
+  (if (ifn? f) (f id) f))
+
 (defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
 
@@ -113,16 +116,18 @@
       val))
 
   (get-node [layer id]
-    (if *revision*
-      (when-let [length (len layer id *revision*)]
-        (f/decode format (db/get db id) 0 length))
-      (f/decode format (db/get db id))))
+    (let [format (apply-fn format id)]
+      (if *revision*
+        (when-let [length (len layer id *revision*)]
+          (f/decode format (db/get db id) 0 length))
+        (f/decode format (db/get db id)))))
 
   (node-exists? [layer id]
     (< 0 (len layer id *revision*)))
 
   (add-node! [layer id attrs]
     (let [node (make-node attrs)
+          format (apply-fn format id)
           data (f/encode format node)]
       (when (db/add! db id data)
         (inc-count! layer)
@@ -130,7 +135,8 @@
         (f/decode format data))))
 
   (set-node! [layer id attrs]
-    (let [data (f/encode format (make-node attrs))]
+    (let [format (apply-fn format id)
+          data (f/encode format (make-node attrs))]
       (db/put! db id data)
       (reset-len! layer id (alength data))
       (f/decode format data)))
@@ -156,6 +162,7 @@
     (when-not (empty? attrs)
       (let [len  (db/len db id)
             node (make-node attrs)
+            format (apply-fn format id)
             data (f/encode format node)]
         (db/append! db id data)
         (when (= -1 len)

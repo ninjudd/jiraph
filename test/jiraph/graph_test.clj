@@ -258,6 +258,20 @@
       (is (edges-valid? :stm2 {:edge {:id "1"}}))
       (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
+(deftest fn-format
+  (let [p (paf/make Test$Node)
+        r (raf/make)]
+    (with-graph {:m (bal/make
+                     (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true})
+                     (fn [id]
+                       (if (.startsWith id "thing-") p r)))}
+      (truncate! :m)
+      (testing "format can be a function"
+        (is (add-node! :m "thing-1" {:a "b"}))
+        (is (= {:id "thing-1" :a "b"} (get-node :m "thing-1")))
+        (is (add-node! :m "foo-1" {:b "a"}))
+        (is (= {:id "foo-1" :b "a"} (get-node :m "foo-1")))))))
+
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
            :b (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true}) (raf/make {:bam 1 :bap 2}))
