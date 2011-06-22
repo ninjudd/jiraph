@@ -52,7 +52,7 @@
   (filter-keys-by-val pred (edges node)))
 
 (defn filter-edges [pred node]
-  (select-keys (edges node) (filter-edge-ids node pred)))
+  (select-keys (edges node) (filter-edge-ids pred node)))
 
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
