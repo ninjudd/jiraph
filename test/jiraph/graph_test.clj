@@ -267,10 +267,10 @@
                        (if (.startsWith id "thing-") p r)))}
       (truncate! :m)
       (testing "format can be a function"
-        (is (add-node! :m "thing-1" {:a "b"}))
-        (is (= {:id "thing-1" :a "b"} (get-node :m "thing-1")))
-        (is (add-node! :m "foo-1" {:b "a"}))
-        (is (= {:id "foo-1" :b "a"} (get-node :m "foo-1")))))))
+        (is (add-node! :m "thing-1" {:foo 1}))
+        (is (= {:id "thing-1" :foo 1} (get-node :m "thing-1")))
+        (is (add-node! :m "foo-1" {:foo 1}))
+        (is (= {:id "foo-1" :foo 1} (get-node :m "foo-1")))))))
 
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
