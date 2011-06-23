@@ -258,7 +258,7 @@
       (is (edges-valid? :stm2 {:edge {:id "1"}}))
       (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
-(deftest fn-format
+(deftest map-format
   (let [p (paf/make Test$Node)
         r (raf/make)]
     (with-graph {:m (bal/make
