@@ -128,8 +128,7 @@
         (is (= #{"4"} (get-incoming layer-name "1")))
         (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
         (is (= #{"4"} (get-incoming layer-name "2")))
-        (is (update-node! layer-name "4" (constantly {:edge {:deleted true}})))
-        (is (compact-node! layer-name "4"))
+        (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
         (is (= #{} (get-incoming layer-name "2")))))))
 
 (deftest revisions
@@ -147,27 +146,27 @@
             (is (= attrs (append-node! layer-name "3" (dissoc attrs :rev))))
             (is (= {:id "3" :bar "cat" :baz [5 8] :rev 101} (get-node layer-name "3"))))
           (at-revision 100
-                       (is (= (assoc node :id "3") (get-node layer-name "3"))))))
+            (is (= (assoc node :id "3") (get-node layer-name "3"))))))
 
       (testing "get-node returns nil if node didn't exist at-revision"
         (at-revision 99
-                     (is (= nil (get-node layer-name "3")))))
-
+          (is (= nil (get-node layer-name "3")))))
+      
       (testing "revisions and all-revisions returns an empty list for nodes without revisions"
         (is (= () (get-revisions layer-name "1")))
         (is (= () (get-all-revisions layer-name "1"))))
 
       (testing ":rev property stores max committed revision"
         (at-revision 102
-                     (with-transaction layer-name
-                       (add-node! layer-name "8" {:foo 8}))
-                     (is (= 8 (:foo (get-node layer-name "8"))))
-                     (is (= 102 (get-property layer-name :rev)))))
+          (with-transaction layer-name
+            (add-node! layer-name "8" {:foo 8}))
+          (is (= 8 (:foo (get-node layer-name "8"))))
+          (is (= 102 (get-property layer-name :rev)))))
 
       (testing "past revisions are ignored inside of transactions"
         (at-revision 101
-                     (with-transaction layer-name
-                       (add-node! layer-name "8" {:foo 9})))
+          (with-transaction layer-name
+            (add-node! layer-name "8" {:foo 9})))
         (is (= 8 (:foo (get-node layer-name "8")))))
 
 
@@ -175,20 +174,20 @@
       (testing "keeps track of incoming edges inside at-revision"
         (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
         (at-revision 200
-                     (is (add-node! layer-name "10" {:edges {"11" {:a "one"}}})))
+          (is (add-node! layer-name "10" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10"} (get-incoming layer-name "11")))
         (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
 
         (at-revision 201
-                     (is (add-node! layer-name "12" {:edges {"11" {:a "one"}}})))
+          (is (add-node! layer-name "12" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10" "12"} (get-incoming layer-name "11")))
         (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
         (at-revision 200 (is (= #{"10"} (get-incoming layer-name "11"))))
 
         (at-revision 202
-                     (is (add-node! layer-name "13" {:edges {"11" {:a "one"}}})))
+          (is (add-node! layer-name "13" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))
         (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
@@ -247,6 +246,17 @@
 
       (testing "can find layers with a specific type"
         (is (= [:tr :tp :stm] (layers-with-type "foo")))))))
+
+(deftest edges-valid
+  (with-graph {:stm1 (stm/make)
+               :stm2 (with-meta (stm/make) {:single-edge true})}
+    (map truncate! (keys *graph*))
+    (testing "behaves properly when :single-edge is false"
+      (is (not (edges-valid? :stm1 {:edge {:id "1"}})))
+      (is (edges-valid? :stm1 {:edges {"1" {:a "b"}}})))
+    (testing "behaves properly when :single-edge is true"
+      (is (edges-valid? :stm2 {:edge {:id "1"}}))
+      (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
 (deftest map-field-to-layers
   (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))

@@ -60,13 +60,8 @@
 (defn- get-rev
   "Fetch a particular revision of an id."
   [layer id]
-  (->> *revision* (subseq (:revs (get-meta layer id)) >=) first second))
-
-(defn- make-node [attrs]
-  (let [attrs (dissoc attrs :id)]
-    (if *revision*
-      (assoc attrs :rev *revision*)
-      (dissoc attrs :rev))))
+  (when-let [revs (:revs (get-meta layer id))]
+    (->> *revision* (subseq revs >=) first second)))
 
 (defrecord STMLayer [data meta properties]
   jiraph.layer/Layer
@@ -106,18 +101,13 @@
          (alter data into {id node}))
         node)))
 
-  (update-node! [layer id f args]
+  (set-node! [layer id attrs]
     (dosync
      (initiate-revs layer id)
-     (let [old (get-node layer id)
-           new (make-node (apply f old args))]
-       (when *revision* (create-rev layer id new))
-       (alter data assoc id new)
-       (map #(dissoc % :id) [old new]))))
-
-  (append-node! [layer id attrs]
-    (update-node! layer id adjoin [attrs])
-    (make-node attrs))
+     (let [node (make-node attrs)]
+       (when *revision* (create-rev layer id node))
+       (alter data assoc id node)
+       (dissoc node :id))))
 
   (get-revisions [layer id] (-> layer (get-meta id) :all-revs))
 
