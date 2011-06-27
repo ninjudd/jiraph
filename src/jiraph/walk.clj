@@ -132,8 +132,7 @@
   [walk step layer]
   (let [ids   (or (alt-ids step) [(id step)])
         nodes (map #(graph/get-node layer %) ids)
-        rev   (reduce #(or-max %1 (:rev %2))
-                      nil, nodes)]
+        rev   (apply or-max (map :rev nodes))]
     (map #(make-step walk step layer rev %)
          (<< extract-edges walk nodes))))
 
