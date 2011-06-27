@@ -234,18 +234,21 @@
 (deftest adhere-schema
   (with-graph
     (into {} (for [[k v] (make-graph)]
-               [k (with-meta v {:types ["foo" "bar"] :edge-types ["bar"]})]))
+               [k (with-meta v {:types #{:foo :bar} :edge-types #{:bar}})]))
     (with-each-layer all
       (truncate! layer-name)
       (testing "adheres to the schema"
         (is (add-node! layer-name "bar-1" {:a "b"}))
         (is (add-node! layer-name "foo-1" {:edges {"bar-1" {:b "2"}}}))
-        (is (thrown? AssertionError (add-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown? AssertionError (update-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown? AssertionError (append-node! layer-name "baz-1" {:a "b"}))))
+        (is (thrown-with-msg? Exception #"doesn't match"
+              (add-node! layer-name "baz-1" {:a "b"})))
+        (is (thrown-with-msg? Exception #"doesn't match"
+              (update-node! layer-name "baz-1" {:a "b"})))
+        (is (thrown-with-msg? Exception #"doesn't match"
+              (append-node! layer-name "baz-1" {:a "b"}))))
 
       (testing "can find layers with a specific type"
-        (is (= [:tr :tp :stm] (layers-with-type "foo")))))))
+        (is (= [:tr :tp :stm] (layers-with-type :foo)))))))
 
 (deftest edges-valid
   (with-graph {:stm1 (stm/make)

@@ -1,5 +1,8 @@
 (ns jiraph.walk
-  (:use [useful :only [assoc-in! update-in! conj-vec update construct into-map or-max map-reduce pcollect *pcollect-thread-num*]]
+  (:use [useful.map :only [assoc-in! update-in! update into-map]]
+        [useful.utils :only [or-max conj-vec]]
+        [useful.parallel :only [pcollect *pcollect-thread-num*]]
+        [useful.java :only [construct]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
@@ -127,11 +130,10 @@
 (defn- make-layer-steps
   "Create steps for all outgoing edges on this layer for this step's node(s)."
   [walk step layer]
-  (let [ids         (or (alt-ids step) [(id step)])
-        [nodes rev] (map-reduce (partial graph/get-node layer)
-                                #(or-max %1 (:rev %2)) nil
-                                ids)]
-    (map (partial make-step walk step layer rev)
+  (let [ids   (or (alt-ids step) [(id step)])
+        nodes (map #(graph/get-node layer %) ids)
+        rev   (apply or-max (map :rev nodes))]
+    (map #(make-step walk step layer rev %)
          (<< extract-edges walk nodes))))
 
 (defn- follow

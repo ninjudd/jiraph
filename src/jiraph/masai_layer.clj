@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [sync count])
   (:use jiraph.layer
         [retro.core :as retro]
-        [useful :only [find-with if-ns]])
+        [useful.utils :only [if-ns]]
+        [useful.seq :only [find-with]])
   (:require [masai.db :as db]
             [cereal.format :as f]
             [cereal.reader :as reader-append-format])
@@ -79,7 +80,7 @@
   (db/inc! (.db layer) count-key 1))
 
 (defn- dec-count! [layer]
-  (db/inc! (.db layer) count-key -1))
+  (db/inc! (:db layer) count-key -1))
 
 (defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
