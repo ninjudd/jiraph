@@ -2,7 +2,8 @@
   (:use [useful.map :only [into-map update filter-keys-by-val remove-vals]]
         [useful.utils :only [conj-vec memoize-deref adjoin]]
         [useful.fn :only [any]]
-        [clojure.string :only [split]])
+        [clojure.string :only [split]]
+        [ego.core :only [split-id]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
             [masai.tokyo :as tokyo]
@@ -11,8 +12,6 @@
 (def ^{:dynamic true} *graph* nil)
 (def ^{:dynamic true} *verbose* nil)
 (def ^{:dynamic true} *use-outer-cache* nil)
-
-(defn- split-id [s] (split s #"-"))
 
 (defn layer
   "Return the layer for a given name from *graph*."
@@ -41,12 +40,11 @@
 
 (defn- type-valid? [types id]
   (or (empty? types)
-      (some (partial = (first (split-id id)))
-            types)))
+      (split-id id types)))
 
 (defn- schema-valid? [layer-name id node]
   (and (type-valid? (layer-meta layer-name :types) id)
-       (every? true?
+       (every? identity
                (map (partial type-valid? (layer-meta layer-name :edge-types))
                     (keys (edges node))))))
 
