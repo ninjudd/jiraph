@@ -1,5 +1,7 @@
 (ns jiraph.graph
-  (:use [useful :only [into-map conj-vec update filter-keys-by-val remove-vals any memoize-deref adjoin]]
+  (:use [useful.map :only [into-map update filter-keys-by-val remove-vals]]
+        [useful.utils :only [conj-vec memoize-deref adjoin]]
+        [useful.fn :only [any]]
         [clojure.string :only [split]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
@@ -335,5 +337,4 @@
 (defn wrap-bindings
   "Wrap the given function with the current graph context."
   [f]
-  (useful/wrap-bindings [#'get-node #'get-incoming #'get-revisions #'get-all-revisions
-                         #'*graph* #'*verbose* #'*use-outer-cache* #'retro/*revision*] f))
+  (bound-fn ([& args] (apply f args))))

@@ -1,5 +1,8 @@
 (ns jiraph.walk
-  (:use [useful :only [assoc-in! update-in! conj-vec update construct into-map or-max pcollect *pcollect-thread-num*]]
+  (:use [useful.map :only [assoc-in! update-in! update into-map]]
+        [useful.utils :only [or-max conj-vec]]
+        [useful.parallel :only [pcollect *pcollect-thread-num*]]
+        [useful.java :only [construct]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))

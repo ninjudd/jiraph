@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [sync count])
   (:use jiraph.layer
         [retro.core :as retro]
-        [useful :only [find-with if-ns]])
+        [useful.utils :only [if-ns]]
+        [useful.seq :only [find-with]])
   (:require [masai.db :as db]
             [cereal.format :as f]
             [cereal.reader :as reader-append-format])

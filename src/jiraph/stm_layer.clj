@@ -1,7 +1,8 @@
 (ns jiraph.stm-layer
   (:use jiraph.layer
         retro.core
-        [useful :only [update adjoin]]))
+        [useful.map :only [update]]
+        [useful.utils :only [adjoin]]))
 
 (defn- conj-set
   "Conj onto collection ensuring it is a set."
