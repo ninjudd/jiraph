@@ -80,7 +80,7 @@
   (db/inc! (.db layer) count-key 1))
 
 (defn- dec-count! [layer]
-  (db/inc! (.db layer) count-key -1))
+  (db/inc! (:db layer) count-key -1))
 
 (defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
