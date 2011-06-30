@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful.map :only [into-map update filter-keys-by-val remove-vals]]
+  (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [conj-vec memoize-deref adjoin]]
         [useful.fn :only [any]]
         [clojure.string :only [split]]
@@ -266,13 +266,18 @@
       (update-node! layer-name id update :edge #(when-not (:deleted %) %))
       (update-node! layer-name id update :edges (partial remove-vals :deleted)))))
 
+(defn fields
+  "Return a map of fields to their metadata for the given layer."
+  [layer-name]
+  (layer/fields (layer layer-name)))
+
 (defn schema
-  "Get the schema for layers that contain type."
+  "Return a map of fields for a given type to the metadata for each layer."
   [type]
-  (into {}
-        (map (fn [layer-name]
-               [layer-name (into {} (layer/schema (layer layer-name)))])
-             (layers-with-type type))))
+  (apply merge-with conj
+         (for [layer        (layers-with-type type)
+               [field meta] (fields layer)]
+           {field {layer meta}})))
 
 (defn layers
   "Return the names of all layers in the current graph."
@@ -300,14 +305,6 @@
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer-name id]
   (layer/get-incoming (layer layer-name) id))
-
-(defn fields-to-layers
-  "Return a mapping from field to layers for all the layers provided. Fields can appear in more than one layer."
-  [graph layers]
-  (reduce (fn [m layer]
-            (reduce #(update %1 %2 conj-vec layer)
-                    m (layer/fields (graph layer))))
-          {} layers))
 
 (defn make-layer [path]
   (masai-layer/make (tokyo/make {:path path :create true})))

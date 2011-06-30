@@ -28,8 +28,7 @@
   (get-revisions    [layer id]         "Return all revision ids for a given node.")
   (get-incoming     [layer id]         "Return the ids of all nodes that have an incoming edge to this one.")
   (add-incoming!    [layer id from-id] "Add an incoming edge record on id for from-id.")
-  (drop-incoming!   [layer id from-id] "Remove the incoming edge record on id for from-id.")
-  (schema           [layer]            "Get the schema for a layer."))
+  (drop-incoming!   [layer id from-id] "Remove the incoming edge record on id for from-id."))
 
 (defprotocol Append
   "Jiraph appending format"

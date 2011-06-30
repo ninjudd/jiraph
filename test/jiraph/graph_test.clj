@@ -151,7 +151,7 @@
       (testing "get-node returns nil if node didn't exist at-revision"
         (at-revision 99
           (is (= nil (get-node layer-name "3")))))
-      
+
       (testing "revisions and all-revisions returns an empty list for nodes without revisions"
         (is (= () (get-revisions layer-name "1")))
         (is (= () (get-all-revisions layer-name "1"))))
@@ -261,9 +261,23 @@
       (is (edges-valid? :stm2 {:edge {:id "1"}}))
       (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
-(deftest map-field-to-layers
-  (let [g {:a (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true}) (paf/make Test$Node))
-           :b (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true}) (raf/make {:bam 1 :bap 2}))
-           :c (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true}) (raf/make {:one 1 :two 2 :foo 3}))}]
-    (is (= {:baz [:a] :bar [:a] :foo [:a :c] :bap [:b] :bam [:b] :two [:c] :one [:c]}
-           (fields-to-layers g [:a :b :c])))))
+(deftest test-fields-and-schema
+  (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
+                                       (paf/make Test$Node))
+                    {:types #{:foo :bar}})
+               :b (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true})
+                                       (raf/make {:bam 1 :bap 2}))
+                    {:types #{:baz :bar}})
+               :c (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
+                                       (raf/make {:one 1 :two 2 :foo 3}))
+                    {:types #{:foo :bam}})}
+    (is (= {:baz {:repeated true, :type :int},
+            :bar {:repeated false, :type :string},
+            :foo {:repeated false, :type :int}}
+           (fields :a)))
+    (is (= {:one {:c 1},
+            :two {:c 2},
+            :foo {:c 3, :a {:repeated false, :type :int}},
+            :bar {:a {:repeated false, :type :string}},
+            :baz {:a {:repeated true, :type :int}}}
+           (schema :foo)))))
