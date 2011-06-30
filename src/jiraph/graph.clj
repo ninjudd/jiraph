@@ -279,6 +279,8 @@
                [field meta] (fields layer)]
            {field {layer meta}})))
 
+;; (alter-var-root #'schema #(with-meta (memoize-deref [#'jiraph.graph/*graph*] %) (meta %)))
+
 (defn layers
   "Return the names of all layers in the current graph."
   []

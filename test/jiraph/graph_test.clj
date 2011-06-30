@@ -266,7 +266,8 @@
                                        (paf/make Test$Node))
                     {:types #{:foo :bar}})
                :b (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true})
-                                       (raf/make {:bam 1 :bap 2}))
+                                       (raf/make (with-meta {:foo 1 :bap 2}
+                                                   {:foo {:type :int} :bap {:type :double}})))
                     {:types #{:baz :bar}})
                :c (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
                                        (raf/make {:one 1 :two 2 :foo 3}))
@@ -275,9 +276,15 @@
             :bar {:repeated false, :type :string},
             :foo {:repeated false, :type :int}}
            (fields :a)))
-    (is (= {:one {:c 1},
-            :two {:c 2},
-            :foo {:c 3, :a {:repeated false, :type :int}},
+    (is (= {:one {:c nil},
+            :two {:c nil},
+            :foo {:c nil, :a {:repeated false, :type :int}},
             :bar {:a {:repeated false, :type :string}},
             :baz {:a {:repeated true, :type :int}}}
-           (schema :foo)))))
+           (schema :foo)))
+    (is (= {:bap {:b {:type :double}},
+            :foo {:b {:type :int}, :a {:repeated false, :type :int}},
+            :bar {:a {:repeated false, :type :string}},
+            :baz {:a {:repeated true, :type :int}}}
+           (schema :bar)))))
+
