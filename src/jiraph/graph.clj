@@ -268,8 +268,8 @@
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
-  [layer-name]
-  (layer/fields (layer layer-name)))
+  [layer-name & args]
+  (apply layer/fields (layer layer-name) args))
 
 (defn schema
   "Return a map of fields for a given type to the metadata for each layer."

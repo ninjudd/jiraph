@@ -16,7 +16,8 @@
   (truncate!        [layer]            "Removes all node data from the layer.")
   (node-count       [layer]            "Return the total number of nodes in this layer.")
   (node-ids         [layer]            "Return a lazy sequence of all node ids in this layer.")
-  (fields           [layer]            "A list of canonical fields stored in this layer. Can be empty.")
+  (fields           [layer]
+                    [layer subfields]  "A list of canonical fields stored in this layer. Can be empty.")
   (get-property     [layer key]        "Fetch a layer-wide property.")
   (set-property!    [layer key val]    "Store a layer-wide property.")
   (get-node         [layer id]         "Fetch a node.")

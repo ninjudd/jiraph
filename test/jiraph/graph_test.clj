@@ -272,19 +272,36 @@
                :c (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
                                        (raf/make {:one 1 :two 2 :foo 3}))
                     {:types #{:foo :bam}})}
-    (is (= {:baz {:repeated true, :type :int},
-            :bar {:repeated false, :type :string},
-            :foo {:repeated false, :type :int}}
+    (is (= {:id    {:type :string},
+            :edges {:repeated true, :type :message},
+            :edge  {:type :message},
+            :rev   {:type :int}
+            :baz   {:repeated true, :type :int},
+            :bar   {:type :string},
+            :foo   {:type :int}}
            (fields :a)))
-    (is (= {:one {:c nil},
-            :two {:c nil},
-            :foo {:c nil, :a {:repeated false, :type :int}},
-            :bar {:a {:repeated false, :type :string}},
-            :baz {:a {:repeated true, :type :int}}}
+    (is (= {:id      {:type :string},
+            :a       {:type :string},
+            :b       {:type :string},
+            :deleted {:type :boolean}}
+           (fields :a [:edges])))
+    (is (= {:id    {:a {:type :string}}
+            :edges {:a {:repeated true, :type :message}},
+            :edge  {:a {:type :message}},
+            :rev   {:a {:type :int}},
+            :one   {:c nil},
+            :two   {:c nil},
+            :foo   {:c nil, :a {:type :int}},
+            :bar   {:a {:type :string}},
+            :baz   {:a {:repeated true, :type :int}}}
            (schema :foo)))
-    (is (= {:bap {:b {:type :double}},
-            :foo {:b {:type :int}, :a {:repeated false, :type :int}},
-            :bar {:a {:repeated false, :type :string}},
-            :baz {:a {:repeated true, :type :int}}}
+    (is (= {:id    {:a {:type :string}}
+            :edges {:a {:repeated true, :type :message}},
+            :edge  {:a {:type :message}},
+            :rev   {:a {:type :int}},
+            :bap   {:b {:type :double}},
+            :foo   {:b {:type :int}, :a {:type :int}},
+            :bar   {:a {:type :string}},
+            :baz   {:a {:repeated true, :type :int}}}
            (schema :bar)))))
 

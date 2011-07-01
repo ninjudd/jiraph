@@ -3,8 +3,7 @@
   (:use jiraph.layer
         [retro.core :as retro]
         [useful.utils :only [if-ns]]
-        [useful.seq :only [find-with]]
-        [useful.map :only [remove-keys]])
+        [useful.seq :only [find-with]])
   (:require [masai.db :as db]
             [cereal.format :as f]
             [cereal.reader :as reader-append-format])
@@ -98,8 +97,10 @@
     (remove #(.startsWith % meta-prefix) (db/key-seq db)))
 
   (fields [layer]
-    (remove-keys (partial contains? #{:id :edges :edge :rev})
-                 (f/fields format)))
+    (f/fields format))
+
+  (fields [layer subfields]
+    (f/fields format subfields))
 
   (get-property  [layer key]
     (if-let [bytes (db/get db (property-key key))]
