@@ -38,11 +38,11 @@
          (:edges node)
          (:edge node))))
 
-(defn- type-valid? [types id]
+(defn type-valid? [types id]
   (or (empty? types)
       (split-id id types)))
 
-(defn- schema-valid? [layer-name id node]
+(defn schema-valid? [layer-name id node]
   (and (type-valid? (layer-meta layer-name :types) id)
        (every? identity
                (map (partial type-valid? (layer-meta layer-name :edge-types))
