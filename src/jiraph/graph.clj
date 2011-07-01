@@ -178,11 +178,6 @@
   [layer-name id]
   (layer/node-exists? (layer layer-name) id))
 
-(defn layers-with-type
-  "Get a list of layers whose :types metadata contains type."
-  [type]
-  (for [[name layer] *graph* :when (some #{type} (layer-meta name :types))]
-    name))
 
 (defn add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
@@ -271,20 +266,25 @@
   [layer-name & args]
   (apply layer/fields (layer layer-name) args))
 
+(defn layers
+  "Return the names of all layers in the current graph."
+  ([] (keys *graph*))
+  ([type]
+     (for [[name layer] *graph*
+           :let [meta (meta layer)]
+           :when (and (contains? (:types meta) type)
+                      (not (:hidden meta)))]
+       name)))
+
 (defn schema
   "Return a map of fields for a given type to the metadata for each layer."
   [type]
   (apply merge-with conj
-         (for [layer        (layers-with-type type)
+         (for [layer        (layers type)
                [field meta] (fields layer)]
            {field {layer meta}})))
 
 ;; (alter-var-root #'schema #(with-meta (memoize-deref [#'jiraph.graph/*graph*] %) (meta %)))
-
-(defn layers
-  "Return the names of all layers in the current graph."
-  []
-  (keys *graph*))
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"

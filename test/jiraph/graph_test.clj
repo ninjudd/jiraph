@@ -248,7 +248,7 @@
               (append-node! layer-name "baz-1" {:a "b"}))))
 
       (testing "can find layers with a specific type"
-        (is (= [:tr :tp :stm] (layers-with-type :foo)))))))
+        (is (= [:tr :tp :stm] (layers :foo)))))))
 
 (deftest edges-valid
   (with-graph {:stm1 (stm/make)
@@ -271,7 +271,10 @@
                     {:types #{:baz :bar}})
                :c (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
                                        (raf/make {:one 1 :two 2 :foo 3}))
-                    {:types #{:foo :bam}})}
+                    {:types #{:foo :bam}})
+               :d (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-d" :create true})
+                                       (raf/make {:one 1 :two 2 :foo 3}))
+                    {:types #{:foo :bar :bam :baz} :hidden true})}
     (is (= {:id    {:type :string},
             :edges {:repeated true, :type :message},
             :edge  {:type :message},
