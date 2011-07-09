@@ -5,7 +5,7 @@
                  [masai "0.5.2-SNAPSHOT"]
                  [cereal "0.1.5-SNAPSHOT"]
                  [retro "0.5.0"]
-                 [ego "0.1.1-SNAPSHOT"]]
+                 [ego "0.1.1"]]
   :dev-dependencies [[clojure-protobuf "0.4.7-SNAPSHOT"]
                      [tokyocabinet "1.24.1-SNAPSHOT"]]
   :tasks [protobuf.tasks])
