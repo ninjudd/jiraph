@@ -284,7 +284,7 @@
                [field meta] (fields layer)]
            {field {layer meta}})))
 
-;; (alter-var-root #'schema #(with-meta (memoize-deref [#'jiraph.graph/*graph*] %) (meta %)))
+(alter-var-root #'schema #(with-meta (memoize-deref [#'jiraph.graph/*graph*] %) (meta %)))
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"
