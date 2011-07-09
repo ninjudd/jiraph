@@ -240,11 +240,11 @@
       (testing "adheres to the schema"
         (is (add-node! layer-name "bar-1" {:a "b"}))
         (is (add-node! layer-name "foo-1" {:edges {"bar-1" {:b "2"}}}))
-        (is (thrown-with-msg? Exception #"doesn't match"
+        (is (thrown-with-msg? AssertionError #"schema-valid"
               (add-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown-with-msg? Exception #"doesn't match"
+        (is (thrown-with-msg? AssertionError #"schema-valid"
               (update-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown-with-msg? Exception #"doesn't match"
+        (is (thrown-with-msg? AssertionError #"schema-valid"
               (append-node! layer-name "baz-1" {:a "b"}))))
 
       (testing "can find layers with a specific type"
@@ -261,17 +261,29 @@
       (is (edges-valid? :stm2 {:edge {:id "1"}}))
       (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
-(deftest test-node-valid
+(deftest test-node-valid-node-assert
   (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
                                        (paf/make Test$Node))
-                    {:node #{:foo :bar} :edge #{:baz}})}
+                    {:node #{:foo :bar} :edge #{:baz} :single-edge true})}
     (map truncate! (keys *graph*))
     (testing "invalid node and edge types"
       (is (not (node-valid? :a "baz-1" {:edge {:id "baz-1"}})))
-      (is (not (node-valid? :a "foo-1" {:edge {:id "bar-1"}}))))
-    (testing "valid node and edge types"
-      (is (not (node-valid? :a "foo-1" {:edge {:id "baz-1"}})))
-      (is (not (node-valid? :a "bar-1" {:edge {:id "baz-1"}}))))))
+      (is (not (node-valid? :a "foo-1" {:edge {:id "bar-1"}})))
+      (is (thrown-with-msg? AssertionError #"schema-valid"
+            (assert-node :a "baz-1" {:foo 1}))))
+    (testing "multiple edges not allowed"
+      (is (not (node-valid? :a "foo-1" {:edges {"baz-8" {:a "1"}}})))
+      (is (thrown-with-msg? AssertionError #"edges-valid"
+            (assert-node :a "foo-1" {:edges {"baz-8" {:a "1"}}}))))
+    (testing "invalid fields"
+      (is (not (node-valid? :a "foo-1" {:foo "bar"})))
+      (is (not (node-valid? :a "bar-1" {:bar 123})))
+      (is (thrown-with-msg? AssertionError #"node-valid"
+            (assert-node :a "foo-1" {:baz "aaa"}))))
+    (testing "valid nodes"
+      (is (node-valid? :a "foo-1" {:edge {:id "baz-1"} :foo 12 :bar "abc"}))
+      (is (node-valid? :a "bar-1" {:edge {:id "baz-1"} :baz 1119}))
+      (is (nil? (assert-node :a "foo-1" {:edge {:id "baz-2"} :bar "foo"}))))))
 
 (deftest test-fields-and-schema
   (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
