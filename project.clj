@@ -1,7 +1,7 @@
 (defproject jiraph "0.7.0-SNAPSHOT"
   :description "embedded graph db library for clojure"
   :dependencies [[clojure "1.2.0"]
-                 [useful "0.4.1-SNAPSHOT"]
+                 [useful "0.5.0"]
                  [masai "0.5.2-SNAPSHOT"]
                  [cereal "0.1.5-SNAPSHOT"]
                  [retro "0.5.0"]

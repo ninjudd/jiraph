@@ -102,6 +102,11 @@
   (fields [layer subfields]
     (f/fields format subfields))
 
+  (node-valid? [layer id attrs]
+    (try (f/encode format (make-node attrs))
+         true
+         (catch Exception e)))
+
   (get-property  [layer key]
     (if-let [bytes (db/get db (property-key key))]
       (read-string (String. bytes))))

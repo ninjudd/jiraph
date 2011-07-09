@@ -43,9 +43,9 @@
       (split-id id types)))
 
 (defn schema-valid? [layer-name id node]
-  (and (type-valid? (layer-meta layer-name :types) id)
+  (and (type-valid? (layer-meta layer-name :node) id)
        (every? identity
-               (map (partial type-valid? (layer-meta layer-name :edge-types))
+               (map (partial type-valid? (layer-meta layer-name :edge))
                     (keys (edges node))))))
 
 (defn filter-edge-ids [pred node]
@@ -266,13 +266,21 @@
   [layer-name & args]
   (apply layer/fields (layer layer-name) args))
 
+(defn node-valid?
+  "Check if the given node is valid for the specified layer."
+  [layer-name id & attrs]
+  (let [attrs (into-map attrs)]
+    (and (schema-valid? layer-name id attrs)
+         (edges-valid? layer-name attrs)
+         (layer/node-valid? (layer layer-name) id attrs))))
+
 (defn layers
   "Return the names of all layers in the current graph."
   ([] (keys *graph*))
   ([type]
      (for [[name layer] *graph*
            :let [meta (meta layer)]
-           :when (and (contains? (:types meta) type)
+           :when (and (contains? (:node meta) type)
                       (not (:hidden meta)))]
        name)))
 
