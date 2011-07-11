@@ -234,23 +234,23 @@
 (deftest adhere-schema
   (with-graph
     (into {} (for [[k v] (make-graph)]
-               [k (with-meta v {:types #{:foo :bar} :edge-types #{:bar}})]))
+               [k (with-meta v {:node #{:foo :bar} :edge #{:bar}})]))
     (with-each-layer all
       (truncate! layer-name)
       (testing "adheres to the schema"
         (is (add-node! layer-name "bar-1" {:a "b"}))
         (is (add-node! layer-name "foo-1" {:edges {"bar-1" {:b "2"}}}))
-        (is (thrown-with-msg? Exception #"doesn't match"
+        (is (thrown-with-msg? AssertionError #"schema-valid"
               (add-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown-with-msg? Exception #"doesn't match"
+        (is (thrown-with-msg? AssertionError #"schema-valid"
               (update-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown-with-msg? Exception #"doesn't match"
+        (is (thrown-with-msg? AssertionError #"schema-valid"
               (append-node! layer-name "baz-1" {:a "b"}))))
 
       (testing "can find layers with a specific type"
         (is (= [:tr :tp :stm] (layers :foo)))))))
 
-(deftest edges-valid
+(deftest test-edges-valid
   (with-graph {:stm1 (stm/make)
                :stm2 (with-meta (stm/make) {:single-edge true})}
     (map truncate! (keys *graph*))
@@ -261,20 +261,44 @@
       (is (edges-valid? :stm2 {:edge {:id "1"}}))
       (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
+(deftest test-node-valid-node-assert
+  (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
+                                       (paf/make Test$Node))
+                    {:node #{:foo :bar} :edge #{:baz} :single-edge true})}
+    (map truncate! (keys *graph*))
+    (testing "invalid node and edge types"
+      (is (not (node-valid? :a "baz-1" {:edge {:id "baz-1"}})))
+      (is (not (node-valid? :a "foo-1" {:edge {:id "bar-1"}})))
+      (is (thrown-with-msg? AssertionError #"schema-valid"
+            (assert-node :a "baz-1" {:foo 1}))))
+    (testing "multiple edges not allowed"
+      (is (not (node-valid? :a "foo-1" {:edges {"baz-8" {:a "1"}}})))
+      (is (thrown-with-msg? AssertionError #"edges-valid"
+            (assert-node :a "foo-1" {:edges {"baz-8" {:a "1"}}}))))
+    (testing "invalid fields"
+      (is (not (node-valid? :a "foo-1" {:foo "bar"})))
+      (is (not (node-valid? :a "bar-1" {:bar 123})))
+      (is (thrown-with-msg? AssertionError #"node-valid"
+            (assert-node :a "foo-1" {:baz "aaa"}))))
+    (testing "valid nodes"
+      (is (node-valid? :a "foo-1" {:edge {:id "baz-1"} :foo 12 :bar "abc"}))
+      (is (node-valid? :a "bar-1" {:edge {:id "baz-1"} :baz 1119}))
+      (is (nil? (assert-node :a "foo-1" {:edge {:id "baz-2"} :bar "foo"}))))))
+
 (deftest test-fields-and-schema
   (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
                                        (paf/make Test$Node))
-                    {:types #{:foo :bar}})
+                    {:node #{:foo :bar}})
                :b (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true})
                                        (raf/make (with-meta {:foo 1 :bap 2}
                                                    {:foo {:type :int} :bap {:type :double}})))
-                    {:types #{:baz :bar}})
+                    {:node #{:baz :bar}})
                :c (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
                                        (raf/make {:one 1 :two 2 :foo 3}))
-                    {:types #{:foo :bam}})
+                    {:node #{:foo :bam}})
                :d (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-d" :create true})
                                        (raf/make {:one 1 :two 2 :foo 3}))
-                    {:types #{:foo :bar :bam :baz} :hidden true})}
+                    {:node #{:foo :bar :bam :baz} :hidden true})}
     (is (= {:id    {:type :string},
             :edges {:repeated true, :type :message},
             :edge  {:type :message},
