@@ -270,20 +270,20 @@
       (is (not (node-valid? :a "baz-1" {:edge {:id "baz-1"}})))
       (is (not (node-valid? :a "foo-1" {:edge {:id "bar-1"}})))
       (is (thrown-with-msg? AssertionError #"schema-valid"
-            (assert-node :a "baz-1" {:foo 1}))))
+            (verify-node :a "baz-1" {:foo 1}))))
     (testing "multiple edges not allowed"
       (is (not (node-valid? :a "foo-1" {:edges {"baz-8" {:a "1"}}})))
       (is (thrown-with-msg? AssertionError #"edges-valid"
-            (assert-node :a "foo-1" {:edges {"baz-8" {:a "1"}}}))))
+            (verify-node :a "foo-1" {:edges {"baz-8" {:a "1"}}}))))
     (testing "invalid fields"
       (is (not (node-valid? :a "foo-1" {:foo "bar"})))
       (is (not (node-valid? :a "bar-1" {:bar 123})))
       (is (thrown-with-msg? AssertionError #"node-valid"
-            (assert-node :a "foo-1" {:baz "aaa"}))))
+            (verify-node :a "foo-1" {:baz "aaa"}))))
     (testing "valid nodes"
       (is (node-valid? :a "foo-1" {:edge {:id "baz-1"} :foo 12 :bar "abc"}))
       (is (node-valid? :a "bar-1" {:edge {:id "baz-1"} :baz 1119}))
-      (is (nil? (assert-node :a "foo-1" {:edge {:id "baz-2"} :bar "foo"}))))))
+      (is (nil? (verify-node :a "foo-1" {:edge {:id "baz-2"} :bar "foo"}))))))
 
 (deftest test-fields-and-schema
   (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})

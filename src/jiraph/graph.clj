@@ -274,7 +274,7 @@
          (edges-valid? layer-name attrs)
          (layer/node-valid? (layer layer-name) id attrs))))
 
-(defn assert-node
+(defn verify-node
   "Assert that the given node is valid for the specified layer."
   [layer-name id & attrs]
   (let [attrs (into-map attrs)]
