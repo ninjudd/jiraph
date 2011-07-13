@@ -1,7 +1,8 @@
 (ns jiraph.masai-layer
   (:refer-clojure :exclude [sync count])
   (:use jiraph.layer
-        [retro.core :as retro]
+        [clojure.stacktrace :only [print-cause-trace]]
+        [retro.core :only [*revision*]]
         [useful.utils :only [if-ns]]
         [useful.seq :only [find-with]])
   (:require [masai.db :as db]
@@ -102,7 +103,7 @@
   (fields [layer subfields]
     (f/fields format subfields))
 
-  (node-valid? [layer id attrs]
+  (node-valid? [layer attrs]
     (try (f/encode format (make-node attrs))
          true
          (catch Exception e)))

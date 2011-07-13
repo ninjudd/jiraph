@@ -18,7 +18,7 @@
   (node-ids         [layer]            "Return a lazy sequence of all node ids in this layer.")
   (fields           [layer]
                     [layer subfields]  "A list of canonical fields stored in this layer. Can be empty.")
-  (node-valid?      [layer id attrs]   "Check if the given node is valid according to the layer schema.")
+  (node-valid?      [layer attrs]      "Check if the given node is valid according to the layer schema.")
   (get-property     [layer key]        "Fetch a layer-wide property.")
   (set-property!    [layer key val]    "Store a layer-wide property.")
   (get-node         [layer id]         "Fetch a node.")

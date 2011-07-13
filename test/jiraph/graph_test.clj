@@ -234,17 +234,17 @@
 (deftest adhere-schema
   (with-graph
     (into {} (for [[k v] (make-graph)]
-               [k (with-meta v {:node #{:foo :bar} :edge #{:bar}})]))
+               [k (with-meta v {:types {:foo #{:bar} :bar #{:bar}}})]))
     (with-each-layer all
       (truncate! layer-name)
       (testing "adheres to the schema"
         (is (add-node! layer-name "bar-1" {:a "b"}))
         (is (add-node! layer-name "foo-1" {:edges {"bar-1" {:b "2"}}}))
-        (is (thrown-with-msg? AssertionError #"schema-valid"
+        (is (thrown-with-msg? AssertionError #"types-valid"
               (add-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown-with-msg? AssertionError #"schema-valid"
+        (is (thrown-with-msg? AssertionError #"types-valid"
               (update-node! layer-name "baz-1" {:a "b"})))
-        (is (thrown-with-msg? AssertionError #"schema-valid"
+        (is (thrown-with-msg? AssertionError #"types-valid"
               (append-node! layer-name "baz-1" {:a "b"}))))
 
       (testing "can find layers with a specific type"
@@ -264,12 +264,12 @@
 (deftest test-node-valid-node-assert
   (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
                                        (paf/make Test$Node))
-                    {:node #{:foo :bar} :edge #{:baz} :single-edge true})}
+                    {:types {:foo #{:baz} :bar #{:baz}} :single-edge true})}
     (map truncate! (keys *graph*))
     (testing "invalid node and edge types"
       (is (not (node-valid? :a "baz-1" {:edge {:id "baz-1"}})))
       (is (not (node-valid? :a "foo-1" {:edge {:id "bar-1"}})))
-      (is (thrown-with-msg? AssertionError #"schema-valid"
+      (is (thrown-with-msg? AssertionError #"types-valid"
             (verify-node :a "baz-1" {:foo 1}))))
     (testing "multiple edges not allowed"
       (is (not (node-valid? :a "foo-1" {:edges {"baz-8" {:a "1"}}})))
@@ -288,17 +288,17 @@
 (deftest test-fields-and-schema
   (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
                                        (paf/make Test$Node))
-                    {:node #{:foo :bar}})
+                    {:types #{:foo :bar}})
                :b (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true})
                                        (raf/make (with-meta {:foo 1 :bap 2}
                                                    {:foo {:type :int} :bap {:type :double}})))
-                    {:node #{:baz :bar}})
+                    {:types #{:baz :bar}})
                :c (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
                                        (raf/make {:one 1 :two 2 :foo 3}))
-                    {:node #{:foo :bam}})
+                    {:types #{:foo :bam}})
                :d (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-d" :create true})
                                        (raf/make {:one 1 :two 2 :foo 3}))
-                    {:node #{:foo :bar :bam :baz} :hidden true})}
+                    {:types #{:foo :bar :bam :baz} :hidden true})}
     (is (= {:id    {:type :string},
             :edges {:repeated true, :type :message},
             :edge  {:type :message},

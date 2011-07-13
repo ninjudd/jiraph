@@ -38,15 +38,13 @@
          (:edges node)
          (:edge node))))
 
-(defn type-valid? [types id]
-  (or (empty? types)
-      (contains? types (type-key id))))
-
-(defn schema-valid? [layer-name id node]
-  (and (type-valid? (layer-meta layer-name :node) id)
-       (every? identity
-               (map (partial type-valid? (layer-meta layer-name :edge))
-                    (keys (edges node))))))
+(defn types-valid? [layer-name id node]
+  (let [types (layer-meta layer-name :types)]
+    (or (not types)
+        (let [node-type (type-key id)]
+          (and (contains? types node-type)
+               (every? (partial contains? (types node-type))
+                       (map type-key (keys (edges node)))))))))
 
 (defn filter-edge-ids [pred node]
   (filter-keys-by-val pred (edges node)))
@@ -184,7 +182,7 @@
   [layer-name id & attrs]
   {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
   (let [attrs (into-map attrs)]
-    (assert (schema-valid? layer-name id attrs))
+    (assert (types-valid? layer-name id attrs))
     (assert (edges-valid? layer-name attrs))
     (with-transaction layer-name
       (let [layer (layer layer-name)
@@ -206,7 +204,7 @@
     (let [layer (layer layer-name)
           old   (layer/get-node layer id)
           new   (layer/set-node! layer id (apply f old args))]
-      (assert (schema-valid? layer-name id new))
+      (assert (types-valid? layer-name id new))
       (assert (edges-valid? layer-name new))
       (let [new-edges (set (filter-edge-ids (complement :deleted) new))
             old-edges (set (keys (edges old)))]
@@ -222,7 +220,7 @@
   {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
   (let [node (into-map attrs)
         layer (layer layer-name)]
-    (assert (schema-valid? layer-name id node))
+    (assert (types-valid? layer-name id node))
     (assert (edges-valid? layer-name node))
     (if (instance? jiraph.layer.Append layer)
       (with-transaction layer-name
@@ -270,17 +268,18 @@
   "Check if the given node is valid for the specified layer."
   [layer-name id & attrs]
   (let [attrs (into-map attrs)]
-    (and (schema-valid? layer-name id attrs)
+    (and (or (nil? id) (types-valid? layer-name id attrs))
          (edges-valid? layer-name attrs)
-         (layer/node-valid? (layer layer-name) id attrs))))
+         (layer/node-valid? (layer layer-name) attrs))))
 
 (defn verify-node
   "Assert that the given node is valid for the specified layer."
   [layer-name id & attrs]
   (let [attrs (into-map attrs)]
-    (assert (schema-valid? layer-name id attrs))
+    (when id
+      (assert (types-valid? layer-name id attrs)))
     (assert (edges-valid? layer-name attrs))
-    (assert (layer/node-valid? (layer layer-name) id attrs))))
+    (assert (layer/node-valid? (layer layer-name) attrs))))
 
 (defn layers
   "Return the names of all layers in the current graph."
@@ -288,7 +287,7 @@
   ([type]
      (for [[name layer] *graph*
            :let [meta (meta layer)]
-           :when (and (contains? (:node meta) type)
+           :when (and (contains? (:types meta) type)
                       (not (:hidden meta)))]
        name)))
 
