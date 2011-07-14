@@ -30,7 +30,8 @@
   "Gets edges from a node. Returns all edges, including deleted ones."
   [node]
   (if-let [edge (:edge node)]
-    {(:id edge) edge}
+    (when-let [id (:id edge)]
+      {id edge})
     (:edges node)))
 
 (defn edges-valid? [layer-name node]
