@@ -4,7 +4,7 @@
                  [useful "0.5.0"]
                  [masai "0.5.2"]
                  [cereal "0.1.5"]
-                 [retro "0.5.0"]
+                 [retro "0.5.1"]
                  [ego "0.1.1"]]
   :dev-dependencies [[protobuf "0.5.0-alpha1"]
                      [tokyocabinet "1.24.1-SNAPSHOT"]]
