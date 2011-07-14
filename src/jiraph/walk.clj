@@ -9,7 +9,7 @@
 
 (def ^{:doc "Should steps be followed in parallel?"} *parallel-follow* false)
 
-(defrecord Step      [id from-id layer source edge alt-ids rev data])
+(defrecord Step      [id dist from-id layer source edge alt-ids rev data])
 (defrecord Walk      [focus-id steps include? ids result-count to-follow max-rev terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step extract-edges terminate?])
 
@@ -121,6 +121,7 @@
   (<< init-step walk
       (make-record Step
         :id to-id
+        :dist (inc (dist from-step))
         :from-id (id from-step)
         :layer layer
         :source from-step
@@ -154,7 +155,7 @@
                :result-count 0
                :to-follow    (transient [])
                :traversal    traversal)
-        step (<< init-step walk (make-record Step :id focus-id))]
+        step (<< init-step walk (make-record Step :id focus-id :dist 0))]
     (traverse walk step)))
 
 (defn- persist-walk!
