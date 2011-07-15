@@ -1,6 +1,7 @@
 (ns jiraph.walk-test
   (:use clojure.test jiraph.graph
-        [jiraph.walk :only [defwalk path paths limit *parallel-follow*]])
+        [jiraph.walk :only [defwalk path paths *parallel-follow*]]
+        [jiraph.walk.predicates :only [limit]])
   (:require [jiraph.masai-layer :as bal]
             [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
@@ -62,4 +63,3 @@
             (is (= ["1" "2" "3" "8" "4" "5" "6" "9" "7"] (:ids walk)))
             (is (= ["1" "8"] (map :id (path walk "8"))))
             (is (= 33  (:max-rev walk)))))))))
-
