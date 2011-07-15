@@ -59,31 +59,19 @@
        (walk focus-id#
              (into traversal# (map traversal-fn (into-map opts#)))))))
 
-(defn limit
-  "Returns a function that can be passed as the :terminate? traversal parameter to limit a walk to a
-   specific number of steps."
-  [num]
-  (fn [walk]
-    (<= num (result-count walk))))
-
-(defn walked?
+(defn- walked?
   "Has this step already been traversed?"
   [walk step]
   (some (fn [s] (and (= (from-id step) (from-id s))
                      (= (layer   step) (layer   s))))
         (get (steps walk) (id step))))
 
-(defn back?
+(defn- back?
   "Is this step back across the edge that was just crossed on the last step?"
   [step]
   (= (id step)
      (when-let [source (source step)]
        (from-id source))))
-
-(defn initial?
-  "Is this the first step of the walk?"
-  [step]
-  (nil? (from-id step)))
 
 (defn- add-node
   "Add the node associated with this step to the walk results."
