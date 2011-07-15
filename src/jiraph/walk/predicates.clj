@@ -8,6 +8,14 @@
   (fn [walk]
     (<= num (result-count walk))))
 
+(defn has-distance
+  "Return a predicate taking [walk step], which applies the supplied test to the
+   step's distance. The distance of a step is the distance from the walk's
+   initial node to the step's destination node."
+  [test num]
+  (fn [walk step]
+    (test (distance step) num)))
+
 (defn initial?
   "Is this the first step of the walk?"
   [step]
