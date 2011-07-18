@@ -1,7 +1,7 @@
 (ns jiraph.walk-test
   (:use clojure.test jiraph.graph
         [jiraph.walk :only [defwalk path paths *parallel-follow*]]
-        [jiraph.walk.predicates :only [limit]])
+        [jiraph.walk.predicates :only [at-limit]])
   (:require [jiraph.masai-layer :as bal]
             [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
@@ -45,7 +45,7 @@
           (is (= [["1" "3"]             ["1" "2" "3"]] (map (partial map :id) (paths walk "3")))))
 
         (testing "early termination"
-          (let [walk (full-walk "1" :terminate? (limit 5))]
+          (let [walk (full-walk "1" :terminate? (at-limit 5))]
             (is (= 5 (:result-count walk)))
             (is (= ["1" "2" "3" "4" "5"] (:ids walk)))
             (is (= nil (path walk "8")))
