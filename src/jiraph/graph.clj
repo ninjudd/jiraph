@@ -2,7 +2,7 @@
   (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [conj-vec memoize-deref adjoin]]
         [useful.fn :only [any]]
-        [clojure.string :only [split]]
+        [clojure.string :only [split join]]
         [ego.core :only [type-key]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]
@@ -177,8 +177,47 @@
   [layer-name id]
   (layer/node-exists? (layer layer-name) id))
 
+(def ^{:dynamic true} *filter* nil)
 
-(defn add-node!
+(defn wrap-filter [fn-name f]
+  (fn [& args]
+    (when (or (not *filter*)
+              (*filter* fn-name args))
+      (apply f args))))
+
+(defmacro ^{:private true} defaction
+  ([name doc args body]
+     `(defaction ~name ~doc ~args {} ~body))
+  ([name doc args condmap body]
+     `(def ~(with-meta name {:doc doc :arglists `'(~args)})
+        (wrap-filter '~name
+         (fn ~args ~condmap
+           ~body)))))
+
+(def default-log-filter
+  (fn [f args]
+    (printf "Calling (%s %s)" f (join " " args))
+    true))
+
+(defn wrap-logging [f]
+  (fn [& args]
+    (prn (-> f meta :name) args)
+    (apply f args)))
+
+(defn pipeline-wrappers [& wrappers]
+  (reduce (fn [f next]
+            (let [res (next f)]
+              (with-meta res (meta f))))
+          wrappers))
+
+(def werawfe
+  (pipeline-wrappers wrap-logging wrap-filters))
+
+(defmacro with-logging [& body]
+  `(binding [*filter* default-log-filter]
+     ~@body))
+
+(defaction add-node!
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer-name id & attrs]
   {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
@@ -197,7 +236,7 @@
 
 (def ^{:dynamic true :private true} *compacting* false)
 
-(defn update-node!
+(defaction update-node!
   "Update a node by calling function f with the old value and any supplied args."
   [layer-name id f & args]
   {:pre [(or (not (layer-meta layer-name :append-only)) *compacting*)]}
@@ -215,7 +254,7 @@
           (layer/drop-incoming! layer to-id id)))
       [(dissoc old :id) new])))
 
-(defn append-node!
+(defaction append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer-name id & attrs]
   {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
@@ -234,7 +273,7 @@
       (do (apply update-node! layer-name id adjoin attrs)
           (layer/make-node node)))))
 
-(defn delete-node!
+(defaction delete-node!
   "Remove a node from a layer (incoming links remain)."
   [layer-name id]
   (with-transaction layer-name
@@ -244,7 +283,7 @@
         (if-not (:deleted edge)
           (layer/drop-incoming! layer to-id id))))))
 
-(defn assoc-node!
+(defaction assoc-node!
   "Associate attrs with a node."
   [layer-name id & attrs]
   (let [layer (layer layer-name)]
@@ -252,7 +291,7 @@
       (layer/assoc-node! layer id (into-map attrs))
       (apply update-node! layer-name id merge attrs))))
 
-(defn compact-node!
+(defaction compact-node!
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
   [layer-name id]
   (binding [*compacting* true]
