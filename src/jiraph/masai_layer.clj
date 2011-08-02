@@ -4,6 +4,7 @@
         [clojure.stacktrace :only [print-cause-trace]]
         [retro.core :only [*revision*]]
         [useful.utils :only [if-ns]]
+        [useful.experimental :only [protocol-stub]]
         [useful.seq :only [find-with]])
   (:require [masai.db :as db]
             [cereal.format :as f]
@@ -195,3 +196,19 @@
          (if (instance? cereal.reader.ReaderFormat format)
            (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
            (protobuf-make format))))))
+
+(protocol-stub DebugLayer
+  {jiraph.layer/Layer {:default :forward
+                       :exceptions [sync! optimize! set-property!
+                                    delete-node! set-node!
+                                    add-node! add-incoming!
+                                    update-node! close
+                                    drop-incoming! truncate!]}
+   jiraph.layer/Append {:default :stub}
+   retro.core/WrappedTransactional {:default :forward}
+   retro.core/Revisioned {:default :forward
+                          :exceptions [set-revision!]}})
+
+(defn stubbed-layer [layer trace-fn]
+  (with-meta (DebugLayer. layer trace-fn)
+    (meta layer)))

@@ -2,6 +2,7 @@
   (:use jiraph.layer
         retro.core
         [useful.map :only [update]]
+        [useful.experimental :only [protocol-stub]]
         [useful.utils :only [adjoin]]))
 
 (defn- conj-set
@@ -137,3 +138,17 @@
 
 (defn make []
   (STMLayer. (ref {}) (ref {}) (ref {})))
+
+(protocol-stub DebugLayer
+  {jiraph.layer/Layer {:default :forward
+                       :exceptions [sync! optimize! set-property!
+                                    delete-node! set-node!
+                                    add-node! add-incoming!
+                                    update-node! close
+                                    drop-incoming! truncate!]}
+   retro.core/WrappedTransactional {:default :forward}
+   retro.core/Revisioned {:default :forward
+                          :exceptions [set-revision!]}})
+
+(defn stubbed-layer [layer trace-fn]
+  (DebugLayer. layer trace-fn))
