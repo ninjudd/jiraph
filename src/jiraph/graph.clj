@@ -5,9 +5,7 @@
         [clojure.string :only [split]]
         [ego.core :only [type-key]])
   (:require [jiraph.layer :as layer]
-            [retro.core :as retro]
-            [masai.tokyo :as tokyo]
-            [jiraph.masai-layer :as masai-layer]))
+            [retro.core :as retro]))
 
 (def ^{:dynamic true} *graph* nil)
 (def ^{:dynamic true} *verbose* nil)
@@ -323,9 +321,6 @@
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer-name id]
   (layer/get-incoming (layer layer-name) id))
-
-(defn make-layer [path]
-  (masai-layer/make (tokyo/make {:path path :create true})))
 
 (defn wrap-caching
   "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls

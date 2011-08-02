@@ -182,15 +182,24 @@
     (set-property! layer :rev rev)))
 
 (if-ns (:require protobuf [cereal.protobuf :as protobuf])
-       (defn protobuf-make [format]
+       (defn- protobuf-make [format]
          (when (instance? cereal.protobuf.ProtobufFormat format)
            (protobuf/make jiraph.Meta$Node)))
-       (def protobuf-make (constantly nil)))
+       (defn- protobuf-make [format]
+         nil))
+
+(if-ns (:require [masai.tokyo :as tokyo])
+       (defn- make-db [db]
+         (if (string? db)
+           (tokyo/make {:path db :create true})
+           db))
+       (def- make-db [db]
+         db))
 
 (defn make [db & [format meta-format]]
   (let [format (or format (reader-append-format/make))]
     (MasaiLayer.
-     db format
+     (make-db db) format
      (or meta-format
          (if (instance? cereal.reader.ReaderFormat format)
            (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})

@@ -10,7 +10,7 @@
 (def all [:tr :tp :stm])
 
 (defn make-graph []
-  {:tr (make-layer "/tmp/jiraph-test-tokyo-reader")
+  {:tr (bal/make "/tmp/jiraph-test-tokyo-reader")
    :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))
    :stm (stm/make)})
 

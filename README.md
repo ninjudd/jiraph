@@ -45,9 +45,9 @@ a sample node:
     (use 'jiraph.graph)
 
     (def g
-      {:foo (make-layer "/tmp/foo")
-       :bar (make-layer "/tmp/bar")
-       :baz (make-layer "/tmp/baz")})
+      {:foo (jiraph.masai-layer/make "/tmp/foo")
+       :bar (jiraph.masai-layer/make "/tmp/bar")
+       :baz (jiraph.masai-layer/make "/tmp/baz")})
 
     (with-graph g
       (add-node! :foo "human-1" {:name "Justin"  :edges {"human-2" {:type :spouse}}})
