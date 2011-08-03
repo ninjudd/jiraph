@@ -2,14 +2,48 @@
   (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [conj-vec memoize-deref adjoin]]
         [useful.fn :only [any]]
-        [clojure.string :only [split]]
-        [ego.core :only [type-key]])
+        [clojure.string :only [split join]]
+        [ego.core :only [type-key]]
+        [useful.experimental :only [defn-wrapping with-wrapper]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]))
 
 (def ^{:dynamic true} *graph* nil)
 (def ^{:dynamic true} *verbose* nil)
 (def ^{:dynamic true} *use-outer-cache* nil)
+
+;; wrappers for read/write methods, used with defn-wrapping
+(def ^{:dynamic true} *read-wrappers* [])
+(def ^{:dynamic true} *write-wrappers* [])
+
+(defn fn-name [wrapper]
+  (-> wrapper meta :useful.experimental/call-data :fn-name))
+
+(defn simple-logging-wrapper [f]
+  (fn [& args]
+    (let [name (fn-name *read-wrappers*)
+          ret (apply args f)]
+      (println (str "Called: (" (join " " (map pr-str
+                                               (cons name args)))
+                    ")"
+                    " => " (pr-str ret))))))
+
+(defmacro with-logging [& body]
+  `(with-wrapper #'*read-wrappers* simple-logging-wrapper
+     ~@body))
+
+(defn simple-stubbing-wrapper [f]
+  (fn [& args]
+    (let [name (fn-name *write-wrappers*)]
+      (println (str "Stubbed: ("
+                    (join " " (map pr-str
+                                   (cons name args)))
+                    ")"))
+      nil)))
+
+(defmacro with-stub-writes [& body]
+  `(with-wrapper #'*write-wrappers* simple-stubbing-wrapper
+     ~@body))
 
 (defn layer
   "Return the layer for a given name from *graph*."
@@ -61,11 +95,11 @@
        (println (format "%-20s %s"~'layer-name (apply str (map pr-str '~forms)))))
      ~@forms))
 
-(defn open! []
+(defn-wrapping open! #'*write-wrappers* []
   (with-each-layer []
     (layer/open layer)))
 
-(defn close! []
+(defn-wrapping close! #'*write-wrappers* []
   (with-each-layer []
     (layer/close layer)))
 
@@ -104,57 +138,57 @@
 
 (def abort-transaction retro/abort-transaction)
 
-(defn sync!
+(defn-wrapping sync! #'*write-wrappers*
   "Flush changes for the specified layers to the storage medium, or all layers if none are specified."
   [& layers]
   (with-each-layer layers
     (layer/sync! layer)))
 
-(defn optimize!
+(defn-wrapping optimize! #'*write-wrappers*
   "Optimize the underlying storage for the specified layers, or all layers if none are specified."
   [& layers]
   (with-each-layer layers
     (layer/optimize! layer)))
 
-(defn truncate!
+(defn-wrapping truncate! #'*write-wrappers*
   "Remove all nodes from the specified layers, or all layers if none are specified."
   [& layers]
   (with-each-layer layers
     (layer/truncate! layer)))
 
-(defn node-ids
+(defn-wrapping node-ids #'*read-wrappers*
   "Return a lazy sequence of all node ids in this layer."
   [layer-name]
   (layer/node-ids (layer layer-name)))
 
-(defn node-count
+(defn-wrapping node-count #'*read-wrappers*
   "Return the total number of nodes in this layer."
   [layer-name]
   (layer/node-count (layer layer-name)))
 
-(defn get-property
+(defn-wrapping get-property #'*read-wrappers*
   "Fetch a layer-wide property."
   [layer-name key]
   (layer/get-property (layer layer-name) key))
 
-(defn set-property!
+(defn-wrapping set-property! #'*write-wrappers*
   "Store a layer-wide property."
   [layer-name key val]
   (layer/set-property! (layer layer-name) key val))
 
-(defn update-property!
+(defn-wrapping update-property! #'*write-wrappers*
   "Update the given layer property by calling function f with the old value and any supplied args."
   [layer-name key f & args]
   (let [val (get-property layer-name key)]
     (set-property! layer-name key (apply f val args))))
 
-(defn current-revision
+(defn-wrapping current-revision #'*read-wrappers*
   "The maximum revision on all specified layers, or all layers if none are specified."
   [& layers]
   (apply max 0 (for [layer (if (empty? layers) (keys *graph*) layers)]
                  (or (get-property layer :rev) 0))))
 
-(defn get-node
+(defn-wrapping get-node #'*read-wrappers*
   "Fetch a node's data from this layer."
   [layer-name id]
   (when-let [node (layer/get-node (layer layer-name) id)]
@@ -170,13 +204,13 @@
   [layer-name id to-id]
   ((edges (get-node layer-name id)) to-id))
 
-(defn node-exists?
+(defn-wrapping node-exists? #'*read-wrappers*
   "Check if a node exists on this layer."
   [layer-name id]
   (layer/node-exists? (layer layer-name) id))
 
 
-(defn add-node!
+(defn-wrapping add-node! #'*write-wrappers*
   "Add a node with the given id and attrs if it doesn't already exist."
   [layer-name id & attrs]
   {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
@@ -195,7 +229,7 @@
 
 (def ^{:dynamic true :private true} *compacting* false)
 
-(defn update-node!
+(defn-wrapping update-node! #'*write-wrappers*
   "Update a node by calling function f with the old value and any supplied args."
   [layer-name id f & args]
   {:pre [(or (not (layer-meta layer-name :append-only)) *compacting*)]}
@@ -213,7 +247,7 @@
           (layer/drop-incoming! layer to-id id)))
       [(dissoc old :id) new])))
 
-(defn append-node!
+(defn-wrapping append-node! #'*write-wrappers*
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer-name id & attrs]
   {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
@@ -232,7 +266,7 @@
       (do (apply update-node! layer-name id adjoin attrs)
           (layer/make-node node)))))
 
-(defn delete-node!
+(defn-wrapping delete-node! #'*write-wrappers*
   "Remove a node from a layer (incoming links remain)."
   [layer-name id]
   (with-transaction layer-name
@@ -242,7 +276,7 @@
         (if-not (:deleted edge)
           (layer/drop-incoming! layer to-id id))))))
 
-(defn assoc-node!
+(defn-wrapping assoc-node! #'*write-wrappers*
   "Associate attrs with a node."
   [layer-name id & attrs]
   (let [layer (layer layer-name)]
@@ -250,7 +284,7 @@
       (layer/assoc-node! layer id (into-map attrs))
       (apply update-node! layer-name id merge attrs))))
 
-(defn compact-node!
+(defn-wrapping compact-node! #'*write-wrappers*
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
   [layer-name id]
   (binding [*compacting* true]
@@ -317,7 +351,7 @@
   (reverse
    (take-while pos? (reverse (layer/get-revisions (layer layer-name) id)))))
 
-(defn get-incoming
+(defn-wrapping get-incoming #'*read-wrappers*
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer-name id]
   (layer/get-incoming (layer layer-name) id))

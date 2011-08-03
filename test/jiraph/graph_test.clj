@@ -19,11 +19,21 @@
     (with-each-layer all
       (truncate! layer-name)
       (testing "add-node! throws exception and doesn't overwrite existing node"
-        (let [node {:foo 2 :bar "three"}] (is (= node (add-node! layer-name "1" node)))
+        (let [node {:foo 2 :bar "three"}]
+          (is (= node (add-node! layer-name "1" node)))
           (is (= (assoc node :id "1") (get-node layer-name "1")))
           (is (thrown-with-msg? java.io.IOException #"already exists"
                 (add-node! layer-name "1" {:foo 8})))
           (is (= (assoc node :id "1") (get-node layer-name "1"))))))))
+
+(deftest stubbed-add-node
+  (with-graph (make-graph)
+    (with-each-layer all
+      (truncate! layer-name)
+      (with-stub-writes
+        (let [node {:foo 2 :bar "three"}]
+          (is (nil? (add-node! layer-name "1" node)))
+          (is (nil? (get-node layer-name "1"))))))))
 
 (deftest node-info
   (with-graph (make-graph)
@@ -331,4 +341,3 @@
             :bar   {:a {:type :string}},
             :baz   {:a {:repeated true, :type :int}}}
            (schema :bar)))))
-
