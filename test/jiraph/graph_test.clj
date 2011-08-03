@@ -67,7 +67,7 @@
             (is (not= get-node-without-caching get-node))
             (is (= {:id "3" :bar "cat" :baz [5 8] :rev 101} (get-node layer-name "3")))
             (at-revision 100
-                         (is (= {:id "3" :bar "cat" :baz [5] :rev 100} (get-node layer-name "3"))))))))))
+              (is (= {:id "3" :bar "cat" :baz [5] :rev 100} (get-node layer-name "3"))))))))))
 
 (deftest transactions
   (with-graph (make-graph)
@@ -288,7 +288,7 @@
 (deftest test-fields-and-schema
   (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
                                        (paf/make Test$Node))
-                    {:types #{:foo :bar}})
+                    {:types #{:foo :bar} :composite {:bap :bar}})
                :b (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true})
                                        (raf/make (with-meta {:foo 1 :bap 2}
                                                    {:foo {:type :int} :bap {:type :double}})))
@@ -305,6 +305,7 @@
             :rev   {:type :int}
             :baz   {:repeated true, :type :int},
             :bar   {:type :string},
+            :bap   {:type :message},
             :foo   {:type :int}}
            (fields :a)))
     (is (= {:id      {:type :string},
@@ -320,15 +321,18 @@
             :two   {:c nil},
             :foo   {:c nil, :a {:type :int}},
             :bar   {:a {:type :string}},
-            :baz   {:a {:repeated true, :type :int}}}
+            :baz   {:a {:repeated true, :type :int}}
+            :bap   {:a {:type :message}}}
            (schema :foo)))
     (is (= {:id    {:a {:type :string}}
             :edges {:a {:repeated true, :type :message}},
             :edge  {:a {:type :message}},
             :rev   {:a {:type :int}},
-            :bap   {:b {:type :double}},
+            :bap   {:a {:type :message, :composite true}, :b {:type :double}},
             :foo   {:b {:type :int}, :a {:type :int}},
             :bar   {:a {:type :string}},
             :baz   {:a {:repeated true, :type :int}}}
-           (schema :bar)))))
-
+           (schema :bar)))
+    (is (= {:val {"bar/a" {:type :string}},
+            :key {"bar/a" {:type :int}}}
+           (schema :bap)))))
