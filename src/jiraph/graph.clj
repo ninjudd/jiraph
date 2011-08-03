@@ -1,8 +1,8 @@
 (ns jiraph.graph
   (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [conj-vec memoize-deref adjoin]]
-        [useful.fn :only [any given]]
-        [clojure.string :only [split join]]
+        [useful.fn :only [any]]
+        [clojure.string :only [split]]
         [ego.core :only [type-key]])
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]))
@@ -284,30 +284,19 @@
   "Return the names of all layers in the current graph."
   ([] (keys *graph*))
   ([type]
-     (for [[layer-name layer] *graph*
+     (for [[name layer] *graph*
            :let [meta (meta layer)]
-           :when (or (contains? (:composite meta) type)
-                     (and (contains? (:types meta) type)
-                          (not (:hidden meta))))]
-       layer-name)))
+           :when (and (contains? (:types meta) type)
+                      (not (:hidden meta)))]
+       name)))
 
 (defn schema
   "Return a map of fields for a given type to the metadata for each layer."
   [type]
   (apply merge-with conj
-         (for [layer-name (layers type)
-               :let [composite (layer-meta layer-name :composite)
-                     container (get composite type)]
-               [field meta] (if container
-                              (fields layer-name [type])
-                              (fields layer-name))]
-           {field (if container
-                    {(join "/" (map name [container layer-name]))
-                     meta}
-                    {layer-name
-                     (-> meta
-                         (given (= type (get composite field))
-                                assoc :composite true))})})))
+         (for [layer        (layers type)
+               [field meta] (fields layer)]
+           {field {layer meta}})))
 
 (alter-var-root #'schema #(with-meta (memoize-deref [#'jiraph.graph/*graph*] %) (meta %)))
 
