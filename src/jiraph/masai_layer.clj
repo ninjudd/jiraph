@@ -193,7 +193,7 @@
          (if (string? db)
            (tokyo/make {:path db :create true})
            db))
-       (def- make-db [db]
+       (defn- make-db [db]
          db))
 
 (defn make [db & [format meta-format]]
