@@ -42,4 +42,5 @@ message Node {
   optional int32  foo     = 6;
   optional string bar     = 7;
   repeated int32  baz     = 8;
+  optional Entry  bap     = 9;
 }

@@ -312,9 +312,10 @@
     (is (= {:id    {:type :string},
             :edges {:repeated true, :type :message},
             :edge  {:type :message},
-            :rev   {:type :int}
+            :rev   {:type :int},
             :baz   {:repeated true, :type :int},
             :bar   {:type :string},
+            :bap   {:type :message},
             :foo   {:type :int}}
            (fields :a)))
     (is (= {:id      {:type :string},
@@ -330,14 +331,18 @@
             :two   {:c nil},
             :foo   {:c nil, :a {:type :int}},
             :bar   {:a {:type :string}},
+            :bap   {:a {:type :message}},
             :baz   {:a {:repeated true, :type :int}}}
            (schema :foo)))
-    (is (= {:id    {:a {:type :string}}
+    (is (= {:id    {:a {:type :string}},
             :edges {:a {:repeated true, :type :message}},
             :edge  {:a {:type :message}},
             :rev   {:a {:type :int}},
-            :bap   {:b {:type :double}},
+            :bap   {:a {:type :message}, :b {:type :double}},
             :foo   {:b {:type :int}, :a {:type :int}},
             :bar   {:a {:type :string}},
             :baz   {:a {:repeated true, :type :int}}}
-           (schema :bar)))))
+           (schema :bar)))
+    (is (= {:val {:a {:type :string}},
+            :key {:a {:type :int}}}
+           (schema :foo :bap)))))

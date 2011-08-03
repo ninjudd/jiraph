@@ -294,8 +294,10 @@
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
-  [layer-name & args]
-  (apply layer/fields (layer layer-name) args))
+  ([layer-name]
+     (layer/fields (layer layer-name)))
+  ([layer-name subfields]
+     (layer/fields (layer layer-name) subfields)))
 
 (defn node-valid?
   "Check if the given node is valid for the specified layer."
@@ -325,12 +327,18 @@
        name)))
 
 (defn schema
-  "Return a map of fields for a given type to the metadata for each layer."
-  [type]
-  (apply merge-with conj
-         (for [layer        (layers type)
-               [field meta] (fields layer)]
-           {field {layer meta}})))
+  "Return a map of fields for a given type to the metadata for each layer. If a subfield is
+  provided, then the schema returned is for the nested type within that subfield."
+  ([type]
+     (apply merge-with conj
+            (for [layer        (layers type)
+                  [field meta] (fields layer)]
+              {field {layer meta}})))
+  ([type subfield]
+     (apply merge-with conj
+            (for [layer        (keys (get (schema type) subfield))
+                  [field meta] (fields layer [subfield])]
+              {field {layer meta}}))))
 
 (alter-var-root #'schema #(with-meta (memoize-deref [#'jiraph.graph/*graph*] %) (meta %)))
 
