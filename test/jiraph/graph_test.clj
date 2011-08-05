@@ -1,5 +1,6 @@
 (ns jiraph.graph-test
-  (:use clojure.test jiraph.graph)
+  (:use clojure.test jiraph.graph
+        [jiraph.wrapper :only [with-stub-writes]])
   (:require [jiraph.masai-layer :as bal]
             [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
@@ -30,10 +31,11 @@
   (with-graph (make-graph)
     (with-each-layer all
       (truncate! layer-name)
-      (with-stub-writes
-        (let [node {:foo 2 :bar "three"}]
-          (is (nil? (add-node! layer-name "1" node)))
-          (is (nil? (get-node layer-name "1"))))))))
+      (with-readonly
+        (with-stub-writes
+          (let [node {:foo 2 :bar "three"}]
+            (is (nil? (add-node! layer-name "1" node)))
+            (is (nil? (get-node layer-name "1")))))))))
 
 (deftest node-info
   (with-graph (make-graph)
