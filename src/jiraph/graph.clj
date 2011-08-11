@@ -182,14 +182,18 @@
 
 (defn get-in-node
   "Fetch data from inside a node."
-  [layer-name keys]
-  (get-in (get-node layer-name (first keys)) (rest keys)))
+  [layer-name [id & keys]]
+  (get-in (get-node layer-name id) keys))
 
 (defn get-edge
   "Fetch an edge from node with id to to-id."
   [layer-name id to-id]
   ((edges (get-node layer-name id)) to-id))
 
+(defn get-in-edge
+  "Fetch data from inside a node."
+  [layer-name [id to-id & keys]]
+  (get-in (get-edge layer-name id to-id) keys))
 
 (defn node-exists?
   "Check if a node exists on this layer."
@@ -254,6 +258,13 @@
           node))
       (do (apply update-node! layer-name id adjoin attrs)
           (layer/make-node node)))))
+
+(defn append-edge!
+  [layer-name id to-id & attrs]
+  (append-node! layer-name id
+                (if (layer-meta layer-name :single-edge)
+                  {:edge (into-map :id to-id attrs)}
+                  {:edges {to-id (into-map attrs)}})))
 
 (defn delete-node!
   "Remove a node from a layer (incoming links remain)."

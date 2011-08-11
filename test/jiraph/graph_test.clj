@@ -143,7 +143,7 @@
         (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
         (is (= #{} (get-incoming layer-name "2")))))))
 
-(deftest revisions
+(deftest append-and-add
   (with-graph (make-graph)
     (with-each-layer all
       (truncate! layer-name)
@@ -181,8 +181,6 @@
             (add-node! layer-name "8" {:foo 9})))
         (is (= 8 (:foo (get-node layer-name "8")))))
 
-
-
       (testing "keeps track of incoming edges inside at-revision"
         (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
         (at-revision 200
@@ -202,9 +200,17 @@
           (is (add-node! layer-name "13" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))
-        (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
-        (at-revision 200 (is (= #{"10"} (get-incoming layer-name "11"))))
-        (at-revision 201 (is (= #{"10" "12"} (get-incoming layer-name "11"))))))))
+        (at-revision 199 (is (= nil          (get-incoming layer-name "11"))))
+        (at-revision 200 (is (= #{"10"}      (get-incoming layer-name "11"))))
+        (at-revision 201 (is (= #{"10" "12"} (get-incoming layer-name "11")))))
+
+      (testing "append-edge!"
+        (at-revision 203
+          (is (append-edge! layer-name "13" "11" {:a "1"})))
+
+        (is (= "1" (get-in-edge layer-name ["13" "11" :a])))
+        (at-revision 202
+          (is (= "one" (get-in-edge layer-name ["13" "11" :a]))))))))
 
 (deftest compact-node
   (with-graph (make-graph)
