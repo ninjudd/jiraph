@@ -293,7 +293,7 @@
   (binding [*compacting* true]
     (if (layer-meta layer-name :single-edge)
       (update-node! layer-name id update :edge #(when-not (:deleted %) %))
-      (update-node! layer-name id update :edges (partial remove-vals :deleted)))))
+      (update-node! layer-name id update :edges remove-vals :deleted))))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
