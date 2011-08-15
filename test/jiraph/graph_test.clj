@@ -129,19 +129,25 @@
         (is (= #{"4"} (get-incoming layer-name "2")))
         (is (= #{"4"} (get-incoming layer-name "3")))))))
 
-(deftest edge
+(deftest single-edge
   (with-graph
     (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
     (with-each-layer all
       (truncate! layer-name)
-      (testing "can handle :edge"
+      (testing "add-node! and update-node! work with single-edge"
         (is (empty? (get-incoming layer-name "1")))
         (is (add-node! layer-name "4" {:edge {:id "1"}}))
         (is (= #{"4"} (get-incoming layer-name "1")))
         (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
         (is (= #{"4"} (get-incoming layer-name "2")))
         (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
-        (is (= #{} (get-incoming layer-name "2")))))))
+        (is (= #{} (get-incoming layer-name "2"))))
+      (testing "append-node! and append-edge! work with single-edge"
+        (is (empty? (get-incoming layer-name "A")))
+        (is (append-node! layer-name "B" {:edge {:id "A"}}))
+        (is (= #{"B"} (get-incoming layer-name "A")))
+        (is (append-edge! layer-name "C" "A" {}))
+        (is (= #{"B" "C"} (get-incoming layer-name "A")))))))
 
 (deftest append-and-add
   (with-graph (make-graph)

@@ -251,7 +251,7 @@
     (if (instance? jiraph.layer.Append layer)
       (with-transaction layer-name
         (let [node (layer/append-node! layer id node)]
-          (doseq [[to-id edge] (:edges node)]
+          (doseq [[to-id edge] (edges node)]
             (if (:deleted edge)
               (layer/drop-incoming! layer to-id id)
               (layer/add-incoming!  layer to-id id)))
