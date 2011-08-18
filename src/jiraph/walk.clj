@@ -44,8 +44,8 @@
    The default traversal parameters with their function signatures are:
      :traverse?     [walk step]  Should this step be traversed and added to the follow queue?
      :skip?         [walk step]  Should this step be skipped at traversal time? (the opposite of traverse?)
-     :follow?       [walk step]  Should this step's node be added to the walk results?
-     :add?          [walk step]  Should the edges on this step's node be followed?
+     :follow?       [walk step]  Should the edges on this step's node be followed?
+     :add?          [walk step]  Should this step's node be added to the walk results?
      :count?        [walk step]  Should this step's node be counted toward the limit after it is added?
      :follow-layers [walk step]  Returns the list of graph layers that should be followed for this step.
      :init-step     [walk step]  Initialize a new step after it is created.
@@ -53,11 +53,11 @@
      :extract-edges [walk nodes] Extract a sequence of edges from a group of nodes.
      :terminate?    [walk]       Should the walk terminate (even if there are still unfollowed steps)?"
   [name & opts]
-  `(let [traversal# (into (make-record Traversal)
-                          (map traversal-fn (into-map default-traversal ~@opts)))]
-     (defn ~name [focus-id# & opts#]
+  `(let [traversal# (into-map default-traversal ~@opts)]
+     (defn ~name {:traversal traversal#} [focus-id# & opts#]
        (walk focus-id#
-             (into traversal# (map traversal-fn (into-map opts#)))))))
+             (into (make-record Traversal)
+                   (map traversal-fn (into-map traversal# opts#)))))))
 
 (defn- walked?
   "Has this step already been traversed?"
