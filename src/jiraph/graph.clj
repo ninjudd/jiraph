@@ -1,6 +1,6 @@
 (ns jiraph.graph
   (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
-        [useful.utils :only [conj-vec memoize-deref adjoin]]
+        [useful.utils :only [memoize-deref adjoin]]
         [useful.fn :only [any]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]

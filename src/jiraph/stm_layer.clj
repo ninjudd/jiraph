@@ -4,13 +4,8 @@
         [useful.map :only [update]]
         [useful.utils :only [adjoin]]))
 
-(defn- conj-set
-  "Conj onto collection ensuring it is a set."
-  [coll item]
-  (conj (set coll) item))
-
-(defn- update-incoming [meta layer to-id from-id doing]
-  (let [f (case doing :add conj-set :drop disj)]
+(defn- update-incoming [meta layer to-id from-id operation]
+  (let [f (case operation :add (fnil conj #{}) :drop disj)]
     (adjoin
      (when *revision*
        (update-in

@@ -99,7 +99,7 @@
           walk
           (-> (update-record walk
                 (conj! to-follow step)
-                (update-in! steps [(id step)] conj-vec step)
+                (update-in! steps [(id step)] (fnil conj []) step)
                 (or-max max-rev (:rev step)))
               (add-node step)))))))
 
