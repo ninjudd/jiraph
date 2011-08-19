@@ -1,6 +1,6 @@
 (ns jiraph.walk
   (:use [useful.map :only [assoc-in! update-in! update into-map]]
-        [useful.utils :only [or-max conj-vec]]
+        [useful.utils :only [or-max]]
         [useful.parallel :only [pcollect *pcollect-thread-num*]]
         [useful.java :only [construct]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
