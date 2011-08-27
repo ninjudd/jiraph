@@ -6,7 +6,7 @@
                  [cereal "0.1.5"]
                  [retro "0.6.0-alpha1"]
                  [ego "0.1.5"]]
-  :dev-dependencies [[protobuf "0.5.0-alpha1"]
+  :dev-dependencies [[protobuf "0.5.0-alpha3"]
                      [tokyocabinet "1.24.1-SNAPSHOT"]
                      [org.clojars.flatland/cake-marginalia "0.6.3"]]
   :tasks [protobuf.tasks cake-marginalia.tasks])
