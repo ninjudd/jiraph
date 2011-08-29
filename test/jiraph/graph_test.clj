@@ -121,13 +121,15 @@
         (is (empty? (get-incoming layer-name "1")))
         (is (add-node! layer-name "4" {:edges {"1" {:a "one"}}}))
         (is (= #{"4"} (get-incoming layer-name "1")))
+        (is (= ["1"] (keys (get-edges layer-name "4"))))
         (is (add-node! layer-name "5" {:edges {"1" {:b "two"}}}))
         (is (= #{"4" "5"} (get-incoming layer-name "1")))
         (is (append-node! layer-name "5" {:edges {"1" {:deleted true}}}))
         (is (= #{"4"} (get-incoming layer-name "1")))
         (is (assoc-node! layer-name "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
         (is (= #{"4"} (get-incoming layer-name "2")))
-        (is (= #{"4"} (get-incoming layer-name "3")))))))
+        (is (= #{"4"} (get-incoming layer-name "3")))
+        (is (= ["2" "3"] (keys (get-edges layer-name "4"))))))))
 
 (deftest single-edge
   (with-graph
@@ -138,10 +140,13 @@
         (is (empty? (get-incoming layer-name "1")))
         (is (add-node! layer-name "4" {:edge {:id "1"}}))
         (is (= #{"4"} (get-incoming layer-name "1")))
+        (is (= {"1" {:id "1"}} (get-edges layer-name "4")))
         (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
         (is (= #{"4"} (get-incoming layer-name "2")))
+        (is (= {"2" {:id "2"}} (get-edges layer-name "4")))
         (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
-        (is (= #{} (get-incoming layer-name "2"))))
+        (is (= #{} (get-incoming layer-name "2")))
+        (is (= {"2" {:id "2", :deleted true}} (get-edges layer-name "4"))))
       (testing "append-node! and append-edge! work with single-edge"
         (is (empty? (get-incoming layer-name "A")))
         (is (append-node! layer-name "B" {:edge {:id "A"}}))

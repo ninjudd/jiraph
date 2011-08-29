@@ -180,6 +180,11 @@
   (when-let [node (layer/get-node (layer layer-name) id)]
     (assoc node :id id)))
 
+(defn get-edges
+  "Fetch the edges for a node on this layer."
+  [layer-name id]
+  (edges (get-node layer-name id)))
+
 (defn get-in-node
   "Fetch data from inside a node."
   [layer-name [id & keys]]
@@ -188,7 +193,7 @@
 (defn get-edge
   "Fetch an edge from node with id to to-id."
   [layer-name id to-id]
-  ((edges (get-node layer-name id)) to-id))
+  (get (get-edges layer-name id) to-id))
 
 (defn get-in-edge
   "Fetch data from inside a node."
