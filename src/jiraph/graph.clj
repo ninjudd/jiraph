@@ -174,7 +174,7 @@
   (apply max 0 (for [layer (if (empty? layers) (keys *graph*) layers)]
                  (or (get-property layer :rev) 0))))
 
-(defn get-node
+#_(defn get-node
   "Fetch a node's data from this layer."
   [layer-name id]
   (when-let [node (layer/get-node (layer layer-name) id)]
@@ -184,13 +184,14 @@
   "Fetch a node's data from this layer."
   [layer-name id]
   (let [layer (layer layer-name)]
-    (if (satisfies? jiraph.layer.Split layer)
+    (if (instance? jiraph.layer.Split layer)
       (let [edges (layer/get-edges layer id)]
+        (prn edges)
         (into (layer/get-attrs layer id)
               (if (> (count edges) 0)
                 {:edges edges}
                 {:edge (first edges)}) ))
-      (when-let [node (layer/get-node (layer layer-name) id)]
+      (when-let [node (layer/get-node layer id)]
         (assoc node :id id)))))
 
 (defn get-edges
