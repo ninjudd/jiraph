@@ -2,16 +2,18 @@
   (:use clojure.test jiraph.graph
         [jiraph.wrapper :only [with-stub-writes]])
   (:require [jiraph.masai-layer :as bal]
+           #_[jiraph.masai-sorted-layer :as msl]
             [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
             [cereal.reader :as raf]
             [cereal.protobuf :as paf])
   (:import [jiraph Test$Node]))
 
-(def all [:tr :tp :stm])
+(def all [:tr :tp :stm #_:trs])
 
 (defn make-graph []
   {:tr (bal/make "/tmp/jiraph-test-tokyo-reader")
+   ;:trs (msl/make "/tmp/jiraph-test-tokyo-reader-sorted")
    :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))
    :stm (stm/make)})
 

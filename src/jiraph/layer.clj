@@ -32,6 +32,16 @@
   (add-incoming!    [layer id from-id] "Add an incoming edge record on id for from-id.")
   (drop-incoming!   [layer id from-id] "Remove the incoming edge record on id for from-id."))
 
+(defprotocol Sorted
+  "Methods for sorted layers."
+  (edges-subseq  [layer id test key] [layer id stest skey etest ekey])
+  (edges-rsubseq [layer id test key] [layer id stest skey etest ekey]))
+
+(defprotocol Split
+  "Layer that can retrieve and deserialize node attributes separately from its edges"
+  (get-edges [layer id] "Read a node's edges")
+  (get-attrs [layer id] "Read a node's attributes"))
+
 (defprotocol Append
   "Jiraph appending format"
   (append-node! [layer id attrs] "Append attrs to a node or create it if it doesn't exist."))

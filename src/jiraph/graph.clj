@@ -180,6 +180,19 @@
   (when-let [node (layer/get-node (layer layer-name) id)]
     (assoc node :id id)))
 
+(defn get-node
+  "Fetch a node's data from this layer."
+  [layer-name id]
+  (let [layer (layer layer-name)]
+    (if (satisfies? jiraph.layer.Split layer)
+      (let [edges (layer/get-edges layer id)]
+        (into (layer/get-attrs layer id)
+              (if (> (count edges) 0)
+                {:edges edges}
+                {:edge (first edges)}) ))
+      (when-let [node (layer/get-node (layer layer-name) id)]
+        (assoc node :id id)))))
+
 (defn get-edges
   "Fetch the edges for a node on this layer."
   [layer-name id]
