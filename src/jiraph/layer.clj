@@ -1,5 +1,66 @@
 (ns jiraph.layer
-  (use [retro.core :only [*revision*]]))
+  (:use [retro.core :only [*revision*]]
+        [useful.utils :only [adjoin]]))
+
+(def ^:dynamic *fallback-warnings* false)
+
+(defn fallback-warning [layer impl]
+  (.printf *err* "Layer %s falling back on %s\n" layer impl))
+
+(defmacro ^{:private true} fallback [impl]
+  `(do
+     (when *fallback-warnings*
+       (fallback-warning ~'layer '~impl))
+     ~impl))
+
+(let [layer-meta-key (fn [id] (str "_" id))
+      node-meta-key (fn [node key] (str "_" node "_" key))
+      incoming-key (fn [id] (node-meta-key id "incoming"))]
+
+  (extend-type Object
+    Schema
+    (fields
+      ([layer] nil)
+      ([layer subfields] nil))
+    ;; TODO add a whats-wrong-with-this-node function
+    (node-valid? [layer attrs] true)
+
+    LayerMeta
+    ;; Implemented in terms of Compound
+    (get-layer-meta [layer key]
+      ((fallback get-node) layer (layer-meta-key key)))
+    (assoc-layer-meta! [layer key value]
+      ((fallback assoc-node!) layer (layer-meta-key key) value))
+
+    NodeMeta
+    ;; Implemented in terms of LayerMeta
+    (get-meta [layer node key]
+      ((fallback get-layer-meta) layer (node-meta-key node key)))
+    (assoc-meta! [layer node key val]
+      ((fallback assoc-layer-meta!) layer (node-meta-key node key) val))
+
+    UpdateMeta
+    (update-meta! [layer node key f args]
+      ((fallback assoc-meta!) layer node key (apply f (get-meta layer node key) args)))
+
+    Counted
+    ;; sorry, you have to implement this yourself
+
+    Incoming
+    (get-incoming [layer id]
+      ((fallback get-meta) layer id (incoming-key id)))
+    (add-incoming! [layer id from-id]
+      ((fallback update-meta!) layer id (incoming-key id) conj from-id))
+    (drop-incoming! [layer id from-id]
+      ((fallback update-meta!) layer id (incoming-key id) disj from-id))
+
+    Compound
+    (get-node [layer id]
+      ((fallback get-in-node) [layer id []]))
+    (assoc-node! [layer id attrs]
+      ((fallback assoc-in-node!) layer id [] attrs))
+    (dissoc-node! [layer id]
+      ((fallback dissoc-in-node!) layer id []))))
 
 (defprotocol Counted
   (node-count       [layer]            "Return the total number of nodes in this layer."))
@@ -12,8 +73,14 @@
   (node-valid?  [layer attrs]      "Check if the given node is valid according to the layer schema."))
 
 (defprotocol LayerMeta
-  (get-meta         [layer key]        "Fetch a layer-wide property.")
-  (assoc-meta!      [layer key val]    "Store a layer-wide property."))
+  (get-layer-meta         [layer key]        "Fetch a layer-wide property.")
+  (assoc-layer-meta!      [layer key val]    "Store a layer-wide property."))
+
+(defprotocol NodeMeta
+  (get-meta               [layer node key])
+  (assoc-meta!            [layer node key val]))
+(defprotocol UpdateMeta
+  (update-meta!           [layer node key f args]))
 
 (defprotocol Revisioned
   (get-revision
@@ -57,9 +124,9 @@
 
 (defprotocol Nested
   "Layer that has indexed access into some subset of 'deeper' attributes, such as edges."
-  (get-in-node [layer id keyseq])
-  (assoc-in-node! [layer id keyseq value])
-  (dissoc-in-node! [layer id keyseq]))
+  (get-in-node [layer keyseq])
+  (assoc-in-node! [layer keyseq value])
+  (dissoc-in-node! [layer keyseq]))
 
 (defprotocol Update
   "Layer that can do (some) updates of sub-nodes more efficiently than fetching a whole node, changing it, and then writing it."
