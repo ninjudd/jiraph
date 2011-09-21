@@ -157,15 +157,16 @@
       (seq ((fallback get-in-node) layer keyseq)))
 
     Sorted
-    (seq-in-node [layer keyseq test key]
+    (subseq-in-node [layer keyseq test key]
+      ;; todo
       )))
 
 (defprotocol Sorted
   "Methods for sorted layers."
-  (seq-in-node
+  (subseq-in-node
     [layer keyseq test key]
     [layer keyseq stest skey etest ekey])
-  (rseq-in-node
+  (rsubseq-in-node
     [layer keyseq test key]
     [layer keyseq stest skey etest ekey])
   (dissoc-subseq-in-node
