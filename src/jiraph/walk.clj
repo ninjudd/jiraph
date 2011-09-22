@@ -192,5 +192,4 @@
 (defn intersection
   "Helper function to return the intersection between the ids of two walks."
   [walk1 walk2]
-  (set/intersection (set (:ids walk1))
-                    (set (:ids walk2))))
+  (seq (remove nil? (map (:include? walk2) (:ids walk1)))))

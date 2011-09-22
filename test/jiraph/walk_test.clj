@@ -1,6 +1,6 @@
 (ns jiraph.walk-test
   (:use clojure.test jiraph.graph
-        [jiraph.walk :only [defwalk path paths *parallel-follow*]]
+        [jiraph.walk :only [defwalk path paths *parallel-follow* intersection]]
         [jiraph.walk.predicates :only [at-limit]])
   (:require [jiraph.masai-layer :as bal]
             [jiraph.stm-layer :as stm]
@@ -55,9 +55,20 @@
             (is (= [["1" "2"]] (map (partial map :id) (paths walk "2"))))
             (is (= [["1"]]     (map (partial map :id) (paths walk "1"))))))
 
+        (testing "intersection"
+          (is (= nil
+                 (intersection (full-walk "1" :terminate? (at-limit 2))
+                               (full-walk "8" :terminate? (at-limit 2)))))
+          (is (= '("2")
+                 (intersection (full-walk "1" :terminate? (at-limit 3))
+                               (full-walk "8" :terminate? (at-limit 3)))))
+          (is (= '("2" "3")
+                 (intersection (full-walk "1" :terminate? (at-limit 4))
+                               (full-walk "8" :terminate? (at-limit 4))))))
+
         (testing "max-rev"
           (at-revision 33
-                       (append-node! :foo "1" {:edges {"8" {:a "one"}}}))
+            (append-node! :foo "1" {:edges {"8" {:a "one"}}}))
           (let [walk (full-walk "1")]
             (is (= 9 (:result-count walk)))
             (is (= ["1" "2" "3" "8" "4" "5" "6" "9" "7"] (:ids walk)))
