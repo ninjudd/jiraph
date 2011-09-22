@@ -10,4 +10,4 @@
                      ;; [org.clojars.flatland/cake-marginalia "0.6.3"]
                      [tokyocabinet "1.24.1-SNAPSHOT" :ext true]]
   ;; :tasks [protobuf.tasks cake-marginalia.tasks]
-  :plugins [[cake-protobuf "0.5.0-alpha5"]])
+  :cake-plugins [[cake-protobuf "0.5.0-alpha5"]])
