@@ -8,8 +8,8 @@
   (:require [masai.db :as db]
             [cereal.format :as f]
             [cereal.reader :as reader-append-format])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
-           [clojure.lang LineNumberingPushbackReader]))
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader SequenceInputStream]
+           [clojure.lang LineNumberingPushbackReader SeqEnumeration]))
 
 (def meta-prefix     "_")
 (def internal-prefix "__")
@@ -83,6 +83,16 @@
 (defn- dec-count! [layer]
   (db/inc! (:db layer) count-key -1))
 
+(defn get-bytestream [db layer ids revision]
+  (let [byte-stream (if revision
+                      (fn [id] (ByteArrayInputStream. (db/get db id) 0 (len layer id revision)))
+                      (fn [id] (ByteArrayInputStream. (db/get db id))))]
+    (if (sequential? ids)
+      (SequenceInputStream.
+       (SeqEnumeration.
+        (seque (map byte-stream ids))))
+      (byte-stream ids))))
+
 (defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
 
@@ -118,10 +128,7 @@
       val))
 
   (get-node [layer id]
-    (if *revision*
-      (when-let [length (len layer id *revision*)]
-        (f/decode format (db/get db id) 0 length))
-      (f/decode format (db/get db id))))
+    (f/decode-stream format (get-bytestream db layer id revision)))
 
   (node-exists? [layer id]
     (< 0 (len layer id *revision*)))
