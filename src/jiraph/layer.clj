@@ -90,19 +90,11 @@
     [layer keyseq f argseq]
     "Arguments are as to clojure.core/update-in, but without varargs."))
 
+;; Meta-related protocols
 (letfn [(layer-meta-key [id] (str "_" id))
         (node-meta-key [node key] (str "_" node "_" key))
         (incoming-key [id] (node-meta-key id "incoming"))]
-
   (extend-type Object
-    Schema
-    ;; default behavior: no fields, all nodes valid
-    (fields
-      ([layer] nil)
-      ([layer subfields] nil))
-    ;; TODO add a whats-wrong-with-this-node function
-    (node-valid? [layer attrs] true)
-
     LayerMeta
     ;; default behavior: create specially-named regular nodes to hold metadata
     (get-layer-meta [layer key]
@@ -122,20 +114,6 @@
     (update-meta! [layer node key f args]
       ((fallback assoc-meta!) layer node key (apply f ((fallback get-meta) layer node key) args)))
 
-    Enumerate
-    ;; Fallback behavior is the empty list. Jiraph does *not* automatically
-    ;; track assoc'd and dissoc'd nodes for you in order to provide node-ids,
-    ;; because that would be a huge performance hit.
-    (node-id-seq [layer]
-      ())
-    (node-seq [layer]
-      ())
-
-    Counted
-    ;; default behavior: walk through all node ids, counting. not very fast
-    (node-count [layer]
-      (apply + (map (constantly 1) ((fallback node-ids) layer))))
-
     Incoming
     ;; default behavior: use node meta with special prefix to track incoming edges
     (get-incoming [layer id]
@@ -143,63 +121,87 @@
     (add-incoming! [layer id from-id]
       ((fallback update-meta!) layer id (incoming-key id) conj from-id))
     (drop-incoming! [layer id from-id]
-      ((fallback update-meta!) layer id (incoming-key id) disj from-id))
+      ((fallback update-meta!) layer id (incoming-key id) disj from-id))))
 
-    Compound
-    ;; default behavior:
-    (get-node [layer id]
-      ((fallback get-in-node) [layer [id]]))
-    (assoc-node! [layer id attrs]
-      ((fallback assoc-in-node!) layer [id] attrs))
-    (dissoc-node! [layer id]
-      ((fallback dissoc-in-node!) layer [id]))
+;; These protocol impls don't need to be closures
+(extend-type Object
+  Schema
+  ;; default behavior: no fields, all nodes valid
+  (fields
+    ([layer] nil)
+    ([layer subfields] nil))
+  ;; TODO add a whats-wrong-with-this-node function
+  (node-valid? [layer attrs] true)
 
-    Revisioned
-    (get-revision
-      ([layer] 0)
-      ([layer id] 0))
+  Enumerate
+  ;; Fallback behavior is the empty list. Jiraph does *not* automatically
+  ;; track assoc'd and dissoc'd nodes for you in order to provide node-ids,
+  ;; because that would be a huge performance hit.
+  (node-id-seq [layer]
+    ())
+  (node-seq [layer]
+    ())
 
-    Layer
-    ;; default implementation is to not do anything, hoping you do it
-    ;; automatically at reasonable times, or don't need it done at all
-    (open [layer] nil)
-    (close [layer] nil)
-    (sync! [layer] nil)
-    (optimize! [layer] nil)
-    (get-revisions [layer id]
-      ())
+  Counted
+  ;; default behavior: walk through all node ids, counting. not very fast
+  (node-count [layer]
+    (apply + (map (constantly 1) ((fallback node-ids) layer))))
 
-    ;; we can simulate these for you, pretty inefficiently
-    (truncate! [layer]
-      (let [dissoc! (fallback dissoc-node!)]
-        (doseq [id ((fallback node-ids) layer)]
-          (dissoc! layer id))))
-    (node-exists? [layer id]
-      (boolean ((fallback get-node) layer id)))
+  Compound
+  ;; default behavior:
+  (get-node [layer id]
+    ((fallback get-in-node) [layer [id]]))
+  (assoc-node! [layer id attrs]
+    ((fallback assoc-in-node!) layer [id] attrs))
+  (dissoc-node! [layer id]
+    ((fallback dissoc-in-node!) layer [id]))
 
-    Seqable
-    (seq-in-node [layer keyseq]
-      (seq ((fallback get-in-node) layer keyseq)))
+  Revisioned
+  (get-revision
+    ([layer] 0)
+    ([layer id] 0))
 
-    Nested
-    (get-in-node [layer keyseq]
-      (let [[id & path] keyseq]
-        (get-in ((fallback get-node) layer id) path)))
-    (assoc-in-node! [layer keyseq val]
-      (let [[id & path] keyseq]
-        ((fallback assoc-node!) layer id
-         (assoc-in ((fallback get-node) layer id) path val))))
-    (dissoc-in-node! [layer keyseq]
-      (let [[id & path] keyseq
-            [path end] ((juxt butlast last) path)]
-        ((fallback assoc-node!) layer id
-         (update-in ((fallback get-node) id) path dissoc end))))
+  Layer
+  ;; default implementation is to not do anything, hoping you do it
+  ;; automatically at reasonable times, or don't need it done at all
+  (open [layer] nil)
+  (close [layer] nil)
+  (sync! [layer] nil)
+  (optimize! [layer] nil)
+  (get-revisions [layer id]
+    ())
 
-    Update
-    (update-in-node! [layer keyseq f args]
-      (let [[id & path] keyseq])
-      ((fallback assoc-node) layer id
-       (apply update-in ((fallback get-node) id) path f args)))))
+  ;; we can simulate these for you, pretty inefficiently
+  (truncate! [layer]
+    (let [dissoc! (fallback dissoc-node!)]
+      (doseq [id ((fallback node-ids) layer)]
+        (dissoc! layer id))))
+  (node-exists? [layer id]
+    (boolean ((fallback get-node) layer id)))
+
+  Seqable
+  (seq-in-node [layer keyseq]
+    (seq ((fallback get-in-node) layer keyseq)))
+
+  Nested
+  (get-in-node [layer keyseq]
+    (let [[id & path] keyseq]
+      (get-in ((fallback get-node) layer id) path)))
+  (assoc-in-node! [layer keyseq val]
+    (let [[id & path] keyseq]
+      ((fallback assoc-node!) layer id
+       (assoc-in ((fallback get-node) layer id) path val))))
+  (dissoc-in-node! [layer keyseq]
+    (let [[id & path] keyseq
+          [path end] ((juxt butlast last) path)]
+      ((fallback assoc-node!) layer id
+       (update-in ((fallback get-node) id) path dissoc end))))
+
+  Update
+  (update-in-node! [layer keyseq f args]
+    (let [[id & path] keyseq])
+    ((fallback assoc-node) layer id
+     (apply update-in ((fallback get-node) id) path f args))))
 
 ;; Use raw extend format to allow recycling functions instead of using literals
 (letfn [(subseq-impl [seqfn]
