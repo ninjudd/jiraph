@@ -5,7 +5,11 @@
         [useful.utils :only [adjoin]]))
 
 (defn- update-incoming [meta layer to-id from-id operation]
-  (let [f (case operation :add (fnil conj #{}) :drop disj)]
+  (let [f (case operation
+                :add (fn [old from-id]
+                       (assoc old from-id true))
+                :drop (fn [old from-id]
+                       (assoc old from-id false)))]
     (adjoin
      (when *revision*
        (update-in
@@ -92,7 +96,7 @@
          (initiate-revs layer id)
          (let [id-meta (get-meta layer id)]
            (when-not (:in id-meta)
-             (alter meta assoc id (assoc id-meta :in #{}))))
+             (alter meta assoc id (assoc id-meta :in {}))))
          (when *revision* (append-rev layer id node))
          (alter data into {id node}))
         node)))

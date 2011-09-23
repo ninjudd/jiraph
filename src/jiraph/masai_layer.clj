@@ -209,5 +209,5 @@
      (make-db db) format
      (or meta-format
          (if (instance? cereal.reader.ReaderFormat format)
-           (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
+           (reader-append-format/make {:in {} :rev [] :len [] :mrev [] :mlen []})
            (protobuf-make format))))))
