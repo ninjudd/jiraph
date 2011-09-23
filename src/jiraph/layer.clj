@@ -1,11 +1,12 @@
 (ns jiraph.layer
   (:use [retro.core :only [*revision*]]
-        [useful.utils :only [adjoin]]))
+        [useful.utils :only [adjoin]])
+  (:umport (java.util Map$Entry)))
 
 (def ^:dynamic *fallback-warnings* false)
 
 (defn fallback-warning [layer impl]
-  (.printf *err* "Layer %s falling back on %s\n" layer impl))
+  (.printf *err* "Layer %s falling back on %s\n" (class layer) impl))
 
 (defmacro ^{:private true} fallback [impl]
   `(do
@@ -65,9 +66,33 @@
 (defprotocol Seqable
   (seq-in-node [layer keyseq] "A seq of all the properties under the given keyseq."))
 
-(let [layer-meta-key (fn [id] (str "_" id))
-      node-meta-key (fn [node key] (str "_" node "_" key))
-      incoming-key (fn [id] (node-meta-key id "incoming"))]
+(defprotocol Sorted
+  "Methods for sorted layers."
+  (subseq-in-node
+    [layer keyseq test key]
+    [layer keyseq stest skey etest ekey])
+  (rsubseq-in-node
+    [layer keyseq test key]
+    [layer keyseq stest skey etest ekey])
+  (dissoc-subseq-in-node
+    [layer keyseq test key]
+    [layer keyseq test key etest ekey]))
+
+(defprotocol Nested
+  "Layer that has indexed access into some subset of 'deeper' attributes, such as edges."
+  (get-in-node [layer keyseq])
+  (assoc-in-node! [layer keyseq value])
+  (dissoc-in-node! [layer keyseq]))
+
+(defprotocol Update
+  "Layer that can do (some) updates of sub-nodes more efficiently than fetching a whole node, changing it, and then writing it."
+  (update-in-node!
+    [layer keyseq f argseq]
+    "Arguments are as to clojure.core/update-in, but without varargs."))
+
+(letfn [(layer-meta-key [id] (str "_" id))
+        (node-meta-key [node key] (str "_" node "_" key))
+        (incoming-key [id] (node-meta-key id "incoming"))]
 
   (extend-type Object
     Schema
@@ -121,13 +146,13 @@
       ((fallback update-meta!) layer id (incoming-key id) disj from-id))
 
     Compound
-    ;;
+    ;; default behavior:
     (get-node [layer id]
-      ((fallback get-in-node) [layer id []]))
+      ((fallback get-in-node) [layer [id]]))
     (assoc-node! [layer id attrs]
-      ((fallback assoc-in-node!) layer id [] attrs))
+      ((fallback assoc-in-node!) layer [id] attrs))
     (dissoc-node! [layer id]
-      ((fallback dissoc-in-node!) layer id []))
+      ((fallback dissoc-in-node!) layer [id]))
 
     Revisioned
     (get-revision
@@ -156,31 +181,38 @@
     (seq-in-node [layer keyseq]
       (seq ((fallback get-in-node) layer keyseq)))
 
+    Nested
+    (get-in-node [layer keyseq]
+      (let [[id & path] keyseq]
+        (get-in ((fallback get-node) layer id) path)))
+    (assoc-in-node! [layer keyseq val]
+      (let [[id & path] keyseq]
+        ((fallback assoc-node!) layer id
+         (assoc-in ((fallback get-node) layer id) path val))))
+    (dissoc-in-node! [layer keyseq]
+      (let [[id & path] keyseq
+            [path end] ((juxt butlast last) path)]
+        ((fallback assoc-node!) layer id
+         (update-in ((fallback get-node) id) path dissoc end))))
+
+    Update
+    (update-in-node! [layer keyseq f args]
+      (let [[id & path] keyseq])
+      ((fallback assoc-node) layer id
+       (apply update-in ((fallback get-node) id) path f args)))))
+
+;; Use raw extend format to allow recycling functions instead of using literals
+(letfn [(subseq-impl [seqfn]
+          (fn [layer keyseq & args]
+            (apply seqfn ((fallback seq-in-node) layer keyseq) fnargs)))]
+  (extend Object
     Sorted
-    (subseq-in-node [layer keyseq test key]
-      ;; todo
-      )))
-
-(defprotocol Sorted
-  "Methods for sorted layers."
-  (subseq-in-node
-    [layer keyseq test key]
-    [layer keyseq stest skey etest ekey])
-  (rsubseq-in-node
-    [layer keyseq test key]
-    [layer keyseq stest skey etest ekey])
-  (dissoc-subseq-in-node
-    [layer keyseq test key]
-    [layer keyseq test key etest ekey]))
-
-(defprotocol Nested
-  "Layer that has indexed access into some subset of 'deeper' attributes, such as edges."
-  (get-in-node [layer keyseq])
-  (assoc-in-node! [layer keyseq value])
-  (dissoc-in-node! [layer keyseq]))
-
-(defprotocol Update
-  "Layer that can do (some) updates of sub-nodes more efficiently than fetching a whole node, changing it, and then writing it."
-  (update-in-node!
-    [layer keyseq f argseq]
-    "Arguments are as to clojure.core/update-in, but without varargs."))
+    {:subseq-in-node (subseq-impl subseq)
+     :rsubseq-in-node (subseq-impl rsubseq)
+     :dissoc-subseq-in-node (fn [layer keyseq & args]
+                              (let [keyseq (vec keyseq)
+                                    dissoc-in! (fallback dissoc-in-node!)]
+                                (doseq [item (apply (fallback subseq-in-node) layer keyseq args)]
+                                  (dissoc-in! layer (conj keyseq (if (instance? Map$Entry item)
+                                                                   (.getKey ^Map$Entry item)
+                                                                   pitem))))))}))
