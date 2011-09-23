@@ -23,36 +23,15 @@
 (defn- property-key [key]
   (str property-prefix key))
 
-(defn get-bytestream [db layer ids revision len]
-  (let [get-stream (fn [id]
-                     (when-let [bytes (db/get db id)]
-                       (if revision
-                         (ByteArrayInputStream. bytes 0 (len layer id revision))
-                         (ByteArrayInputStream. bytes))))]
-    (if (sequential? ids)
-      (when-let [streams (seq (seque (keep get-stream ids)))]
-        (SequenceInputStream.
-         (SeqEnumeration.
-          streams)))
-      (get-stream ids))))
-
 (declare meta-len)
-
 (defn- get-meta [layer key rev]
   (let [db (.db layer)
         mf (.meta-format layer)]
-    (f/decode-stream mf (get-bytestream db layer key rev meta-len))))
-
-(defn- meta-len
-  "The byte length of the meta node at revision rev."
-  [layer key rev]
-  (or (when rev
-        (let [meta (get-meta layer key nil)]
-          ;; Must shift meta lengths by one since they store the length of the previous revision.
-          (find-with (partial >= rev)
-                     (reverse (cons 0 (:mrev meta)))
-                     (cons nil (reverse (:mlen meta))))))
-      (db/len (.db layer) key)))
+    (if rev
+      (let [len (meta-len layer key rev)]
+        (when (< 0 len)
+          (f/decode mf (db/get db key) 0 len)))
+      (f/decode mf (db/get db key)))))
 
 (defn- len
   "The byte length of the node at revision rev."
@@ -65,6 +44,17 @@
                           (reverse (:len meta)))]
       (when (and len (<= 0 len))
         len))))
+
+(defn- meta-len
+  "The byte length of the meta node at revision rev."
+  [layer key rev]
+  (or (when rev
+        (let [meta (get-meta layer key nil)]
+          ;; Must shift meta lengths by one since they store the length of the previous revision.
+          (find-with (partial >= rev)
+                     (reverse (cons 0 (:mrev meta)))
+                     (cons nil (reverse (:mlen meta))))))
+      (db/len (.db layer) key)))
 
 (defn- append-meta! [layer id attrs & [rev]]
   (let [db (.db layer)
@@ -92,6 +82,16 @@
 
 (defn- dec-count! [layer]
   (db/inc! (:db layer) count-key -1))
+
+(defn get-bytestream [db layer ids revision]
+  (let [byte-stream (if revision
+                      (fn [id] (ByteArrayInputStream. (db/get db id) 0 (len layer id revision)))
+                      (fn [id] (ByteArrayInputStream. (db/get db id))))]
+    (if (sequential? ids)
+      (SequenceInputStream.
+       (SeqEnumeration.
+        (seque (map byte-stream ids))))
+      (byte-stream ids))))
 
 (defrecord MasaiLayer [db format meta-format]
   jiraph.layer/Layer
@@ -128,7 +128,7 @@
       val))
 
   (get-node [layer id]
-    (f/decode-stream format (get-bytestream db layer id *revision* len)))
+    (f/decode-stream format (get-bytestream db layer id revision)))
 
   (node-exists? [layer id]
     (< 0 (len layer id *revision*)))
