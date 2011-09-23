@@ -1,6 +1,6 @@
 (ns jiraph.graph
-  (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
-        [useful.utils :only [memoize-deref adjoin]]
+  (:use [useful.map :only [into-map update-dissoc filter-keys-by-val remove-vals map-to]]
+        [useful.utils :only [memoize-deref adjoin into-set]]
         [useful.fn :only [any]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
@@ -298,8 +298,8 @@
   (refuse-readonly)
   (binding [*compacting* true]
     (if (layer-meta layer-name :single-edge)
-      (update-node! layer-name id update :edge #(when-not (:deleted %) %))
-      (update-node! layer-name id update :edges remove-vals :deleted))))
+      (update-node! layer-name id update-dissoc :edge #(when-not (:deleted %) %))
+      (update-node! layer-name id update-dissoc :edges remove-vals :deleted))))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
@@ -371,7 +371,7 @@
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer-name id]
-  (layer/get-incoming (layer layer-name) id))
+  (into-set #{} (layer/get-incoming (layer layer-name) id)))
 
 (defn wrap-caching
   "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
