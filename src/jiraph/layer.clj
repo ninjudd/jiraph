@@ -21,7 +21,6 @@
   (node-valid?      [layer attrs]      "Check if the given node is valid according to the layer schema.")
   (get-property     [layer key]        "Fetch a layer-wide property.")
   (set-property!    [layer key val]    "Store a layer-wide property.")
-  (get-bytes        [layer id]         "Fetch the serialized bytes for a node.")
   (get-node         [layer id]         "Fetch a node.")
   (set-node!        [layer id attrs]   "Set a node.")
   (node-exists?     [layer id]         "Check if a node exists on this layer.")
