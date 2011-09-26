@@ -153,9 +153,9 @@
       ((fallback assoc-in-node!) layer [id] attrs))
     (dissoc-node! [layer id]
       ((fallback dissoc-in-node!) layer [id]))
-    (update-node! [layer k f args]
+    (update-node! [layer id f args]
       ((fallback assoc-node!) layer id
-       (apply update-in ((fallback get-node) layer id) [k] f args)))
+       (apply f ((fallback get-node) layer id) args)))
 
     Nested
     (get-in-node [layer keyseq not-found]
@@ -194,7 +194,7 @@
 ;; Use raw extend format to allow recycling functions instead of using literals
 (letfn [(subseq-impl [seqfn]
           (fn [layer keyseq & args]
-            (apply seqfn ((fallback seq-in-node) layer keyseq) fnargs)))]
+            (apply seqfn ((fallback seq-in-node) layer keyseq) args)))]
   (extend Object
     Sorted
     {:subseq-in-node (subseq-impl subseq)
@@ -205,7 +205,7 @@
                                 (doseq [item (apply (fallback subseq-in-node) layer keyseq args)]
                                   (dissoc-in! layer (conj keyseq (if (instance? Map$Entry item)
                                                                    (.getKey ^Map$Entry item)
-                                                                   pitem))))))}))
+                                                                   item))))))}))
 
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
