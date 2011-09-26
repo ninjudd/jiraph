@@ -1,7 +1,7 @@
 (ns jiraph.layer
   (:use [retro.core :only [*revision*]]
         [useful.utils :only [adjoin]])
-  (:umport (java.util Map$Entry)))
+  (:import (java.util Map$Entry)))
 
 (def ^:dynamic *fallback-warnings* false)
 
