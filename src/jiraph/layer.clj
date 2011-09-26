@@ -148,7 +148,7 @@
     Counted
     ;; default behavior: walk through all node ids, counting. not very fast
     (node-count [layer]
-      (apply + (map (constantly 1) ((fallback node-ids) layer))))
+      (apply + (map (constantly 1) ((fallback node-id-seq) layer))))
 
     Compound
     ;; default behavior:
@@ -194,7 +194,7 @@
     ;; we can simulate these for you, pretty inefficiently
     (truncate! [layer]
       (let [dissoc! (fallback dissoc-node!)]
-        (doseq [id ((fallback node-ids) layer)]
+        (doseq [id ((fallback node-id-seq) layer)]
           (dissoc! layer id))))
     (node-exists? [layer id]
       (not= sentinel ((fallback get-node) layer id sentinel)))
