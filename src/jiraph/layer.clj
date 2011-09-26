@@ -38,6 +38,7 @@
 
 (defprotocol UpdateMeta
   (update-meta!           [layer node key f args]))
+
 (defprotocol Incoming
   (get-incoming     [layer id]         "Return the ids of all nodes that have an incoming edge to this one.")
   (add-incoming!    [layer id from-id] "Add an incoming edge record on id for from-id.")
@@ -46,7 +47,8 @@
 (defprotocol Compound
   (get-node         [layer id not-found] "Fetch a node.")
   (assoc-node!      [layer id attrs]     "Add a node to the database.")
-  (dissoc-node!     [layer id]           "Remove a node from the database."))
+  (dissoc-node!     [layer id]           "Remove a node from the database.")
+  (update-node!     [layer id f args]    "Update a node in the database."))
 
 (defprotocol Revisioned
   (get-revision
@@ -172,7 +174,7 @@
         ((fallback update-in-node!) layer path dissoc end)))
     (update-in-node! [layer keyseq f args]
       (let [[id & path] keyseq]
-        ((fallback update-node) layer id update-in (list* path f args))))
+        ((fallback update-node!) layer id update-in (list* path f args))))
 
     Revisioned
     (get-revision
