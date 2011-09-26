@@ -1,7 +1,7 @@
 (ns jiraph.layer
   (:use [retro.core :only [*revision*]]
         [useful.utils :only [adjoin]])
-  (:import (java.util Map$Entry)))
+  (:umport (java.util Map$Entry)))
 
 (def ^:dynamic *fallback-warnings* false)
 
@@ -49,11 +49,6 @@
   (assoc-node!      [layer id attrs]     "Add a node to the database.")
   (dissoc-node!     [layer id]           "Remove a node from the database.")
   (update-node!     [layer id f args]    "Update a node in the database."))
-
-(defprotocol Revisioned
-  (get-revision
-    [layer] [layer id]
-    "Return the revision this layer is at, or the revision of the specified node."))
 
 (defprotocol Layer
   "Jiraph layer protocol"
@@ -176,11 +171,6 @@
       (let [[id & path] keyseq]
         ((fallback update-node!) layer id update-in (list* path f args))))
 
-    Revisioned
-    (get-revision
-      ([layer] 0)
-      ([layer id] 0))
-
     Layer
     ;; default implementation is to not do anything, hoping you do it
     ;; automatically at reasonable times, or don't need it done at all
@@ -188,8 +178,6 @@
     (close [layer] nil)
     (sync! [layer] nil)
     (optimize! [layer] nil)
-    (get-revisions [layer id]
-      ())
 
     ;; we can simulate these for you, pretty inefficiently
     (truncate! [layer]
