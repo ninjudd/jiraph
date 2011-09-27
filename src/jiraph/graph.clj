@@ -236,7 +236,7 @@
 (defn append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer-name id & attrs]
-  {:pre [(if (:append-only layer-name) retro/*revision* true)]}
+  {:pre [(if (append-only? layer-name) retro/*revision* true)]}
   (refuse-readonly)
   (let [node (into-map attrs)
         layer (layer layer-name)]
@@ -256,7 +256,7 @@
 (defn append-edge!
   [layer-name id to-id & attrs]
   (append-node! layer-name id
-                (if (layer-meta layer-name :single-edge)
+                (if (single-edge? layer-name)
                   {:edge (into-map :id to-id attrs)}
                   {:edges {to-id (into-map attrs)}})))
 
