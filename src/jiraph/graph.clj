@@ -285,9 +285,10 @@
   [layer-name id]
   (refuse-readonly)
   (binding [*compacting* true]
-    (if (layer-meta layer-name :single-edge)
-      (update-node! layer-name id update :edge #(when-not (:deleted %) %))
-      (update-node! layer-name id update :edges remove-vals :deleted))))
+    (apply update-node! layer-name id update
+           (if (single-edge? layer-name)
+             [:edge #(when-not (:deleted %) %)]
+             [:edges remove-vals :deleted]))))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
