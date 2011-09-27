@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful.map :only [into-map update-dissoc filter-keys-by-val remove-vals map-to]]
+  (:use [useful.map :only [into-map update-each filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [memoize-deref adjoin into-set]]
         [useful.fn :only [any]]
         [useful.macro :only [with-altered-var]]
@@ -298,8 +298,8 @@
   (refuse-readonly)
   (binding [*compacting* true]
     (if (layer-meta layer-name :single-edge)
-      (update-node! layer-name id update-dissoc :edge #(when-not (:deleted %) %))
-      (update-node! layer-name id update-dissoc :edges remove-vals :deleted))))
+      (update-node! layer-name id update-each [:edge] #(when-not (:deleted %) %))
+      (update-node! layer-name id update-each [:edges] remove-vals :deleted))))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
