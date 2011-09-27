@@ -148,7 +148,7 @@
 (defn node-ids
   "Return a lazy sequence of all node ids in this layer."
   [layer-name]
-  (layer/node-ids (layer layer-name)))
+  (layer/node-id-seq (layer layer-name)))
 
 (defn node-count
   "Return the total number of nodes in this layer."
@@ -158,14 +158,14 @@
 (defn get-property
   "Fetch a layer-wide property."
   [layer-name key]
-  (layer/get-property (layer layer-name) key))
+  (layer/get-layer-meta (layer layer-name) key))
 
 
 (defn set-property!
   "Store a layer-wide property."
   [layer-name key val]
   (refuse-readonly)
-  (layer/set-property! (layer layer-name) key val))
+  (layer/assoc-layer-meta! (layer layer-name) key val))
 
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
