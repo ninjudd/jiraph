@@ -27,6 +27,12 @@
   [layer-name key]
   (key (meta (layer layer-name))))
 
+(letfn [(meta-accessor [key]
+          (fn [layer-name]
+            (layer-meta layer-name key)))]
+  (def single-edge? (meta-accessor :single-edge))
+  (def append-only? (meta-accessor :append-only)))
+
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
   [node]
@@ -36,7 +42,7 @@
     (:edges node)))
 
 (defn edges-valid? [layer-name node]
-  (not (if (layer-meta layer-name :single-edge)
+  (not (if (single-edge? layer-name)
          (:edges node)
          (:edge node))))
 
@@ -219,30 +225,12 @@
   [layer-name id]
   (layer/node-exists? (layer layer-name) id))
 
-(defn add-node!
-  "Add a node with the given id and attrs if it doesn't already exist."
-  [layer-name id & attrs]
-  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
-  (refuse-readonly)
-  (let [attrs (into-map attrs)]
-    (assert (types-valid? layer-name id attrs))
-    (assert (edges-valid? layer-name attrs))
-    (with-transaction layer-name
-      (let [layer (layer layer-name)
-            node  (layer/add-node! layer id attrs)]
-        (when-not node
-          (throw (java.io.IOException. (format "cannot add node %s because it already exists" id))))
-        (doseq [[to-id edge] (edges node)]
-          (when-not (:deleted edge)
-            (layer/add-incoming! layer to-id id)))
-        node))))
-
 (def ^{:dynamic true :private true} *compacting* false)
 
 (defn update-node!
   "Update a node by calling function f with the old value and any supplied args."
   [layer-name id f & args]
-  {:pre [(or (not (layer-meta layer-name :append-only)) *compacting*)]}
+  {:pre [(or (not (append-only? layer-name)) *compacting*)]}
   (refuse-readonly)
   (with-transaction layer-name
     (let [layer (layer layer-name)
@@ -261,7 +249,7 @@
 (defn append-node!
   "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
   [layer-name id & attrs]
-  {:pre [(if (layer-meta layer-name :append-only) retro/*revision* true)]}
+  {:pre [(if (:append-only layer-name) retro/*revision* true)]}
   (refuse-readonly)
   (let [node (into-map attrs)
         layer (layer layer-name)]
