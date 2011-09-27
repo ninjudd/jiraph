@@ -180,25 +180,12 @@
   (apply max 0 (for [layer (if (empty? layers) (keys *graph*) layers)]
                  (or (get-property layer :rev) 0))))
 
-#_(defn get-node
-  "Fetch a node's data from this layer."
-  [layer-name id]
-  (when-let [node (layer/get-node (layer layer-name) id)]
-    (assoc node :id id)))
-
+;; TODO maybe need to handle :edge/:edges properly?
 (defn get-node
   "Fetch a node's data from this layer."
   [layer-name id]
-  (let [layer (layer layer-name)]
-    (if (instance? jiraph.layer.Split layer)
-      (let [edges (layer/get-edges layer id)]
-        (prn edges)
-        (into (layer/get-attrs layer id)
-              (if (> (count edges) 0)
-                {:edges edges}
-                {:edge (first edges)}) ))
-      (when-let [node (layer/get-node layer id)]
-        (assoc node :id id)))))
+  (when-let [node (layer/get-node (layer layer-name) id nil)]
+    (assoc node :id id)))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
