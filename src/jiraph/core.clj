@@ -42,7 +42,7 @@
     (layer/close layer)))
 
 (defn set-graph! [graph]
-  (alter-var-root #'*graph* (fn [_] graph)))
+  (alter-var-root #'*graph* (constantly graph)))
 
 (defmacro with-graph [graph & forms]
   `(binding [*graph* ~graph]
