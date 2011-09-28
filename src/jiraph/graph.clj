@@ -10,26 +10,16 @@
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]))
 
-(def ^{:dynamic true} *graph* nil)
-(def ^{:dynamic true} *verbose* nil)
-(def ^{:dynamic true} *use-outer-cache* nil)
-
-(defn layer
-  "Return the layer for a given name from *graph*."
-  [layer-name]
-  (if *graph*
-    (or (get *graph* layer-name)
-        (throw (java.io.IOException. (format "cannot find layer %s in open graph" layer-name))))
-    (throw (java.io.IOException. (format "attempt to use a layer without an open graph")))))
+(def ^{:dynamic true} *read-only* false)
 
 (defn layer-meta
   "Fetch a metadata key from a layer."
-  [layer-name key]
-  (key (meta (layer layer-name))))
+  [layer key]
+  (key (meta layer)))
 
 (letfn [(meta-accessor [key]
-          (fn [layer-name]
-            (layer-meta layer-name key)))]
+          (fn [layer]
+            (layer-meta layer key)))]
   (def single-edge? (meta-accessor :single-edge))
   (def append-only? (meta-accessor :append-only)))
 
@@ -41,13 +31,13 @@
       {id edge})
     (:edges node)))
 
-(defn edges-valid? [layer-name node]
-  (not (if (single-edge? layer-name)
-         (:edges node)
-         (:edge node))))
+(defn edges-valid? [layer node]
+  (not ((if (single-edge? layer)
+          :edges
+          :edge) node)))
 
-(defn types-valid? [layer-name id node]
-  (let [types (layer-meta layer-name :types)]
+(defn types-valid? [layer id node]
+  (let [types (layer-meta layer :types)]
     (or (not types)
         (let [node-type (type-key id)]
           (and (contains? types node-type)
@@ -60,69 +50,32 @@
 (defn filter-edges [pred node]
   (select-keys (edges node) (filter-edge-ids pred node)))
 
-(defmacro with-each-layer
-  "Execute forms with layer bound to each layer specified or all layers if layers is empty."
-  [layers & forms]
-  `(doseq [[~'layer-name ~'layer] (cond (keyword? ~layers) [~layers (layer ~layers)]
-                                        (empty?   ~layers) *graph*
-                                        :else              (select-keys *graph* ~layers))]
-     (when *verbose*
-       (println (format "%-20s %s"~'layer-name (apply str (map pr-str '~forms)))))
-     ~@forms))
-
-(defn read-only? []
-  (:read-only (meta *graph*)))
-
-(defmacro with-readonly [& body]
-  `(with-altered-var [*graph* vary-meta assoc :read-only true]
-     ~@body))
-
-(defn- refuse-readonly []
-  (when (read-only?)
-    (throw (IllegalStateException. "Can't write in read-only mode"))))
-
-(defn open! []
-  (with-each-layer []
-    (layer/open layer)))
-
-(defn close! []
-  (with-each-layer []
-    (layer/close layer)))
-
-(defn set-graph! [graph]
-  (alter-var-root #'*graph* (fn [_] graph)))
-
-(defmacro with-graph [graph & forms]
-  `(binding [*graph* ~graph]
-     (try (open!)
-          ~@forms
-          (finally (close!)))))
-
-(defmacro with-graph! [graph & forms]
-  `(let [graph# *graph*]
-     (set-graph! ~graph)
-     (try (open!)
-          ~@forms
-          (finally (close!)
-                   (set-graph! graph#)))))
-
 (defmacro at-revision
   "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
    revision, or rewind the state of the graph to a given revision."
   [rev & forms]
   `(retro/at-revision ~rev ~@forms))
 
+(defn read-only? []
+  *read-only*)
+
+(defmacro with-readonly [& body]
+  `(binding [*read-only* true]
+     ~@body))
+
+(defn- refuse-readonly []
+  (when (read-only?)
+    (throw (IllegalStateException. "Can't write in read-only mode"))))
+
 (defmacro with-transaction
-  "Execute forms within a transaction on the named layer/layers."
+  "Execute forms within a transaction on the specified layers."
   [layers & forms]
   `(if (read-only?)
      (do ~@forms)
      ((reduce
        retro/wrap-transaction
        (fn [] ~@forms)
-       (cond (keyword? ~layers) [(layer ~layers)]
-             (empty?   ~layers) (vals *graph*)
-             :else              (map layer ~layers))))))
+       ~layers))))
 
 (def abort-transaction retro/abort-transaction)
 
@@ -190,16 +143,23 @@
 (defn get-edges
   "Fetch the edges for a node on this layer."
   [layer-name id]
-  (edges (get-node layer-name id)))
+  (let [layer (layer layer-name)
+        single? (single-edge? layer)
+        key (if single? :edge :edges)
+        data (layer/get-in-node layer [key])]
+    (if single?
+      [data]
+      data)))
 
 (defn get-in-node
   "Fetch data from inside a node."
-  [layer-name [id & keys]]
-  (get-in (get-node layer-name id) keys))
+  [layer-name keyseq]
+  (layer/get-in-node (layer layer-name) keyseq))
 
 (defn get-edge
   "Fetch an edge from node with id to to-id."
   [layer-name id to-id]
+  (let [])
   (get (get-edges layer-name id) to-id))
 
 (defn get-in-edge
@@ -217,7 +177,7 @@
 (defn update-node!
   "Update a node by calling function f with the old value and any supplied args."
   [layer-name id f & args]
-  {:pre [(or (not (append-only? layer-name)) *compacting*)]}
+  {:pre [(or (not (append-only? (layer layer-name))) *compacting*)]}
   (refuse-readonly)
   (with-transaction layer-name
     (let [layer (layer layer-name)
