@@ -1,5 +1,6 @@
 (ns jiraph.core
-  (:require [jiraph.graph :as graph]))
+  (:require [jiraph.graph :as graph]
+            [clojure.string :as s]))
 
 (def ^{:dynamic true} *graph* nil)
 (def ^{:dynamic true} *verbose* nil)
@@ -13,17 +14,18 @@
         (throw (java.io.IOException. (format "cannot find layer %s in open graph" layer-name))))
     (throw (java.io.IOException. (format "attempt to use a layer without an open graph")))))
 
-
-
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
   [layers & forms]
-  `(doseq [[~'layer-name ~'layer] (cond (keyword? ~layers) [~layers (layer ~layers)]
-                                        (empty?   ~layers) *graph*
-                                        :else              (select-keys *graph* ~layers))]
-     (when *verbose*
-       (println (format "%-20s %s"~'layer-name (apply str (map pr-str '~forms)))))
-     ~@forms))
+  `(let [layers# ~layers]
+     (doseq [[~'layer-name ~'layer] (cond (keyword? layers#) [layers# (layer layers#)]
+                                          (empty?   layers#) *graph*
+                                          :else              (select-keys *graph* layers#))]
+       (when *verbose*
+         (println (format "%-20s %s"
+                          ~'layer-name
+                          (s/join " " (map pr-str '~forms)))))
+       ~@forms)))
 
 (defn open! []
   (with-each-layer []
