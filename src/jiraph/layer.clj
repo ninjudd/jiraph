@@ -45,10 +45,16 @@
   (drop-incoming!   [layer id from-id] "Remove the incoming edge record on id for from-id."))
 
 (defprotocol Compound
-  (get-node         [layer id not-found] "Fetch a node.")
-  (assoc-node!      [layer id attrs]     "Add a node to the database.")
-  (dissoc-node!     [layer id]           "Remove a node from the database.")
-  (update-node!     [layer id f args]    "Update a node in the database."))
+  (get-node      [layer id not-found] "Fetch a node.")
+  (assoc-node!   [layer id attrs]     "Add a node to the database.")
+  (dissoc-node!  [layer id]           "Remove a node from the database.")
+  (update-node!  [layer id f args]
+    "Update a node in the database. nil is an
+  acceptable return value, useful if you can perform an update without looking
+  at entire nodes, but if possible you should return a map of {:old <old
+  value> :new <new value>}, which jiraph will use to optimize other related
+  operations. Other meaningful keys (such as :changes) may be added in a future
+  version of jiraph."))
 
 (defprotocol Layer
   "Jiraph layer protocol"
@@ -82,7 +88,9 @@
   (dissoc-in-node! [layer keyseq]))
 
 (defprotocol Update
-  "Layer that can do (some) updates of sub-nodes more efficiently than fetching a whole node, changing it, and then writing it."
+  "Layer that can do (some) updates of sub-nodes more efficiently than fetching
+  a whole node, changing it, and then writing it. See docs for
+  jiraph.layer/update-node! for 'optional' parts of the Update contract."
   (update-in-node!
     [layer keyseq f argseq]
     "Arguments are as to clojure.core/update-in, but without varargs."))

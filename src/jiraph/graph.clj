@@ -23,6 +23,10 @@
   (def single-edge? (meta-accessor :single-edge))
   (def append-only? (meta-accessor :append-only)))
 
+(defn edge-key [layer]
+  (if (single-edge? layer)
+    :edge, :edges))
+
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
   [node]
@@ -33,8 +37,8 @@
 
 (defn edges-valid? [layer node]
   (not ((if (single-edge? layer)
-          :edges
-          :edge) node)))
+          :edges, :edge) ;; NB opposite of usual edge-key
+        node)))
 
 (defn types-valid? [layer id node]
   (let [types (layer-meta layer :types)]
@@ -80,97 +84,87 @@
 (def abort-transaction retro/abort-transaction)
 
 (defn sync!
-  "Flush changes for the specified layers to the storage medium, or all layers if none are specified."
+  "Flush changes for the specified layers to the storage medium."
   [& layers]
-  (with-each-layer layers
+  (doseq [layer layers]
     (layer/sync! layer)))
 
 (defn optimize!
-  "Optimize the underlying storage for the specified layers, or all layers if none are specified."
+  "Optimize the underlying storage for the specified layers."
   [& layers]
-  (with-each-layer layers
+  (doseq [layer layers]
     (layer/optimize! layer)))
 
 (defn truncate!
-  "Remove all nodes from the specified layers, or all layers if none are specified."
+  "Remove all nodes from the specified layers."
   [& layers]
   (refuse-readonly)
-  (with-each-layer layers
+  (doseq [layer layers]
     (layer/truncate! layer)))
 
-(defn node-ids
+(defn node-id-seq
   "Return a lazy sequence of all node ids in this layer."
-  [layer-name]
-  (layer/node-id-seq (layer layer-name)))
+  [layer]
+  (layer/node-id-seq layer))
 
 (defn node-count
   "Return the total number of nodes in this layer."
-  [layer-name]
-  (layer/node-count (layer layer-name)))
+  [layer]
+  (layer/node-count layer))
 
 (defn get-property
   "Fetch a layer-wide property."
-  [layer-name key]
-  (layer/get-layer-meta (layer layer-name) key))
-
+  [layer key]
+  (layer/get-layer-meta layer key))
 
 (defn set-property!
   "Store a layer-wide property."
-  [layer-name key val]
+  [layer key val]
   (refuse-readonly)
-  (layer/assoc-layer-meta! (layer layer-name) key val))
+  (layer/assoc-layer-meta! layer key val))
 
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
-  [layer-name key f & args]
+  [layer key f & args]
   (refuse-readonly)
-  (let [val (get-property layer-name key)]
-    (set-property! layer-name key (apply f val args))))
+  (let [val (get-property layer key)]
+    (set-property! layer key (apply f val args))))
 
-(defn current-revision
-  "The maximum revision on all specified layers, or all layers if none are specified."
-  [& layers]
-  (apply max 0 (for [layer (if (empty? layers) (keys *graph*) layers)]
-                 (or (get-property layer :rev) 0))))
-
-;; TODO maybe need to handle :edge/:edges properly?
 (defn get-node
   "Fetch a node's data from this layer."
-  [layer-name id]
-  (when-let [node (layer/get-node (layer layer-name) id nil)]
-    (assoc node :id id)))
+  ([layer id & [not-found]]
+     (layer/get-node layer id not-found)))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
-  [layer-name id]
-  (let [layer (layer layer-name)
-        single? (single-edge? layer)
+  [layer id]
+  (let [single? (single-edge? layer)
         key (if single? :edge :edges)
-        data (layer/get-in-node layer [key])]
+        data (layer/get-in-node layer [key] nil)]
     (if single?
-      [data]
+      (when-let [id (:id data)]
+        {id data})
       data)))
 
 (defn get-in-node
   "Fetch data from inside a node."
-  [layer-name keyseq]
-  (layer/get-in-node (layer layer-name) keyseq))
+  ([layer keyseq & [not-found]]
+     (layer/get-in-node layer keyseq not-found)))
+
+(defn get-in-edge
+  "Fetch data from inside an edge."
+  ([layer [id to-id & keys] & [not-found]]
+     (get-in-node layer (list* id (edge-key layer) to-id keys) not-found)))
 
 (defn get-edge
   "Fetch an edge from node with id to to-id."
-  [layer-name id to-id]
-  (let [])
-  (get (get-edges layer-name id) to-id))
-
-(defn get-in-edge
-  "Fetch data from inside a node."
-  [layer-name [id to-id & keys]]
-  (get-in (get-edge layer-name id to-id) keys))
+  ([layer id to-id & [not-found]]
+     (get-in-edge layer [id to-id] not-found)))
 
 (defn node-exists?
   "Check if a node exists on this layer."
-  [layer-name id]
-  (layer/node-exists? (layer layer-name) id))
+  [layer id]
+  (layer/node-exists? layer id))
 
 (def ^{:dynamic true :private true} *compacting* false)
 

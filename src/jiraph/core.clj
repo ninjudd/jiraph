@@ -63,3 +63,9 @@
   [layers & forms]
   `(graph/with-transaction (vals (as-layer-map ~layers))
      ~@forms))
+
+(defn current-revision
+  "The maximum revision on all specified layers, or all layers if none are specified."
+  [& layers]
+  (apply max 0 (for [layer (vals (as-layer-map layers))]
+                 (or (graph/get-property layer :rev) 0))))
