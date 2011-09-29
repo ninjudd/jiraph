@@ -60,10 +60,9 @@
   `(doseq [[~'layer-name ~'layer] (cond (keyword? ~layers) [~layers (layer ~layers)]
                                         (empty?   ~layers) *graph*
                                         :else              (select-keys *graph* ~layers))]
-     (clojure.test/testing (name~'layer-name)
-       (when *verbose*
-         (println (format "%-20s %s"~'layer-name (apply str (map pr-str '~forms)))))
-       ~@forms)))
+     (when *verbose*
+       (println (format "%-20s %s"~'layer-name (apply str (map pr-str '~forms)))))
+     ~@forms))
 
 (defn read-only? []
   (:read-only (meta *graph*)))
