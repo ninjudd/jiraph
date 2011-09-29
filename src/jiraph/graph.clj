@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful.map :only [into-map update-each filter-keys-by-val remove-vals map-to]]
+  (:use [useful.map :only [into-map update-each update filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [memoize-deref adjoin into-set]]
         [useful.fn :only [any]]
         [useful.macro :only [with-altered-var]]
@@ -14,6 +14,8 @@
 (def ^{:dynamic true} *verbose* nil)
 (def ^{:dynamic true} *use-outer-cache* nil)
 
+(declare *merge-ids*)
+
 (defn layer
   "Return the layer for a given name from *graph*."
   [layer-name]
@@ -25,7 +27,7 @@
 (defn layer-meta
   "Fetch a metadata key from a layer."
   [layer-name key]
-  (key (meta (layer layer-name))))
+  (key (layer/options (layer layer-name))))
 
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
@@ -176,10 +178,17 @@
                  (or (get-property layer :rev) 0))))
 
 (defn get-node
-  "Fetch a node's data from this layer."
+  "Fetch a node's data from this layer, if the layer contains an fn for :merge-ids,
+  the edges of node-ids returned by calling (merge-ids id) will me merged into :edges"
   [layer-name id]
-  (when-let [node (layer/get-node (layer layer-name) id)]
-    (assoc node :id id)))
+  (let [layer (layer layer-name)]
+    (if-let [get-merge-ids (or *merge-ids* (constantly nil))]
+      (reduce (fn [merged {:keys [edges]}]
+                (adjoin merged {:edges (into {} (for [{[to-id attrs] :edges} (layer/get-node layer id)]
+                                                  [(peek (get-merge-ids to-id))
+                                                   attrs]))}))
+              (get-merge-ids id)))
+    (layer/get-node layer id)))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
@@ -283,6 +292,11 @@
         (if-not (:deleted edge)
           (layer/drop-incoming! layer to-id id))))))
 
+(defn delete-edge!
+  "Mark the edge from id to to-id as deleted"
+  [layer-name id to-id]
+  (append-edge! layer-name id to-id {:deleted true}))
+
 (defn assoc-node!
   "Associate attrs with a node."
   [layer-name id & attrs]
@@ -330,9 +344,9 @@
   ([] (keys *graph*))
   ([type]
      (for [[name layer] *graph*
-           :let [meta (meta layer)]
-           :when (and (contains? (:types meta) type)
-                      (not (:hidden meta)))]
+           :let [options (layer/options layer)]
+           :when (and (contains? (:types options) type)
+                      (not (:hidden options)))]
        name)))
 
 (defn schema

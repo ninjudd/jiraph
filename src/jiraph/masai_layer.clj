@@ -4,6 +4,7 @@
         [clojure.stacktrace :only [print-cause-trace]]
         [retro.core :only [*revision*]]
         [useful.utils :only [if-ns]]
+        [useful.map :only [into-map]]
         [useful.seq :only [find-with]])
   (:require [masai.db :as db]
             [cereal.format :as f]
@@ -83,7 +84,7 @@
 (defn- dec-count! [layer]
   (db/inc! (:db layer) count-key -1))
 
-(defrecord MasaiLayer [db format meta-format]
+(defrecord MasaiLayer [db format meta-format layer-options]
   jiraph.layer/Layer
 
   (open      [layer] (db/open      db))
@@ -155,7 +156,9 @@
 
   (truncate! [layer] (db/truncate! db))
 
-  jiraph.layer.Append
+  (options [layer] layer-options)
+
+  jiraph.layer/Append
 
   (append-node! [layer id attrs]
     (when-not (empty? attrs)
@@ -196,11 +199,13 @@
        (defn- make-db [db]
          db))
 
-(defn make [db & [format meta-format]]
-  (let [format (or format (reader-append-format/make))]
+(defn make [& opts]
+  (let [{:keys [db format meta-format] :as opts} (into-map opts)
+        format (or format (reader-append-format/make))]
     (MasaiLayer.
      (make-db db) format
      (or meta-format
          (if (instance? cereal.reader.ReaderFormat format)
            (reader-append-format/make {:in {} :rev [] :len [] :mrev [] :mlen []})
-           (protobuf-make format))))))
+           (protobuf-make format)))
+     (make-layer-options opts))))
