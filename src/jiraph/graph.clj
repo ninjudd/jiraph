@@ -1,6 +1,6 @@
 (ns jiraph.graph
   (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
-        [useful.utils :only [memoize-deref adjoin]]
+        [useful.utils :only [memoize-deref adjoin with-adjustments]]
         [useful.fn :only [any]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
@@ -17,28 +17,14 @@
   [layer key]
   (key (meta layer)))
 
-(letfn [(meta-accessor [key]
-          (fn [layer]
-            (layer-meta layer key)))]
-  (def single-edge? (meta-accessor :single-edge))
-  (def append-only? (meta-accessor :append-only)))
-
-(defn edge-key [layer]
-  (if (single-edge? layer)
-    :edge, :edges))
-
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
   [node]
-  (if-let [edge (:edge node)]
-    (when-let [id (:id edge)]
-      {id edge})
-    (:edges node)))
+  (:edges node))
 
-(defn edges-valid? [layer node]
-  (not ((if (single-edge? layer)
-          :edges, :edge) ;; NB opposite of usual edge-key
-        node)))
+(defn edges-valid? [layer edges]
+  (or (not (single-edge? layer))
+      (> 2 (count edge))))
 
 (defn types-valid? [layer id node]
   (let [types (layer-meta layer :types)]
@@ -138,13 +124,7 @@
 (defn get-edges
   "Fetch the edges for a node on this layer."
   [layer id]
-  (let [single? (single-edge? layer)
-        key (if single? :edge :edges)
-        data (layer/get-in-node layer [key] nil)]
-    (if single?
-      (when-let [id (:id data)]
-        {id data})
-      data)))
+  (layer/get-in-node layer [id :edges] nil))
 
 (defn get-in-node
   "Fetch data from inside a node."
@@ -154,7 +134,7 @@
 (defn get-in-edge
   "Fetch data from inside an edge."
   ([layer [id to-id & keys] & [not-found]]
-     (get-in-node layer (list* id (edge-key layer) to-id keys) not-found)))
+     (get-in-node layer (list* id :edges to-id keys) not-found)))
 
 (defn get-edge
   "Fetch an edge from node with id to to-id."
@@ -168,71 +148,55 @@
 
 (def ^{:dynamic true :private true} *compacting* false)
 
-(defn update-node!
-  "Update a node by calling function f with the old value and any supplied args."
-  [layer-name id f & args]
-  {:pre [(or (not (append-only? (layer layer-name))) *compacting*)]}
-  (refuse-readonly)
-  (with-transaction layer-name
-    (let [layer (layer layer-name)
-          old   (layer/get-node layer id)
-          new   (layer/set-node! layer id (apply f old args))]
-      (assert (types-valid? layer-name id new))
-      (assert (edges-valid? layer-name new))
-      (let [new-edges (set (filter-edge-ids (complement :deleted) new))
-            old-edges (set (keys (edges old)))]
-        (doseq [to-id (remove old-edges new-edges)]
-          (layer/add-incoming! layer to-id id))
-        (doseq [to-id (remove new-edges old-edges)]
-          (layer/drop-incoming! layer to-id id)))
-      [(dissoc old :id) new])))
+(letfn [(incoming-adjustments [old-edges new-edges]
+          (with-adjustments #(set (map key (remove (comp :deleted val) %))) [old-edges new-edges]
+            {:add  (remove old-edges new-edges)
+             :drop (remove new-edges old-edges)}))]
 
-(defn append-node!
-  "Append attrs to a node or create it if it doesn't exist. Note: some layers may not implement this."
-  [layer-name id & attrs]
-  {:pre [(if (append-only? layer-name) retro/*revision* true)]}
-  (refuse-readonly)
-  (let [node (into-map attrs)
-        layer (layer layer-name)]
-    (assert (types-valid? layer-name id node))
-    (assert (edges-valid? layer-name node))
-    (if (instance? jiraph.layer.Append layer)
-      (with-transaction layer-name
-        (let [node (layer/append-node! layer id node)]
-          (doseq [[to-id edge] (edges node)]
-            (if (:deleted edge)
-              (layer/drop-incoming! layer to-id id)
-              (layer/add-incoming!  layer to-id id)))
-          node))
-      (do (apply update-node! layer-name id adjoin attrs)
-          (layer/make-node node)))))
+  (defn update-node!
+    "Update a node by calling function f with the old value and any supplied args."
+    [layer id f & args]
+    {:pre [(or (not (append-only? layer)) *compacting*)]}
+    (refuse-readonly)
+    (letfn [(assert-valid [node]
+              (assert (types-valid? layer id node))
+              (assert (edges-valid? layer (edges node))))]
+      (with-transaction [layer]
+        (let [changed-incoming (condp = f
+                                 adjoin (let [node (into-map args)]
+                                          (layer/update-node! layer id f args)
+                                          (assert-valid node)
+                                          (into {}
+                                                (for [[to-id edge] (edges node)]
+                                                  [(if (:deleted edge) :drop, :add)
+                                                   to-id])))
+                                 (let [old (layer/get-node layer id nil)
+                                       _ (layer/update-node! layer id f args)
+                                       new (layer/get-node layer id nil)]
+                                   (assert-valid new)
+                                   (apply incoming-adjustments (map :edges [old new]))))]
+          (doseq [[k f!] {:add  layer/add-incoming!
+                          :drop layer/drop-incoming!}
+                  to-id (get changed-incoming k)]
+            (f! layer to-id id))))))
 
-(defn append-edge!
-  [layer-name id to-id & attrs]
-  (append-node! layer-name id
-                (if (single-edge? layer-name)
-                  {:edge (into-map :id to-id attrs)}
-                  {:edges {to-id (into-map attrs)}})))
+  ;; TODO update this? toss it?
+  (defn append-edge!
+    [layer-name id to-id & attrs]
+    (append-node! layer-name id
+                  (if (single-edge? layer-name)
+                    {:edge (into-map :id to-id attrs)}
+                    {:edges {to-id (into-map attrs)}})))
 
-(defn delete-node!
-  "Remove a node from a layer (incoming links remain)."
-  [layer-name id]
-  (refuse-readonly)
-  (with-transaction layer-name
-    (let [layer (layer layer-name)
-          node  (layer/delete-node! layer id)]
-      (doseq [[to-id edge] (edges node)]
-        (if-not (:deleted edge)
-          (layer/drop-incoming! layer to-id id))))))
-
-(defn assoc-node!
-  "Associate attrs with a node."
-  [layer-name id & attrs]
-  (refuse-readonly)
-  (let [layer (layer layer-name)]
-    (if (instance? jiraph.layer.Assoc layer)
-      (layer/assoc-node! layer id (into-map attrs))
-      (apply update-node! layer-name id merge attrs))))
+  (defn dissoc-node!
+    "Remove a node from a layer (incoming links remain)."
+    [layer id]
+    (refuse-readonly)
+    (with-transaction [layer]
+      (let [node  (layer/dissoc-node! layer id)]
+        (doseq [[to-id edge] (edges node)]
+          (if-not (:deleted edge)
+            (layer/drop-incoming! layer to-id id)))))))
 
 (defn compact-node!
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
@@ -246,10 +210,10 @@
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
-  ([layer-name]
-     (layer/fields (layer layer-name)))
-  ([layer-name subfields]
-     (layer/fields (layer layer-name) subfields)))
+  ([layer]
+     (layer/fields layer))
+  ([layer subfields]
+     (layer/fields layer subfields)))
 
 (defn node-valid?
   "Check if the given node is valid for the specified layer."

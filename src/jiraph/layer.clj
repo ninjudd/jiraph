@@ -14,10 +14,6 @@
        (fallback-warning ~'layer '~impl))
      ~impl))
 
-(defprotocol Enumerate
-  (node-id-seq [layer] "A seq of all node ids in this layer")
-  (node-seq    [layer] "A seq of all nodes in this layer"))
-
 (defprotocol Counted
   (node-count       [layer]            "Return the total number of nodes in this layer."))
 
@@ -44,17 +40,14 @@
   (add-incoming!    [layer id from-id] "Add an incoming edge record on id for from-id.")
   (drop-incoming!   [layer id from-id] "Remove the incoming edge record on id for from-id."))
 
-(defprotocol Compound
+(defprotocol Basic
   (get-node      [layer id not-found] "Fetch a node.")
   (assoc-node!   [layer id attrs]     "Add a node to the database.")
-  (dissoc-node!  [layer id]           "Remove a node from the database.")
-  (update-node!  [layer id f args]
-    "Update a node in the database. nil is an
-  acceptable return value, useful if you can perform an update without looking
-  at entire nodes, but if possible you should return a map of {:old <old
-  value> :new <new value>}, which jiraph will use to optimize other related
-  operations. Other meaningful keys (such as :changes) may be added in a future
-  version of jiraph."))
+  (dissoc-node!  [layer id]           "Remove a node from the database."))
+
+(defprotocol Optimized
+  (update-in-node  [layer id f args]
+    ))
 
 (defprotocol Layer
   "Jiraph layer protocol"
@@ -65,6 +58,12 @@
   (truncate!        [layer]            "Removes all node data from the layer.")
   (get-revisions    [layer id]         "Return all revision ids for a given node.")
   (node-exists?     [layer id]         "Check if a node exists on this layer."))
+
+(defprotocol Preferences
+  "Indicate to jiraph what things you want it to do for you. These preferences should not
+  change while the system is running; jiraph may choose to cache any of them."
+  (manage-incoming? [layer] "Should jiraph decide when to add/drop incoming edges?")
+  (single-edge?     [layer] "Is it legal to have more than one edge from a node on this layer?"))
 
 (defprotocol Seqable
   (seq-in-node [layer keyseq] "A seq of all the properties under the given keyseq."))
@@ -186,6 +185,10 @@
     (close [layer] nil)
     (sync! [layer] nil)
     (optimize! [layer] nil)
+
+    Preferences
+    (manage-incoming? [layer] true)
+    (single-edge? [layer] (:single-edge layer))
 
     ;; we can simulate these for you, pretty inefficiently
     (truncate! [layer]
