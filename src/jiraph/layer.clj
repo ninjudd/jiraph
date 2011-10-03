@@ -46,8 +46,44 @@
   (dissoc-node!  [layer id]           "Remove a node from the database."))
 
 (defprotocol Optimized
-  (update-in-node  [layer id f args]
-    ))
+  "Describe to jiraph how to perform a more-optimized version of some subset of operations on a
+  layer. These functions will be called on a layer in preparation to actually performing an
+  operation on some internal node. The layer is responsible for determining whether that operation
+  can be optimized at that position in the tree; this will usually be implemented by inspecting
+  the function passed in and testing it against some internal list of optimizable functions.
+
+  If nil is returned, the operation will be done in some less optimized way, often by calling
+  get-node, applying the update, and then assoc-node!.  If an optimization is possible, you should
+  return a function which will take any additional args to f (but not f itself, or the keyseq;
+  those should be closed over and captured in the returned function); jiraph will call this
+  function with the appropriate arguments.
+
+  For example, jiraph might ask for an optimization with (update-fn layer [from-id :edges to-id]
+  assoc), and call the returned function as (the-fn :rel :child), thus achieving basically the
+  same effect as (update-in layer [from-id :edges to-id] assoc :rel :child), or (assoc-in layer
+  [from-id :edges to-id :rel] child)."
+
+  (update-fn [layer keyseq f] "Get a function for performing an optimized update/mutation on the
+  layer at a specified node. See documentation of Optimized for the general contract of Optimized
+  functions. In addition, the function returned by update-fn should, when called, return a hash
+  containing information about the changes it made, if possible.
+
+  The hash should contain keys :old and :new, describing the contents of the sub-node (that is,
+  the one in the layer under keyseq) before and after the update was applied. It is legal for
+  these to both be nil (eg, returning an empty hash), but in that case jiraph will be unable to
+  provide some services, such as managing incoming edges for you.
+
+  jiraph's behavior in the case of return values of any type other than hash (including nil) is
+  unspecified; these may receive special handling in some future version.")
+
+  (query-fn [layer keyseq f] "Get a function for performing an optimized read on the layer at a
+  specified node. See documentation of Optimized for the general contract of Optimized
+  functions. The function returned by update-fn should, when called, call f on the data at
+  keyseq (presumably in some optimized way), and return f's result.
+
+  For example, a layer might store a node's edge-count in a separate field which can be read
+  without reading the edges themselves; in that case, (query-fn layer [node-name :edges] count)
+  should return a function like (fn [] (get-from-db (str node-name \":edge-count\")))."))
 
 (defprotocol Layer
   "Jiraph layer protocol"
