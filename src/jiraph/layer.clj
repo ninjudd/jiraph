@@ -17,6 +17,10 @@
 (defprotocol Counted
   (node-count       [layer]            "Return the total number of nodes in this layer."))
 
+(defprotocol Enumerate
+  (node-id-seq [layer] "A seq of all node ids in this layer")
+  (node-seq    [layer] "A seq of all nodes in this layer"))
+
 (defprotocol Schema
   (fields
     [layer]
@@ -101,35 +105,6 @@
   (manage-incoming? [layer] "Should jiraph decide when to add/drop incoming edges?")
   (single-edge?     [layer] "Is it illegal to have more than one edge from a node on this layer?"))
 
-(defprotocol Seqable
-  (seq-in-node [layer keyseq] "A seq of all the properties under the given keyseq."))
-
-(defprotocol Sorted
-  "Methods for sorted layers."
-  (subseq-in-node
-    [layer keyseq test key]
-    [layer keyseq stest skey etest ekey])
-  (rsubseq-in-node
-    [layer keyseq test key]
-    [layer keyseq stest skey etest ekey])
-  (dissoc-subseq-in-node
-    [layer keyseq test key]
-    [layer keyseq test key etest ekey]))
-
-(defprotocol Nested
-  "Layer that has indexed access into some subset of 'deeper' attributes, such as edges."
-  (get-in-node     [layer keyseq not-found])
-  (assoc-in-node!  [layer keyseq value])
-  (dissoc-in-node! [layer keyseq]))
-
-(defprotocol Update
-  "Layer that can do (some) updates of sub-nodes more efficiently than fetching
-  a whole node, changing it, and then writing it. See docs for
-  jiraph.layer/update-node! for 'optional' parts of the Update contract."
-  (update-in-node!
-    [layer keyseq f argseq]
-    "Arguments are as to clojure.core/update-in, but without varargs."))
-
 ;; Meta-related protocols
 (letfn [(layer-meta-key [id] (str "_" id))
         (node-meta-key [node key] (str "_" node "_" key))
@@ -166,54 +141,6 @@
 ;; these guys want a default/permanent sentinel
 (let [sentinel (Object.)]
   (extend-type Object
-    Schema
-    ;; default behavior: no fields, all nodes valid
-    (fields
-      ([layer] nil)
-      ([layer subfields] nil))
-    ;; TODO add a whats-wrong-with-this-node function
-    (node-valid? [layer attrs] true)
-
-    Enumerate
-    ;; Fallback behavior is the empty list. Jiraph does *not* automatically
-    ;; track assoc'd and dissoc'd nodes for you in order to provide node-ids,
-    ;; because that would be a huge performance hit.
-    (node-id-seq [layer]
-      ())
-    (node-seq [layer]
-      ())
-
-    Counted
-    ;; default behavior: walk through all node ids, counting. not very fast
-    (node-count [layer]
-      (apply + (map (constantly 1) ((fallback node-id-seq) layer))))
-
-    Compound
-    ;; default behavior:
-    (get-node [layer id not-found]
-      ((fallback get-in-node) layer [id] not-found))
-    (assoc-node! [layer id attrs]
-      ((fallback assoc-in-node!) layer [id] attrs))
-    (dissoc-node! [layer id]
-      ((fallback dissoc-in-node!) layer [id]))
-    (update-node! [layer id f args]
-      ((fallback assoc-node!) layer id
-       (apply f ((fallback get-node) layer id) args)))
-
-    Nested
-    (get-in-node [layer keyseq not-found]
-      (let [[id & path] keyseq]
-        (get-in ((fallback get-node) layer id) path not-found)))
-    (assoc-in-node! [layer keyseq val]
-      (let [[path end] ((juxt butlast last) keyseq)]
-        ((fallback update-in-node!) layer path assoc end val)))
-    (dissoc-in-node! [layer keyseq]
-      (let [[path end] ((juxt butlast last) keyseq)]
-        ((fallback update-in-node!) layer path dissoc end)))
-    (update-in-node! [layer keyseq f args]
-      (let [[id & path] keyseq]
-        ((fallback update-node!) layer id update-in (list* path f args))))
-
     Layer
     ;; default implementation is to not do anything, hoping you do it
     ;; automatically at reasonable times, or don't need it done at all
@@ -221,10 +148,6 @@
     (close [layer] nil)
     (sync! [layer] nil)
     (optimize! [layer] nil)
-
-    Preferences
-    (manage-incoming? [layer] true)
-    (single-edge? [layer] (:single-edge layer))
 
     ;; we can simulate these for you, pretty inefficiently
     (truncate! [layer]
@@ -234,25 +157,40 @@
     (node-exists? [layer id]
       (not= sentinel ((fallback get-node) layer id sentinel)))
 
-    Seqable
-    (seq-in-node [layer keyseq]
-      (seq ((fallback get-in-node) layer keyseq)))))
+    Preferences
+    ;; opt in to managed-incoming, and let the layer set a :single-edge key to
+    ;; indicate it should be in single-edge mode
+    (manage-incoming? [layer] true)
+    (single-edge? [layer] (:single-edge layer))))
 
-;; Use raw extend format to allow recycling functions instead of using literals
-(letfn [(subseq-impl [seqfn]
-          (fn [layer keyseq & args]
-            (apply seqfn ((fallback seq-in-node) layer keyseq) args)))]
-  (extend Object
-    Sorted
-    {:subseq-in-node (subseq-impl subseq)
-     :rsubseq-in-node (subseq-impl rsubseq)
-     :dissoc-subseq-in-node (fn [layer keyseq & args]
-                              (let [keyseq (vec keyseq)
-                                    dissoc-in! (fallback dissoc-in-node!)]
-                                (doseq [item (apply (fallback subseq-in-node) layer keyseq args)]
-                                  (dissoc-in! layer (conj keyseq (if (instance? Map$Entry item)
-                                                                   (.getKey ^Map$Entry item)
-                                                                   item))))))}))
+;; Don't need any special closures here
+(extend-type Object
+  Schema
+  ;; default behavior: no fields, all nodes valid
+  (fields
+    ([layer] nil)
+    ([layer subfields] nil))
+  ;; TODO add a whats-wrong-with-this-node function
+  (node-valid? [layer attrs] true)
+
+  Enumerate
+  ;; Fallback behavior is the empty list. Jiraph does *not* automatically
+  ;; track assoc'd and dissoc'd nodes for you in order to provide node-ids,
+  ;; because that would be a huge performance hit.
+  (node-id-seq [layer]
+    ())
+  (node-seq [layer]
+    ())
+
+  Counted
+  ;; default behavior: walk through all node ids, counting. not very fast
+  (node-count [layer]
+    (apply + (map (constantly 1) ((fallback node-id-seq) layer))))
+
+  Optimized
+  ;; can't optimize anything
+  (update-fn [layer keyseq f] nil)
+  (query-fn [layer keyseq f] nil))
 
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
