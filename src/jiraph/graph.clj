@@ -23,7 +23,7 @@
   (:edges node))
 
 (defn edges-valid? [layer edges]
-  (or (not (single-edge? layer))
+  (or (not (layer/single-edge? layer))
       (> 2 (count edge))))
 
 (defn types-valid? [layer id node]
@@ -166,15 +166,15 @@
                                  adjoin (let [node (into-map args)]
                                           (layer/update-node! layer id f args)
                                           (assert-valid node)
-                                          (into {}
-                                                (for [[to-id edge] (edges node)]
-                                                  [(if (:deleted edge) :drop, :add)
-                                                   to-id])))
-                                 (let [old (layer/get-node layer id nil)
-                                       _ (layer/update-node! layer id f args)
-                                       new (layer/get-node layer id nil)]
-                                   (assert-valid new)
-                                   (apply incoming-adjustments (map :edges [old new]))))]
+                                          #(into {}
+                                                 (for [[to-id edge] (edges node)]
+                                                   [(if (:deleted edge) :drop, :add)
+                                                    to-id])))
+                                 (let [old (layer/get-node layer id nil)]
+                                   (layer/update-node! layer id f args)
+                                   #(let [new (layer/get-node layer id nil)]
+                                      (assert-valid new)
+                                      (apply incoming-adjustments (map :edges [old new])))))]
           (doseq [[k f!] {:add  layer/add-incoming!
                           :drop layer/drop-incoming!}
                   to-id (get changed-incoming k)]
@@ -203,10 +203,8 @@
   [layer-name id]
   (refuse-readonly)
   (binding [*compacting* true]
-    (apply update-node! layer-name id update
-           (if (single-edge? layer-name)
-             [:edge #(when-not (:deleted %) %)]
-             [:edges remove-vals :deleted]))))
+    (layer/update-in-node! layer-name [id :edges]
+                           remove-vals [:deleted])))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."

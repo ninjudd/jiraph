@@ -99,7 +99,7 @@
   "Indicate to jiraph what things you want it to do for you. These preferences should not
   change while the system is running; jiraph may choose to cache any of them."
   (manage-incoming? [layer] "Should jiraph decide when to add/drop incoming edges?")
-  (single-edge?     [layer] "Is it legal to have more than one edge from a node on this layer?"))
+  (single-edge?     [layer] "Is it illegal to have more than one edge from a node on this layer?"))
 
 (defprotocol Seqable
   (seq-in-node [layer keyseq] "A seq of all the properties under the given keyseq."))
