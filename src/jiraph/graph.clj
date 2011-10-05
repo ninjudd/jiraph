@@ -24,7 +24,7 @@
 
 (defn edges-valid? [layer edges]
   (or (not (layer/single-edge? layer))
-      (> 2 (count edge))))
+      (> 2 (count edges))))
 
 (defn types-valid? [layer id node]
   (let [types (layer-meta layer :types)]
@@ -121,15 +121,24 @@
   ([layer id & [not-found]]
      (layer/get-node layer id not-found)))
 
-(defn get-edges
-  "Fetch the edges for a node on this layer."
-  [layer id]
-  (layer/get-in-node layer [id :edges] nil))
+(defn query-in-node
+  "Fetch data from inside a node and immediately call a function on it."
+  ([layer keyseq f & args]
+     (if-let [query-fn (layer/query-fn layer keyseq f)]
+       (apply query-fn args)
+       (let [[id & keys] keyseq
+             node (layer/get-node id)]
+         (apply f (get-in node keys) args)))))
 
 (defn get-in-node
   "Fetch data from inside a node."
-  ([layer keyseq & [not-found]]
-     (layer/get-in-node layer keyseq not-found)))
+  ([layer [id & keys] & [not-found]]
+     (query-in-node [id] get-in keys not-found)))
+
+(defn get-edges
+  "Fetch the edges for a node on this layer."
+  ([layer id]
+     (get-in-node layer [id :edges] nil)))
 
 (defn get-in-edge
   "Fetch data from inside an edge."
@@ -143,10 +152,32 @@
 
 (defn node-exists?
   "Check if a node exists on this layer."
-  [layer id]
-  (layer/node-exists? layer id))
+  ([layer id]
+     (layer/node-exists? layer id)))
 
 (def ^{:dynamic true :private true} *compacting* false)
+
+(letfn [(edge-present? [m edge-id]
+          (let [edge (get m edge-id)]
+            (and edge (not (:deleted edge)))))]
+  (defn update-in-node [layer keyseq f & args]
+    (let [[id & keys] keyseq]
+      (letfn [(updater [keyseq f]
+                (layer/update-fn layer keyseq f))
+              (edge-incoming [old-edges new-edges]
+                ())
+              (node-incoming [old-node new-node]
+                )]
+        (if-let [update-fn (updater keyseq f)]
+          ;; maximally-optimized; the layer can do this exact thing well
+          (apply update-fn args)
+          (let [[one-up deepest] ((juxt butlast last) keyseq)]
+            (if-let [update-fn (updater one-up assoc)]
+              ;; they can replace this sub-node efficiently, at least
+              (update-fn deepest (apply f args (get-in-node layer keyseq)))
+              (let [old (get-node layer id)
+                    new (apply update-in old keyseq f args)]
+                (layer/assoc-node! layer id new)))))))))
 
 (letfn [(incoming-adjustments [old-edges new-edges]
           (with-adjustments #(set (map key (remove (comp :deleted val) %))) [old-edges new-edges]
