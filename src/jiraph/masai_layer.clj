@@ -203,7 +203,8 @@
   (let [{:keys [db format meta-format] :as opts} (into-map opts)
         format (or format (reader-append-format/make))]
     (MasaiLayer.
-     (make-db db) format
+     (make-db db)
+     format
      (or meta-format
          (if (instance? cereal.reader.ReaderFormat format)
            (reader-append-format/make {:in {} :rev [] :len [] :mrev [] :mlen []})

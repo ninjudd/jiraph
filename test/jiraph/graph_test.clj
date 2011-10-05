@@ -5,15 +5,16 @@
             [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
             [cereal.reader :as raf]
-            [cereal.protobuf :as paf])
+            [cereal.protobuf :as paf]
+            [useful.map :as into-map])
   (:import [jiraph Test$Node]))
 
 (def all [:tr :tp :stm])
 
-(defn make-graph []
-  {:tr (bal/make "/tmp/jiraph-test-tokyo-reader")
-   :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))
-   :stm (stm/make)})
+(defn make-graph [& options]
+  {:tr (apply bal/make :db "/tmp/jiraph-test-tokyo-reader" options)
+   :tp (apply bal/make :db (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) :format (paf/make Test$Node) options)
+   :stm (apply stm/make options)})
 
 (deftest add-node
   (with-graph (make-graph)
@@ -133,7 +134,7 @@
 
 (deftest single-edge
   (with-graph
-    (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
+    (into {} (make-graph :single-edge true))
     (with-each-layer all
       (truncate! layer-name)
       (testing "add-node! and update-node! work with single-edge"
@@ -262,8 +263,7 @@
 
 (deftest adhere-schema
   (with-graph
-    (into {} (for [[k v] (make-graph)]
-               [k (with-meta v {:types {:foo #{:bar} :bar #{:bar}}})]))
+    (into {} (make-graph {:types {:foo #{:bar} :bar #{:bar}}}))
     (with-each-layer all
       (truncate! layer-name)
       (testing "adheres to the schema"
@@ -281,7 +281,7 @@
 
 (deftest test-edges-valid
   (with-graph {:stm1 (stm/make)
-               :stm2 (with-meta (stm/make) {:single-edge true})}
+               :stm2 (stm/make :single-edge true)}
     (map truncate! (keys *graph*))
     (testing "behaves properly when :single-edge is false"
       (is (not (edges-valid? :stm1 {:edge {:id "1"}})))
@@ -291,9 +291,9 @@
       (is (not (edges-valid? :stm2 {:edges {"1" {:a "b"}}}))))))
 
 (deftest test-node-valid-node-assert
-  (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
-                                       (paf/make Test$Node))
-                    {:types {:foo #{:baz} :bar #{:baz}} :single-edge true})}
+  (with-graph {:a (bal/make :db (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
+                            :format (paf/make Test$Node)
+                            :types {:foo #{:baz} :bar #{:baz}} :single-edge true)}
     (map truncate! (keys *graph*))
     (testing "invalid node and edge types"
       (is (not (node-valid? :a "baz-1" {:edge {:id "baz-1"}})))
@@ -315,19 +315,19 @@
       (is (nil? (verify-node :a "foo-1" {:edge {:id "baz-2"} :bar "foo"}))))))
 
 (deftest test-fields-and-schema
-  (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
-                                       (paf/make Test$Node))
-                    {:types #{:foo :bar}})
-               :b (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-b" :create true})
-                                       (raf/make (with-meta {:foo 1 :bap 2}
-                                                   {:foo {:type :int} :bap {:type :double}})))
-                    {:types #{:baz :bar}})
-               :c (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
-                                       (raf/make {:one 1 :two 2 :foo 3}))
-                    {:types #{:foo :bam}})
-               :d (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-d" :create true})
-                                       (raf/make {:one 1 :two 2 :foo 3}))
-                    {:types #{:foo :bar :bam :baz} :hidden true})}
+  (with-graph {:a (bal/make :db (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
+                            :format (paf/make Test$Node)
+                            :types #{:foo :bar})
+               :b (bal/make :db (tokyo/make {:path "/tmp/jiraph-test-b" :create true})
+                            :format (raf/make (with-meta {:foo 1 :bap 2}
+                                                {:foo {:type :int} :bap {:type :double}}))
+                            :types #{:baz :bar})
+               :c (bal/make :db (tokyo/make {:path "/tmp/jiraph-test-c" :create true})
+                            :format (raf/make {:one 1 :two 2 :foo 3})
+                            :types #{:foo :bam})
+               :d (bal/make :db (tokyo/make {:path "/tmp/jiraph-test-d" :create true})
+                            :format (raf/make {:one 1 :two 2 :foo 3})
+                            :types #{:foo :bar :bam :baz} :hidden true)}
     (is (= {:id    {:type :string},
             :edges {:repeated true, :type :message},
             :edge  {:type :message},

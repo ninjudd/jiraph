@@ -14,7 +14,7 @@
 (def ^{:dynamic true} *verbose* nil)
 (def ^{:dynamic true} *use-outer-cache* nil)
 
-(declare *merge-ids*)
+(def *merge-ids* nil)
 
 (defn layer
   "Return the layer for a given name from *graph*."
@@ -181,14 +181,21 @@
   "Fetch a node's data from this layer, if the layer contains an fn for :merge-ids,
   the edges of node-ids returned by calling (merge-ids id) will me merged into :edges"
   [layer-name id]
-  (let [layer (layer layer-name)]
-    (if-let [get-merge-ids (or *merge-ids* (constantly nil))]
-      (reduce (fn [merged {:keys [edges]}]
-                (adjoin merged {:edges (into {} (for [{[to-id attrs] :edges} (layer/get-node layer id)]
-                                                  [(peek (get-merge-ids to-id))
-                                                   attrs]))}))
-              (get-merge-ids id)))
-    (layer/get-node layer id)))
+  (let [layer         (layer layer-name)
+        get-merge-ids (memoize (or *merge-ids* (constantly nil)))]
+    (when-let [node (if-let [merge-ids (get-merge-ids id)]
+                    (reduce (fn [merged id]
+                              (let [node (layer/get-node layer id)]
+                                (adjoin (if (= id (peek merge-ids))
+                                          (assoc node :edges (:edges merged))
+                                          merged)
+                                        {:edges (into {} (for [[to-id attrs] (:edges node)]
+                                                           (let [head-id (peek (get-merge-ids to-id))]
+                                                             [head-id (assoc attrs :id head-id)])))})))
+                            {}
+                            merge-ids)
+                    (layer/get-node layer id))]
+      (assoc node :id id))))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."

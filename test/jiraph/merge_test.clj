@@ -55,7 +55,14 @@
     (binding [jiraph.graph/*merge-ids* (fn [id] (let [merge (layer :merge)
                                                       id (or (ffirst (:edges (layer/get-node merge id))) id)]
                                                   (conj (into-set [] (layer/get-incoming merge id)) id)))]
-      (is (= #{"m-1"}
-             (set (for [[k {:keys [deleted]}] (:edges (get-node :restaurants "r-1"))
-                        :when (not deleted)]
-                    k)))))))
+      (let [node (get-node :restaurants "r-1")]
+        (is (= #{"m-1"}
+               (set (for [[k {:keys [deleted]}] (:edges node)
+                          :when (not deleted)]
+                      k))))
+        (is (= {:edges {"m-1" {:id "m-1", :deleted false},
+                        "m-2" {:foo :bar, :id "m-2", :deleted true}},
+                :id "r-1"
+                :name "The Golden State",
+                :address "426 N. Fairfax Ave"}
+               node))))))
