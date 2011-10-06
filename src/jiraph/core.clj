@@ -2,8 +2,9 @@
   (:require [jiraph.graph :as graph]
             [clojure.string :as s]))
 
-(def ^{:dynamic true} *graph* nil)
-(def ^{:dynamic true} *verbose* nil)
+(def ^{:dynamic true} *graph*           nil)
+(def ^{:dynamic true} *verbose*         nil)
+(def ^{:dynamic true} *revision*        nil)
 (def ^{:dynamic true} *use-outer-cache* nil)
 
 (defn layer
@@ -42,6 +43,13 @@
                         ~'layer-name
                         (s/join " " (map pr-str '~forms)))))
      ~@forms))
+
+(defmacro at-revision
+  "Execute the given forms with the curren revision set to rev. Can be used to mark changes with a given
+   revision, or read the state at a given revision."
+  [rev & forms]
+  `(binding [*revision* ~rev]
+      ~@forms))
 
 (defn open! []
   (with-each-layer []
