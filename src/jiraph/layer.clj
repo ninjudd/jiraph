@@ -1,6 +1,5 @@
 (ns jiraph.layer
-  (:use [retro.core :only [*revision*]]
-        [useful.utils :only [adjoin]]
+  (:use [useful.utils :only [adjoin]]
         [clojure.stacktrace :only [print-trace-element]])
   (:import (java.util Map$Entry)))
 

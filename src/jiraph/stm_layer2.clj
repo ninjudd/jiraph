@@ -1,7 +1,7 @@
 (ns jiraph.stm-layer2
   (refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta]]
-        [retro.core   :only [*revision* WrappedTransactional Revisioned]]))
+        [retro.core   :only [WrappedTransactional Revisioned]]))
 
 (def empty-store {:revisions (sorted-map-by >)})
 
@@ -29,17 +29,17 @@
   LayerMeta
   (get-layer-meta [this k]
     (-> this meta (get k)))
-  (assoc-layer-meta [this k v]
+  (assoc-layer-meta! [this k v]
     (alter (:store this)
            assoc-in [:scratch :meta k] v))
 
   Basic
-  (get-node [this k]
-    (-> this nodes (get k)))
-  (assoc-node [this k v]
+  (get-node [this k not-found]
+    (-> this nodes (get k not-found)))
+  (assoc-node! [this k v]
     (alter (:store this)
            assoc-in [:scratch :nodes k] v))
-  (dissoc-node [this k]
+  (dissoc-node! [this k]
     (alter (:store this)
            update-in [:scratch :nodes] dissoc k))
 
