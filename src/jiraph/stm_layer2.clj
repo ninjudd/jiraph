@@ -7,10 +7,10 @@
 
 (defn current-rev [layer]
   (or (:revision layer)
-      (first (keys (:store layer)))))
+      (first (keys (-> layer :store deref :revisions)))))
 
 (defn now [layer]
-  (-> layer :store deref (get (current-rev layer))))
+  (-> layer :store deref :revisions (get (current-rev layer))))
 
 (def nodes (comp :nodes now))
 (def meta (comp :meta now))
@@ -48,8 +48,8 @@
     nil)
   (update-fn [this ks f]
     (fn [& args]
-      (alter (:store this)
-             #(apply update-in % (concat [:scratch :nodes] ks) f args))))
+      (apply alter store
+             update-in (concat [:scratch :nodes] ks) f args)))
 
   Revisioned
   (get-revisions [this _] ;; we store all nodes at every revision
@@ -62,15 +62,13 @@
   WrappedTransactional
   (txn-wrap [this f]
     #(dosync
-      (alter (:store this)
-             (fn [store]
-               (assoc store
-                 :scratch (now this))))
+      (alter store assoc
+             :scratch (now this))
       (let [ret (f)]
-        (alter (:store this)
+        (alter store
                (fn [store]
                  (-> store
-                     (assoc (inc (current-rev this)) (:scratch store))
+                     (assoc-in [:revisions (inc (current-rev this))] (:scratch store))
                      (dissoc :scratch))))
         ret)))
 
@@ -83,3 +81,6 @@
     (ref-set (:store this) empty-store))
   (node-exists? [this id]
     (-> this nodes (get id) boolean)))
+
+(defn make []
+  (STMLayer. (ref {}) nil))
