@@ -174,10 +174,11 @@
 (defn make-path
   "Given a step, construct a path of steps from the walk focus to this step's node."
   [step]
-  (loop [^Step step step, path nil]
-    (if step
-      (recur (source step) (conj path (assoc-record step :source nil)))
-      (when path (vec path)))))
+  (when step
+    (loop [^Step step step, path nil]
+      (if step
+        (recur (source step) (conj path (assoc-record step :source nil)))
+        (when path (vec path))))))
 
 (defn paths
   "Return all paths to a given node in walk."
@@ -192,5 +193,4 @@
 (defn intersection
   "Helper function to return the intersection between the ids of two walks."
   [walk1 walk2]
-  (set/intersection (set (:ids walk1))
-                    (set (:ids walk2))))
+  (seq (remove nil? (map (:include? walk2) (:ids walk1)))))

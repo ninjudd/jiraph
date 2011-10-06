@@ -1,6 +1,6 @@
 (ns jiraph.graph
-  (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
-        [useful.utils :only [memoize-deref adjoin with-adjustments map-entry]]
+  (:use [useful.map :only [into-map update-each filter-keys-by-val remove-vals map-to]]
+        [useful.utils :only [memoize-deref adjoin into-set with-adjustments map-entry]]
         [useful.fn :only [any to-fix]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
@@ -273,7 +273,7 @@
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer id]
-  (layer/get-incoming layer id))
+  (into-set #{} (layer/get-incoming layer id)))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."
