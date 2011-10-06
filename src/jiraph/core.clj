@@ -14,6 +14,16 @@
         (throw (java.io.IOException. (format "cannot find layer %s in open graph" layer-name))))
     (throw (java.io.IOException. (format "attempt to use a layer without an open graph")))))
 
+(defn layers
+  "Return the names of all layers in the current graph."
+  ([] (keys *graph*))
+  ([type]
+     (for [[name layer] *graph*
+           :let [meta (meta layer)]
+           :when (and (contains? (:types meta) type)
+                      (not (:hidden meta)))]
+       name)))
+
 (defn as-layer-map
   "Create a map of {layer-name, layer} pairs from the input. A keyword yields a
    single-entry map, an empty sequence operates on all layers, and a sequence of
@@ -69,3 +79,44 @@
   [& layers]
   (apply max 0 (for [layer (vals (as-layer-map layers))]
                  (or (graph/get-property layer :rev) 0))))
+
+(defn schema
+  "Return a map of fields for a given type to the metadata for each layer. If a subfield is
+  provided, then the schema returned is for the nested type within that subfield."
+  ([type]
+     (apply merge-with conj
+            (for [layer        (layers type)
+                  [field meta] (fields layer)]
+              {field {layer meta}})))
+  ([type subfield]
+     (apply merge-with conj
+            (for [layer        (keys (get (schema type) subfield))
+                  [field meta] (fields layer [subfield])]
+              {field {layer meta}}))))
+
+(alter-var-root #'schema #(with-meta (memoize-deref [#'*graph*] %) (meta %)))
+
+(defn layer-exists?
+  "Does the named layer exist in the current graph?"
+  [layer-name]
+  (contains? *graph* layer-name))
+
+(defn wrap-caching
+  "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
+   are collapsed so only the outer cache is used."
+  [f]
+  (let [vars [#'*graph* #'retro/*revision*]]
+    (fn []
+      (if *use-outer-cache*
+        (f)
+        (binding [*use-outer-cache* true
+                  get-node          (memoize-deref vars get-node)
+                  get-incoming      (memoize-deref vars get-incoming)
+                  get-revisions     (memoize-deref vars get-revisions)
+                  get-all-revisions (memoize-deref vars get-all-revisions)]
+          (f))))))
+
+(defmacro with-caching
+  "Enable caching for the given forms. See wrap-caching."
+  [& forms]
+  `((wrap-caching (fn [] ~@forms))))

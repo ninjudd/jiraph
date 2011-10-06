@@ -1,7 +1,7 @@
 (ns jiraph.graph
   (:use [useful.map :only [into-map update filter-keys-by-val remove-vals map-to]]
-        [useful.utils :only [memoize-deref adjoin with-adjustments]]
-        [useful.fn :only [any]]
+        [useful.utils :only [memoize-deref adjoin with-adjustments map-entry]]
+        [useful.fn :only [any to-fix]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
@@ -121,13 +121,21 @@
   ([layer id & [not-found]]
      (layer/get-node layer id not-found)))
 
+(let [sentinel (Object.)]
+  (defn find-node
+    "Get a node's data along with its id."
+    ([layer id]
+       (let [node (get-node layer id sentinel)]
+         (when-not (identical? node sentinel)
+           (map-entry id node))))))
+
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
   ([layer keyseq f & args]
      (if-let [query-fn (layer/query-fn layer keyseq f)]
        (apply query-fn args)
        (let [[id & keys] keyseq
-             node (layer/get-node id)]
+             node (get-node layer id)]
          (apply f (get-in node keys) args)))))
 
 (defn get-in-node
@@ -157,85 +165,76 @@
 
 (def ^{:dynamic true :private true} *compacting* false)
 
-(letfn [(edge-present? [m edge-id]
-          (let [edge (get m edge-id)]
-            (and edge (not (:deleted edge)))))]
-  (defn update-in-node [layer keyseq f & args]
-    (let [[id & keys] keyseq]
-      (letfn [(updater [keyseq f]
-                (layer/update-fn layer keyseq f))
-              (edge-incoming [old-edges new-edges]
-                ())
-              (node-incoming [old-node new-node]
-                )]
-        (if-let [update-fn (updater keyseq f)]
-          ;; maximally-optimized; the layer can do this exact thing well
-          (apply update-fn args)
-          (let [[one-up deepest] ((juxt butlast last) keyseq)]
-            (if-let [update-fn (updater one-up assoc)]
-              ;; they can replace this sub-node efficiently, at least
-              (update-fn deepest (apply f args (get-in-node layer keyseq)))
-              (let [old (get-node layer id)
-                    new (apply update-in old keyseq f args)]
-                (layer/assoc-node! layer id new)))))))))
+(letfn [(changed-edges [old-edges new-edges]
+          (reduce (fn [edges [edge-id edge]]
+                    (let [was-present (not (:deleted edge))
+                          is-present  (when-let [e (get edges edge-id)] (not (:deleted e)))]
+                      (if (= was-present is-present)
+                        (dissoc edges edge-id)
+                        (assoc-in edges [edge-id :deleted] was-present))))
+                  new-edges old-edges))
 
-(letfn [(incoming-adjustments [old-edges new-edges]
-          (with-adjustments #(set (map key (remove (comp :deleted val) %))) [old-edges new-edges]
-            {:add  (remove old-edges new-edges)
-             :drop (remove new-edges old-edges)}))]
+        (update-incoming! [layer [id & keys] old new]
+          (when (layer/manage-incoming? layer)
+            (doseq [[edge-id {:keys [deleted]}]
+                    (apply changed-edges
+                           (map (comp :edges (to-fix keys (partial assoc-in {} keys)))
+                                [old new]))]
+              ((if deleted layer/drop-incoming! layer/add-incoming!)
+               layer id edge-id))))]
 
-  (defn update-node!
-    "Update a node by calling function f with the old value and any supplied args."
-    [layer id f & args]
-    {:pre [(or (not (append-only? layer)) *compacting*)]}
-    (refuse-readonly)
-    (letfn [(assert-valid [node]
-              (assert (types-valid? layer id node))
-              (assert (edges-valid? layer (edges node))))]
-      (with-transaction [layer]
-        (let [changed-incoming (condp = f
-                                 adjoin (let [node (into-map args)]
-                                          (layer/update-node! layer id f args)
-                                          (assert-valid node)
-                                          #(into {}
-                                                 (for [[to-id edge] (edges node)]
-                                                   [(if (:deleted edge) :drop, :add)
-                                                    to-id])))
-                                 (let [old (layer/get-node layer id nil)]
-                                   (layer/update-node! layer id f args)
-                                   #(let [new (layer/get-node layer id nil)]
-                                      (assert-valid new)
-                                      (apply incoming-adjustments (map :edges [old new])))))]
-          (doseq [[k f!] {:add  layer/add-incoming!
-                          :drop layer/drop-incoming!}
-                  to-id (get changed-incoming k)]
-            (f! layer to-id id))))))
-
-  ;; TODO update this? toss it?
-  (defn append-edge!
-    [layer-name id to-id & attrs]
-    (append-node! layer-name id
-                  (if (single-edge? layer-name)
-                    {:edge (into-map :id to-id attrs)}
-                    {:edges {to-id (into-map attrs)}})))
-
-  (defn dissoc-node!
-    "Remove a node from a layer (incoming links remain)."
-    [layer id]
-    (refuse-readonly)
+  (defn update-in-node! [layer keys f & args]
+    (refuse-readonly layer)
     (with-transaction [layer]
-      (let [node  (layer/dissoc-node! layer id)]
-        (doseq [[to-id edge] (edges node)]
-          (if-not (:deleted edge)
-            (layer/drop-incoming! layer to-id id)))))))
+      (let [updater (partial layer/update-fn layer)]
+        (if-let [update! (updater keys f)]
+          ;; maximally-optimized; the layer can do this exact thing well
+          (let [{:keys [old new]} (apply update! args)]
+            (update-incoming! layer keys old new))
+          (if-let [update! (and (seq keys) ;; don't look for assoc-in of empty keys
+                                (updater (butlast keys) assoc))]
+            ;; they can replace this sub-node efficiently, at least
+            (let [old (get-in-node layer keys)
+                  new (apply f old args)]
+              (update! (last keys) new)
+              (update-incoming! layer keys old new))
+
+            ;; need some special logic for unoptimized top-level assoc/dissoc
+            (if-let [update! (and (not keys) ({assoc  layer/assoc-node!
+                                               dissoc layer/dissoc-node!} f))]
+              (let [[id new] args
+                    old (when (layer/manage-incoming? layer)
+                          (get-node layer id))]
+                (apply update! layer args)
+                (update-incoming! layer [id] old new))
+              (let [id  (first keys)
+                    old (get-node layer id)
+                    new (apply update-in old keys f args)]
+                (layer/assoc-node! layer id new)
+                (update-incoming! layer [id] old new)))))))))
+
+(defn update-node!
+  "Update a node by calling function f with the old value and any supplied args."
+  [layer id f & args]
+  (apply update-in-node! layer [id] f args))
+
+(defn dissoc-node!
+  "Remove a node from a layer (incoming links remain)."
+  [layer id]
+  (update-in-node! layer [] dissoc id))
+
+(defn assoc-node!
+  "Create or set a node with the given id and value."
+  [layer id value]
+  (update-in-node! layer [] assoc id value))
 
 (defn compact-node!
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
-  [layer-name id]
+  [layer id]
   (refuse-readonly)
   (binding [*compacting* true]
-    (layer/update-in-node! layer-name [id :edges]
-                           remove-vals [:deleted])))
+    (update-in-node! layer [id :edges]
+                     remove-vals :deleted)))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
@@ -246,97 +245,46 @@
 
 (defn node-valid?
   "Check if the given node is valid for the specified layer."
-  [layer-name id & attrs]
-  (let [attrs (into-map attrs)]
-    (and (or (nil? id) (types-valid? layer-name id attrs))
-         (edges-valid? layer-name attrs)
-         (layer/node-valid? (layer layer-name) attrs))))
+  [layer id attrs]
+  (and (or (nil? id) (types-valid? layer id attrs))
+       (edges-valid? layer attrs)
+       (layer/node-valid? layer attrs)))
 
 (defn verify-node
   "Assert that the given node is valid for the specified layer."
-  [layer-name id & attrs]
-  (let [attrs (into-map attrs)]
-    (when id
-      (assert (types-valid? layer-name id attrs)))
-    (assert (edges-valid? layer-name attrs))
-    (assert (layer/node-valid? (layer layer-name) attrs))))
-
-(defn layers
-  "Return the names of all layers in the current graph."
-  ([] (keys *graph*))
-  ([type]
-     (for [[name layer] *graph*
-           :let [meta (meta layer)]
-           :when (and (contains? (:types meta) type)
-                      (not (:hidden meta)))]
-       name)))
-
-(defn schema
-  "Return a map of fields for a given type to the metadata for each layer. If a subfield is
-  provided, then the schema returned is for the nested type within that subfield."
-  ([type]
-     (apply merge-with conj
-            (for [layer        (layers type)
-                  [field meta] (fields layer)]
-              {field {layer meta}})))
-  ([type subfield]
-     (apply merge-with conj
-            (for [layer        (keys (get (schema type) subfield))
-                  [field meta] (fields layer [subfield])]
-              {field {layer meta}}))))
-
-(alter-var-root #'schema #(with-meta (memoize-deref [#'jiraph.graph/*graph*] %) (meta %)))
-
-(defn layer-exists?
-  "Does the named layer exist in the current graph?"
-  [layer-name]
-  (contains? *graph* layer-name))
+  [layer id attrs]
+  (when id
+    (assert (types-valid? layer id attrs)))
+  (assert (edges-valid? layer attrs))
+  (assert (layer/node-valid? layer attrs)))
 
 (defn get-all-revisions
   "Return a seq of all revisions that have ever modified this node on this layer, even if the data has been
    subsequently compacted."
-  [layer-name id]
-  (filter pos? (layer/get-revisions (layer layer-name) id)))
+  [layer id]
+  (filter pos? (layer/get-revisions layer id)))
 
 (defn get-revisions
   "Return a seq of all revisions with data for this node."
-  [layer-name id]
+  [layer id]
   (reverse
-   (take-while pos? (reverse (layer/get-revisions (layer layer-name) id)))))
+   (take-while pos? (reverse (layer/get-revisions layer id)))))
 
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
-  [layer-name id]
-  (layer/get-incoming (layer layer-name) id))
-
-(defn wrap-caching
-  "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
-   are collapsed so only the outer cache is used."
-  [f]
-  (let [vars [#'jiraph.graph/*graph* #'retro/*revision*]]
-    (fn []
-      (if *use-outer-cache*
-        (f)
-        (binding [*use-outer-cache* true
-                  get-node          (memoize-deref vars get-node)
-                  get-incoming      (memoize-deref vars get-incoming)
-                  get-revisions     (memoize-deref vars get-revisions)
-                  get-all-revisions (memoize-deref vars get-all-revisions)]
-          (f))))))
-
-(defmacro with-caching
-  "Enable caching for the given forms. See wrap-caching."
-  [& forms]
-  `((wrap-caching (fn [] ~@forms))))
+  [layer id]
+  (layer/get-incoming layer id))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."
   [f]
   (bound-fn ([& args] (apply f args))))
 
-(wrap-multiple #'*read-wrappers*
-               node-ids node-count get-property current-revision
-               get-node node-exists? get-incoming)
-(wrap-multiple #'*write-wrappers*
-               update-node! optimize! truncate! set-property! update-property!
-               sync! add-node! append-node! assoc-node! compact-node! delete-node!)
+(comment these guys need to be updated and split up once we've figured out our
+         plan for wrapping, and also the split between graph and core.
+  (wrap-multiple #'*read-wrappers*
+                 node-id-seq node-count get-property current-revision
+                 get-node node-exists? get-incoming)
+  (wrap-multiple #'*write-wrappers*
+                 update-node! optimize! truncate! set-property! update-property!
+                 sync! add-node! append-node! assoc-node! compact-node! delete-node!))
