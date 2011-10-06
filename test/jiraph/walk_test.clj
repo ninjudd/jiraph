@@ -10,10 +10,10 @@
   (:import [jiraph Test$Node]))
 
 (def test-graph
-  {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-foo" :create true}) (raf/make))
-   :bar (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-bar" :create true}) (paf/make Test$Node))
-   :baz (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-baz" :create true}) (raf/make))
-   :stm (with-meta (stm/make) {:single-edge true})})
+  {:foo (bal/make :db (tokyo/make {:path "/tmp/jiraph-walk-test-foo" :create true}) :format (raf/make))
+   :bar (bal/make :db (tokyo/make {:path "/tmp/jiraph-walk-test-bar" :create true}) :format (paf/make Test$Node))
+   :baz (bal/make :db (tokyo/make {:path "/tmp/jiraph-walk-test-baz" :create true}) :format (raf/make))
+   :stm (stm/make {:single-edge true})})
 
 (defwalk full-walk
   :add?      true

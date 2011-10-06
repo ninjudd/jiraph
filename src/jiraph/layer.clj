@@ -14,6 +14,7 @@
   (sync!            [layer]            "Flush all layer changes to the storage medium.")
   (optimize!        [layer]            "Optimize underlying layer storage.")
   (truncate!        [layer]            "Removes all node data from the layer.")
+  (options          [layer]            "Return configuration options for layer.")
   (node-count       [layer]            "Return the total number of nodes in this layer.")
   (node-ids         [layer]            "Return a lazy sequence of all node ids in this layer.")
   (fields           [layer]
@@ -39,3 +40,8 @@
 (defprotocol Assoc
   "Jiraph assoc protocol"
   (assoc-node! [layer id attrs] "Associate attrs with a node."))
+
+(defrecord LayerOptions [types hidden single-edge append-only merge-ids])
+
+(defn make-layer-options [opts]
+  (into (LayerOptions. nil nil nil nil nil) opts))

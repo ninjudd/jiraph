@@ -1,7 +1,7 @@
 (ns jiraph.stm-layer
   (:use jiraph.layer
         retro.core
-        [useful.map :only [update]]
+        [useful.map :only [update into-map]]
         [useful.utils :only [adjoin]]))
 
 (defn- update-incoming [meta layer to-id from-id operation]
@@ -63,7 +63,7 @@
   (when-let [revs (:revs (get-meta layer id))]
     (->> *revision* (subseq revs >=) first second)))
 
-(defrecord STMLayer [data meta properties]
+(defrecord STMLayer [data meta properties layer-options]
   jiraph.layer/Layer
 
   (open [layer] nil)
@@ -124,6 +124,8 @@
   (drop-incoming! [layer id from-id]
     (dosync (alter meta update-incoming layer id from-id :drop)))
 
+  (options [layer] layer-options)
+
   retro.core/Revisioned
 
   (get-revision [layer] (get-property layer :rev))
@@ -134,5 +136,5 @@
 
   (txn-wrap [layer f] #(dosync (f))))
 
-(defn make []
-  (STMLayer. (ref {}) (ref {}) (ref {})))
+(defn make [& opts]
+  (STMLayer. (ref {}) (ref {}) (ref {}) (make-layer-options (into-map opts))))
