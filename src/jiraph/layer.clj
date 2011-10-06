@@ -1,18 +1,18 @@
 (ns jiraph.layer
   (:use [retro.core :only [*revision*]]
-        [useful.utils :only [adjoin]])
+        [useful.utils :only [adjoin]]
+        [clojure.stacktrace :only [print-trace-element]])
   (:import (java.util Map$Entry)))
 
-(def ^:dynamic *fallback-warnings* false)
+(def ^:dynamic *warn-on-fallback* false)
 
-(defn fallback-warning [layer impl]
-  (.printf *err* "Layer %s falling back on %s\n" (class layer) impl))
-
-(defmacro ^{:private true} fallback [impl]
-  `(do
-     (when *fallback-warnings*
-       (fallback-warning ~'layer '~impl))
-     ~impl))
+(defn fallback-warning []
+  (when *warn-on-fallback*
+    (let [stacktrace (seq (.getStackTrace (Exception.)))]
+      (binding [*out* *err*]
+        (print "Jiraph fallback warning: ")
+        (print-trace-element (second stacktrace))
+        (println)))))
 
 (defprotocol Enumerate
   (node-id-seq [layer]
@@ -137,30 +137,37 @@
     LayerMeta
     ;; default behavior: create specially-named regular nodes to hold metadata
     (get-layer-meta [layer key]
-      ((fallback get-node) layer (layer-meta-key key)))
+      (fallback-warning)
+      (get-node layer (layer-meta-key key) nil))
     (assoc-layer-meta! [layer key value]
-      ((fallback assoc-node!) layer (layer-meta-key key) value))
+      (fallback-warning)
+      (assoc-node! layer (layer-meta-key key) value))
 
     NodeMeta
     ;; default behavior: use specially-named layer-wide meta to fake node metadata
     (get-meta [layer node key]
-      ((fallback get-layer-meta) layer (node-meta-key node key)))
+      (fallback-warning)
+      (get-layer-meta layer (node-meta-key node key)))
     (assoc-meta! [layer node key val]
-      ((fallback assoc-layer-meta!) layer (node-meta-key node key) val))
+      (fallback-warning)
+      (assoc-layer-meta! layer (node-meta-key node key) val))
 
     UpdateMeta
     ;; default behavior: get old meta, apply f, set new value
     (update-meta! [layer node key f args]
-      ((fallback assoc-meta!) layer node key (apply f ((fallback get-meta) layer node key) args)))
+      (assoc-meta! layer node key (apply f (get-meta layer node key) args)))
 
     Incoming
     ;; default behavior: use node meta with special prefix to track incoming edges
     (get-incoming [layer id]
-      ((fallback get-meta) layer id (incoming-key id)))
+      (fallback-warning)
+      (get-meta layer id (incoming-key id)))
     (add-incoming! [layer id from-id]
-      ((fallback update-meta!) layer id (incoming-key id) conj from-id))
+      (fallback-warning)
+      (update-meta! layer id (incoming-key id) conj from-id))
     (drop-incoming! [layer id from-id]
-      ((fallback update-meta!) layer id (incoming-key id) disj from-id))))
+      (fallback-warning)
+      (update-meta! layer id (incoming-key id) disj from-id))))
 
 ;; these guys want a default/permanent sentinel
 (let [sentinel (Object.)]
@@ -175,12 +182,13 @@
 
     ;; we can simulate these for you, pretty inefficiently
     (truncate! [layer]
-      (let [dissoc! (fallback dissoc-node!)]
-        (doseq [id ((fallback node-id-seq) layer)]
-          (dissoc! layer id))))
+      (fallback-warning)
+      (doseq [id (node-id-seq layer)]
+        (dissoc-node! layer id)))
 
     (node-exists? [layer id]
-      (not= sentinel ((fallback get-node) layer id sentinel)))
+      (fallback-warning)
+      (not= sentinel (get-node layer id sentinel)))
 
     Preferences
     ;; opt in to managed-incoming, and let the layer set a :single-edge key to
@@ -205,16 +213,14 @@
   ;; Fallback behavior is the empty list. Jiraph does *not* automatically
   ;; track assoc'd and dissoc'd nodes for you in order to provide node-ids,
   ;; because that would be a huge performance hit.
-  (node-id-seq [layer]
-    ())
-
-  (node-seq [layer]
-    ())
+  (node-seq    [layer] ())
+  (node-id-seq [layer] ())
 
   Counted
   ;; default behavior: walk through all node ids, counting. not very fast
   (node-count [layer]
-    (apply + (map (constantly 1) ((fallback node-id-seq) layer))))
+    (fallback-warning)
+    (apply + (map (constantly 1) (node-id-seq layer))))
 
   Optimized
   ;; can't optimize anything
