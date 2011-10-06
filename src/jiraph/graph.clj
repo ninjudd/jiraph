@@ -10,7 +10,7 @@
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]))
 
-(def ^{:dynamic true} *read-only* false)
+(def ^{:dynamic true} *read-only* #{})
 
 (defn layer-meta
   "Fetch a metadata key from a layer."
@@ -46,26 +46,27 @@
   [rev & forms]
   `(retro/at-revision ~rev ~@forms))
 
-(defn read-only? []
-  *read-only*)
+(defn read-only? [layer]
+  (*read-only* layer))
 
-(defmacro with-readonly [& body]
-  `(binding [*read-only* true]
+(defmacro with-readonly [layers & body]
+  `(binding [*read-only* (into *read-only* layers)]
      ~@body))
 
-(defn- refuse-readonly []
-  (when (read-only?)
+(defn- refuse-readonly [layers]
+  (when (some read-only? layers)
     (throw (IllegalStateException. "Can't write in read-only mode"))))
 
 (defmacro with-transaction
   "Execute forms within a transaction on the specified layers."
   [layers & forms]
-  `(if (read-only?)
-     (do ~@forms)
-     ((reduce
-       retro/wrap-transaction
-       (fn [] ~@forms)
-       ~layers))))
+  `(let [layers# ~layers]
+     (if (some read-only? layers#)
+      (do ~@forms)
+      ((reduce
+        retro/wrap-transaction
+        (fn [] ~@forms)
+        layers#)))))
 
 (def abort-transaction retro/abort-transaction)
 
@@ -84,7 +85,7 @@
 (defn truncate!
   "Remove all nodes from the specified layers."
   [& layers]
-  (refuse-readonly)
+  (refuse-readonly layers)
   (doseq [layer layers]
     (layer/truncate! layer)))
 
@@ -106,13 +107,13 @@
 (defn set-property!
   "Store a layer-wide property."
   [layer key val]
-  (refuse-readonly)
+  (refuse-readonly [layer])
   (layer/assoc-layer-meta! layer key val))
 
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
   [layer key f & args]
-  (refuse-readonly)
+  (refuse-readonly [layer])
   (let [val (get-property layer key)]
     (set-property! layer key (apply f val args))))
 
@@ -184,7 +185,7 @@
                layer id edge-id))))]
 
   (defn update-in-node! [layer keys f & args]
-    (refuse-readonly layer)
+    (refuse-readonly [layer])
     (with-transaction [layer]
       (let [updater (partial layer/update-fn layer)]
         (if-let [update! (updater keys f)]
@@ -231,7 +232,7 @@
 (defn compact-node!
   "Compact a node by removing deleted edges. This will also collapse appended revisions."
   [layer id]
-  (refuse-readonly)
+  (refuse-readonly [layer])
   (binding [*compacting* true]
     (update-in-node! layer [id :edges]
                      remove-vals :deleted)))
