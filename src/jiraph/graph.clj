@@ -177,25 +177,39 @@
   (apply max 0 (for [layer (if (empty? layers) (keys *graph*) layers)]
                  (or (get-property layer :rev) 0))))
 
+(defn current-merge-ids [] (memoize (or *merge-ids* (constantly nil))))
+
 (defn get-node
   "Fetch a node's data from this layer, if the layer contains an fn for :merge-ids,
   the edges of node-ids returned by calling (merge-ids id) will me merged into :edges"
   [layer-name id]
   (let [layer         (layer layer-name)
-        get-merge-ids (memoize (or *merge-ids* (constantly nil)))]
+        get-merge-ids (current-merge-ids)]
     (when-let [node (if-let [merge-ids (get-merge-ids id)]
-                    (reduce (fn [merged id]
-                              (let [node (layer/get-node layer id)]
-                                (adjoin (if (= id (peek merge-ids))
-                                          (assoc node :edges (:edges merged))
-                                          merged)
-                                        {:edges (into {} (for [[to-id attrs] (:edges node)]
-                                                           (let [head-id (peek (get-merge-ids to-id))]
-                                                             [head-id (assoc attrs :id head-id)])))})))
-                            {}
-                            merge-ids)
-                    (layer/get-node layer id))]
+                      (reduce (fn [merged id]
+                                (let [node (layer/get-node layer id)]
+                                  (adjoin (if (= id (peek merge-ids))
+                                            (assoc node :edges (:edges merged))
+                                            merged)
+                                          {:edges (into {} (for [[to-id attrs] (:edges node)]
+                                                             (let [head-id (peek (get-merge-ids to-id))]
+                                                               [head-id (assoc (merge {:deleted nil} attrs)
+                                                                          :id head-id)])))})))
+                              {}
+                              merge-ids)
+                      (layer/get-node layer id))]
       (assoc node :id id))))
+
+(defn get-incoming
+  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+  [layer-name id]
+  (let [layer         (layer layer-name)
+        get-merge-ids (current-merge-ids)]
+    (into-set #{}
+              (if-let [merge-ids (get-merge-ids id)]
+                (mapcat (partial layer/get-incoming layer)
+                        merge-ids)
+                (layer/get-incoming layer id)))))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
@@ -388,11 +402,6 @@
   [layer-name id]
   (reverse
    (take-while pos? (reverse (layer/get-revisions (layer layer-name) id)))))
-
-(defn get-incoming
-  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
-  [layer-name id]
-  (into-set #{} (layer/get-incoming (layer layer-name) id)))
 
 (defn wrap-caching
   "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
