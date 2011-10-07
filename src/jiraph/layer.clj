@@ -131,7 +131,7 @@
 ;; Meta-related protocols
 (letfn [(layer-meta-key [id] (str "_" id))
         (node-meta-key [node key] (str "_" node "_" key))
-        (incoming-key [id] (node-meta-key id "incoming"))]
+        (incoming-key [id] "incoming")]
   (extend-type Object
     LayerMeta
     ;; default behavior: create specially-named regular nodes to hold metadata

@@ -182,7 +182,7 @@
                            (map (comp :edges (to-fix keys (partial assoc-in {} keys)))
                                 [old new]))]
               ((if deleted layer/drop-incoming! layer/add-incoming!)
-               layer id edge-id))))]
+               layer edge-id id))))]
 
   (defn update-in-node! [layer keys f & args]
     (refuse-readonly [layer])
