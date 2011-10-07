@@ -1,5 +1,5 @@
 (ns jiraph.stm-layer2
-  (refer-clojure :exclude [meta])
+  (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta]]
         [retro.core   :only [WrappedTransactional Revisioned]]))
 
@@ -42,14 +42,6 @@
   (dissoc-node! [this k]
     (alter (:store this)
            update-in [:scratch :nodes] dissoc k))
-
-  Optimized
-  (query-fn [this ks f]
-    nil)
-  (update-fn [this ks f]
-    (fn [& args]
-      (apply alter store
-             update-in (concat [:scratch :nodes] ks) f args)))
 
   Revisioned
   (get-revisions [this _] ;; we store all nodes at every revision

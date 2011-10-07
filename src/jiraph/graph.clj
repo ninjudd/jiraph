@@ -187,7 +187,8 @@
   (defn update-in-node! [layer keys f & args]
     (refuse-readonly [layer])
     (with-transaction [layer]
-      (let [updater (partial layer/update-fn layer)]
+      (let [updater (partial layer/update-fn layer)
+            keys (seq keys)]
         (if-let [update! (updater keys f)]
           ;; maximally-optimized; the layer can do this exact thing well
           (let [{:keys [old new]} (apply update! args)]

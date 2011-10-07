@@ -163,10 +163,10 @@
       (get-meta layer id (incoming-key id)))
     (add-incoming! [layer id from-id]
       (fallback-warning)
-      (update-meta! layer id (incoming-key id) conj from-id))
+      (update-meta! layer id (incoming-key id) conj [from-id]))
     (drop-incoming! [layer id from-id]
       (fallback-warning)
-      (update-meta! layer id (incoming-key id) disj from-id))))
+      (update-meta! layer id (incoming-key id) disj [from-id]))))
 
 ;; these guys want a default/permanent sentinel
 (let [sentinel (Object.)]
