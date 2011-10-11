@@ -1,6 +1,6 @@
 (ns jiraph.masai-layer
-  (:refer-clojure :exclude [sync count])
-  (:use jiraph.layer
+  (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta]]
+        [retro.core   :only [WrappedTransactional Revisioned]]
         [clojure.stacktrace :only [print-cause-trace]]
         [retro.core :only [*revision*]]
         [useful.utils :only [if-ns]]
@@ -11,17 +11,8 @@
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
            [clojure.lang LineNumberingPushbackReader]))
 
-(def meta-prefix     "_")
-(def internal-prefix "__")
-(def property-prefix "___")
-
-(defn- meta-key [id]
-  (str meta-prefix id))
-
-(def count-key (str internal-prefix "count"))
-
-(defn- property-key [key]
-  (str property-prefix key))
+(defn- layer-meta-key [key] (str "_" key))
+(defn- node-meta-key [id key] (str "_" id "_" key))
 
 (declare meta-len)
 (defn- get-meta [layer key rev]
@@ -83,16 +74,60 @@
 (defn- dec-count! [layer]
   (db/inc! (:db layer) count-key -1))
 
-(defrecord MasaiLayer [db format meta-format]
-  jiraph.layer/Layer
+(defrecord MasaiLayer [db format node-meta-format layer-meta-format]
+  Enumerate
+  (node-ids-seq [this]
+    (remove #(.startsWith % "_") (db/key-seq db)))
+  (node-seq [this]
+    (map #(get-node layer % nil) (node-id-seq this)))
 
-  (open      [layer] (db/open      db))
-  (close     [layer] (db/close     db))
-  (sync!     [layer] (db/sync!     db))
-  (optimize! [layer] (db/optimize! db))
+  Counted
+  (node-count [this]
+    (or (db/fetch db count-key) 0))
 
-  (node-count [layer]
-    (db/inc! db count-key 0))
+  LayerMeta
+  (get-layer-meta [this key]
+    (f/decode layer-meta-format
+              (db/get db (layer-meta-key key))))
+  (assoc-layer-meta! [this key val]
+    (db/put! db (layer-meta-key key)
+             (f/encode layer-meta-format val)))
+
+  NodeMeta
+  (get-meta [this id key]
+    (f/decode node-meta-format
+              (db/get db (node-meta-key id key))))
+  (assoc-meta! [this id val]
+    (db/put! db (node-meta-key id key)
+             (f/encode node-meta-format val)))
+
+  Basic
+  (get-node [this id]
+    (if *revision*
+      (when-let [length (len this id *revision*)]
+        (f/decode format (db/get db id) 0 length))
+      (f/decode format (db/get db id))))
+  (assoc-node! [this id attrs]
+    (let [data (f/encode format (make-node attrs))]
+      (db/put! db id data)
+      (reset-len! this id (alength data))
+      (f/decode format data)))
+  (dissoc-node! [this id]
+    (let [node (get-node this id)]
+      (when (db/delete! db id)
+        (dec-count! layer)
+        (reset-len! layer id)
+        node)))
+
+  Layer
+  (open [layer]
+    (db/open db))
+  (close [layer]
+    (db/close db))
+  (sync! [layer]
+    (db/sync! db))
+  (optimize! [layer]
+    (db/optimize! db))
 
   (node-ids [layer]
     (remove #(.startsWith % meta-prefix) (db/key-seq db)))
@@ -108,20 +143,8 @@
          true
          (catch Exception e)))
 
-  (get-property  [layer key]
-    (if-let [bytes (db/get db (property-key key))]
-      (read-string (String. bytes))))
 
-  (set-property! [layer key val]
-    (let [bytes (.getBytes (pr-str val))]
-      (db/put! db (property-key key) bytes)
-      val))
 
-  (get-node [layer id]
-    (if *revision*
-      (when-let [length (len layer id *revision*)]
-        (f/decode format (db/get db id) 0 length))
-      (f/decode format (db/get db id))))
 
   (node-exists? [layer id]
     (< 0 (len layer id *revision*)))
@@ -134,18 +157,9 @@
         (set-len! layer id (alength data))
         (f/decode format data))))
 
-  (set-node! [layer id attrs]
-    (let [data (f/encode format (make-node attrs))]
-      (db/put! db id data)
-      (reset-len! layer id (alength data))
-      (f/decode format data)))
 
-  (delete-node! [layer id]
-    (let [node (get-node layer id)]
-      (when (db/delete! db id)
-        (dec-count! layer)
-        (reset-len! layer id)
-        node)))
+
+
 
   (get-revisions [layer id] (:rev (get-meta layer (meta-key id) *revision*)))
   (get-incoming  [layer id] (:in  (get-meta layer (meta-key id) *revision*)))

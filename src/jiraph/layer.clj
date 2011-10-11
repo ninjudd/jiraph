@@ -37,13 +37,13 @@
     "Store layer-wide meta."))
 
 (defprotocol NodeMeta
-  (get-meta [layer node key]
+  (get-meta [layer id key]
     "Fetch the metadata for a specific node.")
-  (assoc-meta! [layer node key val]
+  (assoc-meta! [layer id key val]
     "Set the metadata for a node."))
 
 (defprotocol UpdateMeta
-  (update-meta! [layer node key f args]
+  (update-meta! [layer id key f args]
     "Update the metadata for a node."))
 
 (defprotocol Incoming
@@ -139,7 +139,7 @@
 
 ;; Meta-related protocols
 (letfn [(layer-meta-key [id] (str "_" id))
-        (node-meta-key [node key] (str "_" node "_" key))
+        (node-meta-key [id key] (str "_" node "_" key))
         (incoming-key [id] "incoming")]
   (extend-type Object
     ChangeLog
@@ -164,17 +164,17 @@
 
     NodeMeta
     ;; default behavior: use specially-named layer-wide meta to fake node metadata
-    (get-meta [layer node key]
+    (get-meta [layer id key]
       (fallback-warning)
-      (get-layer-meta layer (node-meta-key node key)))
-    (assoc-meta! [layer node key val]
+      (get-layer-meta layer (node-meta-key id key)))
+    (assoc-meta! [layer id key val]
       (fallback-warning)
-      (assoc-layer-meta! layer (node-meta-key node key) val))
+      (assoc-layer-meta! layer (node-meta-key id key) val))
 
     UpdateMeta
     ;; default behavior: get old meta, apply f, set new value
-    (update-meta! [layer node key f args]
-      (assoc-meta! layer node key (apply f (get-meta layer node key) args)))
+    (update-meta! [layer id key f args]
+      (assoc-meta! layer id key (apply f (get-meta layer id key) args)))
 
     Incoming
     ;; default behavior: use node meta with special prefix to track incoming edges
@@ -207,18 +207,18 @@
 
     (node-exists? [layer id]
       (fallback-warning)
-      (not= sentinel (get-node layer id sentinel)))
-
-    Preferences
-    ;; opt in to managed-incoming, and let the layer set a :single-edge key to
-    ;; indicate it should be in single-edge mode
-    (manage-incoming? [layer] true)
-    (manage-changelog? [layer] true)
-    (single-edge? [layer]
-      (:single-edge layer))))
+      (not= sentinel (get-node layer id sentinel)))))
 
 ;; Don't need any special closures here
 (extend-type Object
+  Preferences
+  ;; opt in to managed-incoming, and let the layer set a :single-edge key to
+  ;; indicate it should be in single-edge mode
+  (manage-incoming?  [layer] true)
+  (manage-changelog? [layer] true)
+  (single-edge? [layer]
+    (:single-edge layer))
+
   Schema
   ;; default behavior: no fields, all nodes valid
   (fields
@@ -232,8 +232,9 @@
   ;; Fallback behavior is the empty list. Jiraph does *not* automatically
   ;; track assoc'd and dissoc'd nodes for you in order to provide node-ids,
   ;; because that would be a huge performance hit.
-  (node-seq    [layer] ())
   (node-id-seq [layer] ())
+  (node-seq [layer]
+    (map #(get-node layer % nil) (node-id-seq layer)))
 
   Counted
   ;; default behavior: walk through all node ids, counting. not very fast
@@ -243,8 +244,8 @@
 
   Optimized
   ;; can't optimize anything
-  (update-fn [layer keyseq f] nil)
-  (query-fn  [layer keyseq f] nil))
+  (query-fn  [layer keyseq f] nil)
+  (update-fn [layer keyseq f] nil))
 
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
