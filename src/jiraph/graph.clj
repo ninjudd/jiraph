@@ -370,7 +370,7 @@
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer-name id]
-  (into-set #{} (layer/get-incoming (layer layer-name) id)))
+  (layer/get-incoming (layer layer-name) id))
 
 (defn wrap-caching
   "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls

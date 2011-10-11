@@ -3,7 +3,7 @@
   :dependencies [[clojure "1.2.0"]
                  [useful "0.7.0"]
                  [masai "0.5.3"]
-                 [cereal "0.1.8"]
+                 [cereal "0.1.9"]
                  [retro "0.5.2"]
                  [ego "0.1.5"]]
   :dev-dependencies [[protobuf "0.5.0-beta1"]
