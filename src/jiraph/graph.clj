@@ -193,14 +193,16 @@
         (if-let [update! (updater keys f)]
           ;; maximally-optimized; the layer can do this exact thing well
           (let [{:keys [old new]} (apply update! args)]
-            (update-incoming! layer keys old new))
+            (update-incoming! layer keys old new)
+            (update-changelog! layer (first keys)))
           (if-let [update! (and (seq keys) ;; don't look for assoc-in of empty keys
                                 (updater (butlast keys) assoc))]
             ;; they can replace this sub-node efficiently, at least
             (let [old (get-in-node layer keys)
                   new (apply f old args)]
               (update! (last keys) new)
-              (update-incoming! layer keys old new))
+              (update-incoming! layer keys old new)
+              (update-changelog! layer (first keys)))
 
             ;; need some special logic for unoptimized top-level assoc/dissoc
             (if-let [update! (and (not keys) ({assoc  layer/assoc-node!
@@ -209,12 +211,14 @@
                     old (when (layer/manage-incoming? layer)
                           (get-node layer id))]
                 (apply update! layer args)
-                (update-incoming! layer [id] old new))
+                (update-incoming! layer [id] old new)
+                (update-changelog! layer id))
               (let [id  (first keys)
                     old (get-node layer id)
                     new (apply update-in old keys f args)]
                 (layer/assoc-node! layer id new)
-                (update-incoming! layer [id] old new)))))))))
+                (update-incoming! layer [id] old new)
+                (update-changelog! layer id)))))))))
 
 (defn update-in-node
   "Functional version of update-in-node! for use in a transaction."

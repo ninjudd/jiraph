@@ -150,7 +150,8 @@
     (max-revision [layer]
       (-> layer
           (retro/at-revision nil)
-          (get-layer-meta "revision-id")))
+          (get-layer-meta "revision-id")
+          (or 0)))
 
     LayerMeta
     ;; default behavior: create specially-named regular nodes to hold metadata
@@ -256,7 +257,7 @@
   [layer]
   (let [[rev max] ((juxt retro/current-revision max-revision) layer)]
     (if rev
-      (if (and max (<= rev max))
+      (if (and max (< rev max))
         (retro/empty-queue layer)
         (retro/at-revision layer (inc rev)))
       (if max
