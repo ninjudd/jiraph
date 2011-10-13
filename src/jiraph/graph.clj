@@ -183,7 +183,7 @@
               (set-property! layer "revision-id" rev-id)
               (when node-id
                 (layer/update-meta! layer node-id "affected-by" conj [rev-id])
-                (update-property! layer (str "changed-ids-" rev-id) conj [node-id])))))]
+                (update-property! layer (str "changed-ids-" rev-id) conj node-id)))))]
 
   (defn update-in-node! [layer keys f & args]
     (refuse-readonly [layer])
@@ -298,7 +298,10 @@
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer id]
-  (into-set #{} (layer/get-incoming layer id)))
+  (let [incoming (layer/get-incoming layer id)]
+    (if (map? incoming)
+      (into-set #{} incoming)
+      incoming)))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."
