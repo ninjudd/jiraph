@@ -1,19 +1,21 @@
 (ns jiraph.stm-layer2
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta]]
-        [retro.core   :only [WrappedTransactional Revisioned]]))
+  (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta
+                             ChangeLog skip-applied-revs max-revision]]
+        [retro.core   :only [WrappedTransactional TransactionHooks Revisioned]]
+        [useful.fn    :only [given]]))
 
 (def empty-store {:revisions (sorted-map-by >)})
 
 (defn current-rev [layer]
   (or (:revision layer)
-      (first (keys (-> layer :store deref :revisions)))))
+      (max-revision layer)))
 
 (defn now [layer]
-  (-> layer :store deref :revisions (get (current-rev layer))))
+  (-> layer :store deref (get (current-rev layer))))
 
-(def nodes (comp :nodes now))
-(def meta (comp :meta now))
+(def ^{:private true} nodes (comp :nodes now))
+(def ^{:private true} meta (comp :meta now))
 
 (defrecord STMLayer [store revision]
   Enumerate
@@ -30,7 +32,7 @@
   (get-layer-meta [this k]
     (-> this meta (get k)))
   (assoc-layer-meta! [this k v]
-    (alter (:store this)
+    (alter (:store this) ;; TODO make this work when no revision?
            assoc-in [:scratch :meta k] v))
 
   Basic
@@ -44,25 +46,25 @@
            update-in [:scratch :nodes] dissoc k))
 
   Revisioned
-  (get-revisions [this _] ;; we store all nodes at every revision
-    (map key (subseq @(:store this) <= (current-rev this))))
   (at-revision [this rev]
     (STMLayer. (:store this) rev))
   (current-revision [this]
     (current-rev this))
 
+  TransactionHooks
+  (before-mutate [this]
+    (let [pending (skip-applied-revs this)]
+      (-> this
+          (skip-applied-revs)
+          (given (comp seq :queue)
+                 update-in [:store] alter (fn [store]
+                                            (let [max-rev (max-revision this)]
+                                              (assoc store (inc max-rev)
+                                                     (get store max-rev))))))))
+
   WrappedTransactional
   (txn-wrap [this f]
-    #(dosync
-      (alter store assoc
-             :scratch (now this))
-      (let [ret (f)]
-        (alter store
-               (fn [store]
-                 (-> store
-                     (assoc-in [:revisions (inc (current-rev this))] (:scratch store))
-                     (dissoc :scratch))))
-        ret)))
+    #(dosync (f)))
 
   Layer
   (open [this] nil)

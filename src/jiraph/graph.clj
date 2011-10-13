@@ -40,12 +40,6 @@
 (defn filter-edges [pred node]
   (select-keys (edges node) (filter-edge-ids pred node)))
 
-(defmacro at-revision
-  "Execute the given forms with the graph at revision rev. Can be used in to mark changes with a given
-   revision, or rewind the state of the graph to a given revision."
-  [rev & forms]
-  `(retro/at-revision ~rev ~@forms))
-
 (defn read-only? [layer]
   (*read-only* layer))
 
@@ -54,19 +48,19 @@
      ~@body))
 
 (defn- refuse-readonly [layers]
-  (when (some read-only? layers)
-    (throw (IllegalStateException. "Can't write in read-only mode"))))
+  (doseq [layer layers]
+    (if (read-only? layer)
+      (throw (IllegalStateException.
+              (format "Can't write to %s in read-only mode" layer)))
+      (retro/modify! layer))))
 
 (defmacro with-transaction
   "Execute forms within a transaction on the specified layers."
   [layers & forms]
-  `(let [layers# ~layers]
-     (if (some read-only? layers#)
-      (do ~@forms)
-      ((reduce
-        retro/wrap-transaction
-        (fn [] ~@forms)
-        layers#)))))
+  `((reduce ;; TODO is this right? Or do we need transactions for read-only mode?
+     retro/wrap-transaction
+     (fn [] ~@forms)
+     (remove read-only? ~layers))))
 
 (def abort-transaction retro/abort-transaction)
 
@@ -113,7 +107,6 @@
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
   [layer key f & args]
-  (refuse-readonly [layer])
   (let [val (get-property layer key)]
     (set-property! layer key (apply f val args))))
 
@@ -182,7 +175,15 @@
                            (map (comp :edges (to-fix keys (partial assoc-in {} keys)))
                                 [old new]))]
               ((if deleted layer/drop-incoming! layer/add-incoming!)
-               layer edge-id id))))]
+               layer edge-id id))))
+
+        (update-changelog! [layer node-id]
+          (when (layer/manage-changelog? layer)
+            (when-let [rev-id (retro/current-revision layer)]
+              (set-property! layer "revision-id" rev-id)
+              (when node-id
+                (layer/update-meta! layer node-id "affected-by" conj [rev-id])
+                (update-property! layer (str "changed-ids-" rev-id) conj [node-id])))))]
 
   (defn update-in-node! [layer keys f & args]
     (refuse-readonly [layer])
@@ -215,28 +216,46 @@
                 (layer/assoc-node! layer id new)
                 (update-incoming! layer [id] old new)))))))))
 
-(defn update-node!
-  "Update a node by calling function f with the old value and any supplied args."
-  [layer id f & args]
-  (apply update-in-node! layer [id] f args))
+(defn update-in-node
+  "Functional version of update-in-node! for use in a transaction."
+  [layer keys f & args]
+  (retro/enqueue layer #(apply update-in-node! % keys f args)))
 
-(defn dissoc-node!
-  "Remove a node from a layer (incoming links remain)."
-  [layer id]
-  (update-in-node! layer [] dissoc id))
+(do (defn update-node!
+      "Update a node by calling function f with the old value and any supplied args."
+      [layer id f & args]
+      (apply update-in-node! layer [id] f args))
+    (defn update-node
+      "Functional version of update-node! for use in a transaction."
+      [layer id f & args]
+      (retro/enqueue layer #(apply update-node! % id f args))))
 
-(defn assoc-node!
-  "Create or set a node with the given id and value."
-  [layer id value]
-  (update-in-node! layer [] assoc id value))
+(do (defn dissoc-node!
+      "Remove a node from a layer (incoming links remain)."
+      [layer id]
+      (update-in-node! layer [] dissoc id))
+    (defn dissoc-node
+      "Functional version of update-node! for use in a transaction."
+      [layer id]
+      (retro/enqueue layer #(dissoc-node! % id))))
 
-(defn compact-node!
-  "Compact a node by removing deleted edges. This will also collapse appended revisions."
-  [layer id]
-  (refuse-readonly [layer])
-  (binding [*compacting* true]
-    (update-in-node! layer [id :edges]
-                     remove-vals :deleted)))
+(do (defn assoc-node!
+      "Create or set a node with the given id and value."
+      [layer id value]
+      (update-in-node! layer [] assoc id value))
+    (defn assoc-node
+      "Functional version of assoc-node! for use in a transaction."
+      [layer id value]
+      (retro/enqueue layer #(assoc-node! % id value))))
+
+(do (defn assoc-in-node!
+      "Set attributes inside of a node."
+      [layer keys value]
+      (update-in-node! layer (butlast keys) assoc (last keys) value))
+    (defn assoc-in-node
+      "Functional version of assoc-in-node! for use in a transaction."
+      [layer keys value]
+      (retro/enqueue layer #(assoc-in-node! % keys value))))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."

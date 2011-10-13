@@ -1,6 +1,7 @@
 (ns jiraph.layer
   (:use [useful.utils :only [adjoin]]
         [clojure.stacktrace :only [print-trace-element]])
+  (:require [retro.core :as retro])
   (:import (java.util Map$Entry)))
 
 (def ^:dynamic *warn-on-fallback* false)
@@ -115,16 +116,24 @@
     "Optimize underlying layer storage.")
   (truncate! [layer]
     "Removes all node data from the layer.")
-  (get-revisions [layer id]
-    "Return all revision ids for a given node.")
   (node-exists? [layer id]
     "Check if a node exists on this layer."))
+
+(defprotocol ChangeLog
+  (get-revisions [layer id]
+    "The revisions that changed the given node.")
+  (get-changed-ids [layer rev]
+    "The nodes changed by the given revision.")
+  (max-revision [layer]
+    "The most recent revision of this layer, disregarding `at-revision` restrictions."))
 
 (defprotocol Preferences
   "Indicate to Jiraph what things you want it to do for you. These preferences should not
   change while the system is running; Jiraph may choose to cache any of them."
   (manage-incoming? [layer]
     "Should Jiraph decide when to add/drop incoming edges?")
+  (manage-changelog? [layer]
+    "Should Jiraph store changelog information for you?")
   (single-edge? [layer]
     "Is it illegal to have more than one outgoing edge per node on this layer?"))
 
@@ -133,6 +142,16 @@
         (node-meta-key [node key] (str "_" node "_" key))
         (incoming-key [id] "incoming")]
   (extend-type Object
+    ChangeLog
+    (get-revisions [layer id]
+      (get-meta layer id "affected-by"))
+    (get-changed-ids [layer rev]
+      (get-layer-meta layer (str "changed-ids-" rev)))
+    (max-revision [layer]
+      (-> layer
+          (retro/at-revision nil)
+          (get-layer-meta "revision-id")))
+
     LayerMeta
     ;; default behavior: create specially-named regular nodes to hold metadata
     (get-layer-meta [layer key]
@@ -163,7 +182,7 @@
       (get-meta layer id (incoming-key id)))
     (add-incoming! [layer id from-id]
       (fallback-warning)
-      (update-meta! layer id (incoming-key id) conj [from-id]))
+      (update-meta! layer id (incoming-key id) (fnil conj #{}) [from-id]))
     (drop-incoming! [layer id from-id]
       (fallback-warning)
       (update-meta! layer id (incoming-key id) disj [from-id]))))
@@ -193,7 +212,7 @@
     ;; opt in to managed-incoming, and let the layer set a :single-edge key to
     ;; indicate it should be in single-edge mode
     (manage-incoming? [layer] true)
-
+    (manage-changelog? [layer] true)
     (single-edge? [layer]
       (:single-edge layer))))
 
@@ -228,3 +247,19 @@
 
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
+
+(defn skip-applied-revs
+  "Useful building block for skipping applied revisions. Calling this on a layer
+  will empty the layer's queue if the revision has already been applied; it
+  will otherwise increment the layer's revision to point to the to-be-written
+  revision number."
+  [layer]
+  (let [[rev max] ((juxt retro/current-revision max-revision) layer)]
+    (if rev
+      (if (and max (<= rev max))
+        (retro/empty-queue layer)
+        (retro/at-revision layer (inc rev)))
+      (if max
+        (throw (IllegalStateException.
+                "Trying to write to revisioned layer without a revision set."))
+        layer))))
