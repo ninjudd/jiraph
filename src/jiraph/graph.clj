@@ -213,9 +213,11 @@
                 (apply update! layer args)
                 (update-incoming! layer [id] old new)
                 (update-changelog! layer id))
-              (let [id  (first keys)
+              (let [[id & keys] keys
                     old (get-node layer id)
-                    new (apply update-in old keys f args)]
+                    new (if keys
+                          (apply update-in old keys f args)
+                          (apply f old args))]
                 (layer/assoc-node! layer id new)
                 (update-incoming! layer [id] old new)
                 (update-changelog! layer id)))))))))
