@@ -1,4 +1,4 @@
-(ns jiraph.stm-layer2
+(ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta
                              ChangeLog skip-applied-revs max-revision]]
