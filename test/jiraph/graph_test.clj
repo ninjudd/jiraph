@@ -1,4 +1,4 @@
-(ns jiraph.new-graph-test
+(ns jiraph.graph-test
   (:use clojure.test jiraph.graph
         [retro.core :as retro :only [dotxn at-revision]])
   (:require [jiraph.stm-layer :as stm]
@@ -51,4 +51,25 @@
         (is (= #{"mike" "charles"}
                (set (layer/get-changed-ids (rev 2) 2)))))
       (testing "max-revision"
-        (is (= 2 (layer/max-revision master)))))))
+        (is (= 2 (layer/max-revision master)))
+        (is (= 2 (layer/max-revision (rev 1))))))
+
+    (testing "Can't rewrite history"
+      (dotxn (rev 0)
+        (-> (rev 0)
+            (assoc-node "donald" {:age 72})))
+      (doseq [r rev]
+        (is (nil? (get-node r "donald")))))
+
+    (testing "Transaction safety"
+      (testing "Can't mutate active layer while building a transaction"
+        (is (thrown? Exception
+                     (dotxn (rev 2)
+                       (doto (rev 2)
+                         (assoc-node! "stevie" {:age 2}))))))
+      (testing "Can't mutate other layer while committing a transaction"
+        (is (thrown? Exception
+                     (dotxn (rev 2)
+                       (-> (rev 2)
+                           (retro/enqueue (fn [_]
+                                            (assoc-node! (rev 4) "stevie" {:age 2})))))))))))
