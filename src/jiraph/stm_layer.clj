@@ -6,6 +6,28 @@
                              get-queue at-revision current-revision]]
         [useful.fn    :only [given]]))
 
+(comment
+  The STM layer stores a single ref, pointing to a series of whole-layer
+  snapshots over time, one per committed revision. Each snapshot contains
+  a :nodes section and a :meta section - the meta is managed entirely by
+  jiraph.graph. Note that while metadata is revisioned, it does not keep a
+  changelog like nodes do, so you can't meaningfully read metadata from a
+  revision in the future (which you can do for nodes).
+
+  The layer also tracks a current revision, to allow any snapshot to be
+  viewed as if it were the full graph.
+
+  So a sample STM layer might look like the following.
+
+  {:revision 2
+   :store (ref {0 {}
+                1 {:meta {"some-key" "some-value"}
+                   :nodes {"profile-4" {:name "Rita" :edges {"profile-9" {:rel :child}}}}}
+                2 {:meta {"some-key" "other-value"}
+                   :nodes {"profile-4" {:name "Rita" :edges {"profile-9" {:rel :child}}
+                                        :age 39}
+                           "profile-9" {:name "William"}}}})})
+
 (def empty-store (sorted-map-by >))
 
 (defn current-rev [layer]
