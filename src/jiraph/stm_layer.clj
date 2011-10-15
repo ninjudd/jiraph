@@ -102,10 +102,11 @@
   Layer
   (open [this]
     (when filename
-      (try
-        (doto this
-          (-> :store (ref-set (read-string (slurp filename)))))
-        (catch FileNotFoundException e this))))
+      (dosync
+       (try
+         (doto this
+           (-> :store (ref-set (read-string (slurp filename)))))
+         (catch FileNotFoundException e this)))))
   (close [this]
     (when filename
       (spit filename @store)))
