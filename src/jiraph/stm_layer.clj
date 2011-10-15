@@ -1,10 +1,11 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta
-                             ChangeLog skip-applied-revs max-revision get-revisions]]
+                             ChangeLog skip-applied-revs max-revision get-revisions close]]
         [retro.core   :only [WrappedTransactional TransactionHooks Revisioned
                              get-queue at-revision current-revision]]
-        [useful.fn    :only [given]]))
+        [useful.fn    :only [given]])
+  (:import (java.io FileNotFoundException)))
 
 (comment
   The STM layer stores a single ref, pointing to a series of whole-layer
@@ -40,7 +41,7 @@
 (def ^{:private true} nodes (comp :nodes now))
 (def ^{:private true} meta (comp :meta now))
 
-(defrecord STMLayer [store revision]
+(defrecord STMLayer [store revision filename]
   Enumerate
   (node-id-seq [this]
     (-> this nodes keys))
@@ -99,14 +100,23 @@
     #(dosync (f)))
 
   Layer
-  (open [this] nil)
-  (close [this] nil)
-  (sync! [this] nil)
+  (open [this]
+    (when filename
+      (try
+        (doto this
+          (-> :store (ref-set (read-string (slurp filename)))))
+        (catch FileNotFoundException e this))))
+  (close [this]
+    (when filename
+      (spit filename @store)))
+  (sync! [this]
+    (close this))
   (optimize! [this] nil)
   (truncate! [this]
     (ref-set (:store this) empty-store))
   (node-exists? [this id]
     (-> this nodes (get id) boolean)))
 
-(defn make []
-  (STMLayer. (ref {0 {}}) nil))
+(defn make
+  ([] (make nil))
+  ([filename] (STMLayer. (ref {0 {}}) nil filename)))
