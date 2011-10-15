@@ -1,16 +1,16 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta
-                             ChangeLog skip-applied-revs max-revision]]
+                             ChangeLog skip-applied-revs max-revision get-revisions]]
         [retro.core   :only [WrappedTransactional TransactionHooks Revisioned
-                             get-queue]]
+                             get-queue at-revision current-revision]]
         [useful.fn    :only [given]]))
 
-(def empty-store {:revisions (sorted-map-by >)})
+(def empty-store (sorted-map-by >))
 
 (defn current-rev [layer]
-  (or (:revision layer)
-      (first (keys (-> layer :store deref)))))
+  (or (:revision layer) ;; revision explicitly set
+      (first (keys (-> layer :store deref))))) ;;  get most recent revision
 
 (defn now [layer]
   (-> layer :store deref (get (current-rev layer))))
@@ -38,7 +38,16 @@
 
   Basic
   (get-node [this k not-found]
-    (-> this nodes (get k not-found)))
+    (let [n (-> this nodes (get k not-found))]
+      (if-not (identical? n not-found)
+        n
+        (let [touched-revisions (get-revisions (at-revision this nil) k)
+              curr (current-revision this)
+              most-recent (or (first (if curr
+                                       (drop-while #(> % curr) touched-revisions)
+                                       touched-revisions))
+                              0)]
+          (-> this :store deref (get-in [most-recent :nodes k] not-found))))))
   (assoc-node! [this k v]
     (alter (:store this)
            assoc-in [(current-rev this) :nodes k] v))
