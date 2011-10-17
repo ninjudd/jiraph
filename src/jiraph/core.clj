@@ -1,6 +1,11 @@
 (ns jiraph.core
   (:require [jiraph.graph :as graph]
-            [clojure.string :as s]))
+            [jiraph.layer :as layer]
+            [clojure.string :as s]
+            [retro.core :as retro])
+  (:use     [useful.utils :only [memoize-deref]]
+            [useful.map :only [update]]
+            [useful.macro :only [macro-do]]))
 
 (def ^{:dynamic true} *graph*           nil)
 (def ^{:dynamic true} *verbose*         nil)
@@ -43,6 +48,32 @@
                         ~'layer-name
                         (s/join " " (map pr-str '~forms)))))
      ~@forms))
+
+;; define forwarders to resolve keyword layer-names in *graph*
+(macro-do [name]
+  (let [impl (symbol "jiraph.graph" (str name))
+        fn-meta (-> (meta (resolve impl))
+                    (select-keys [:arglists :doc])
+                    (update :arglists (partial list 'quote)))]
+    `(def ~(with-meta name fn-meta)
+       (fn ~name [layer# & args#]
+         (apply ~impl (layer layer#) args#))))
+  layer-meta node-id-seq node-count get-property set-property! update-property!
+  get-node find-node query-in-node get-in-node get-edges get-in-edge get-edge node-exists?
+  update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
+  fields node-valid? verify-node
+  get-all-revisions get-revisions
+  get-incoming)
+
+;; these point directly at jiraph.graph functions, without layer-name resolution,
+;; because they can't meaningfully work with layer names but we don't want to make
+;; the "simple" uses of jiraph.core have to mention jiraph.graph at all
+(doseq [name '[update-in-node  update-node  dissoc-node  assoc-node  assoc-in-node]]
+  (let [impl (resolve (symbol "jiraph.graph" (str name)))
+        fn-meta (-> (meta impl)
+                    (select-keys [:arglists :doc])
+                    (update :arglists (partial list 'quote)))]
+    (intern *ns* (with-meta name fn-meta) @impl)))
 
 (defmacro at-revision
   "Execute the given forms with the curren revision set to rev. Can be used to mark changes with a given
@@ -94,12 +125,12 @@
   ([type]
      (apply merge-with conj
             (for [layer        (layers type)
-                  [field meta] (fields layer)]
+                  [field meta] (layer/fields layer)]
               {field {layer meta}})))
   ([type subfield]
      (apply merge-with conj
             (for [layer        (keys (get (schema type) subfield))
-                  [field meta] (fields layer [subfield])]
+                  [field meta] (layer/fields layer [subfield])]
               {field {layer meta}}))))
 
 (alter-var-root #'schema #(with-meta (memoize-deref [#'*graph*] %) (meta %)))
@@ -113,7 +144,7 @@
   "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
    are collapsed so only the outer cache is used."
   [f]
-  (let [vars [#'*graph* #'retro/*revision*]]
+  (let [vars [#'*graph* #'*revision*]]
     (fn []
       (if *use-outer-cache*
         (f)
