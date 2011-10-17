@@ -31,9 +31,8 @@
   [key (if (fn? val) val (constantly val))])
 
 (defmacro << [fname walk & args]
-  (let [fname (symbol (str "." fname))]
-    `(let [^Traversal t# (traversal ~walk)]
-       ((~fname t#) ~walk ~@args))))
+  `(let [^Traversal t# (traversal ~walk)]
+     ((. t# ~fname) ~walk ~@args)))
 
 (defmacro defwalk
   "Define a new walk based on the default-traversal given custom traversal parameters as maps or
