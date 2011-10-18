@@ -6,6 +6,7 @@ classes
 *.jar
 *.class
 *.java
+native/
 *~
 #*#
 .#*
