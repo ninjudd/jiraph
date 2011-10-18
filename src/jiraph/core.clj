@@ -3,7 +3,7 @@
             [jiraph.layer :as layer]
             [clojure.string :as s]
             [retro.core :as retro])
-  (:use     [useful.utils :only [memoize-deref]]
+  (:use     [useful.utils :only [memoize-deref map-entry]]
             [useful.map :only [update]]
             [useful.macro :only [macro-do]])
   (:import java.io.IOException))
@@ -23,15 +23,21 @@
                        *revision*)
     (throw (IOException. (format "attempt to use a layer without an open graph")))))
 
-(defn layers
-  "Return the names of all layers in the current graph."
-  ([] (keys *graph*))
-  ([type]
-     (for [[name layer] *graph*
-           :let [meta (meta layer)]
-           :when (and (contains? (:types meta) type)
-                      (not (:hidden meta)))]
-       name)))
+(letfn [(layer-entries
+          ([] *graph*)
+          ([type] (for [[name layer :as e] *graph*
+                        :let [meta (meta layer)]
+                        :when (and (contains? (:types meta) type)
+                                   (not (:hidden meta)))]
+                    (map-entry name (retro/at-revision layer *revision*)))))]
+  (defn layer-names
+    "Return the names of all layers in the current graph."
+    ([]     (keys *graph*))
+    ([type] (map key (layer-entries type))))
+  (defn layers
+    "Return all layers in the current graph."
+    ([]     (map val (layer-entries)))
+    ([type] (map val (layer-entries type)))))
 
 (defn as-layer-map
   "Create a map of {layer-name, layer} pairs from the input. A keyword yields a
