@@ -31,8 +31,6 @@
         (assoc-node! :baz "8" {:edges {"8" {:a "foo"} "9" {:a "bar"}}})
         (assoc-node! :stm "9" {:edges {"2" {}}})
 
-        (prn (layer :baz))
-
         (let [walk (full-walk "1")]
           (is (= 9 (:result-count walk)))
           (is (= ["1" "2" "3" "4" "5" "6" "7" "8" "9"] (:ids walk)))
