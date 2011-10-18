@@ -5,12 +5,13 @@
         [useful.java :only [construct]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [jiraph.graph :as graph]
+            [jiraph.core  :as core]
             [clojure.set :as set]))
 
 (def ^{:doc "Should steps be followed in parallel?"} *parallel-follow* false)
 
-(defrecord Step      [id distance from-id layer source edge alt-ids rev data])
-(defrecord Walk      [focus-id steps include? ids result-count to-follow max-rev terminated? traversal])
+(defrecord Step      [id distance from-id layer source edge alt-ids data])
+(defrecord Walk      [focus-id steps include? ids result-count to-follow terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step extract-edges terminate?])
 
 (record-accessors Step Walk)
@@ -21,7 +22,7 @@
    :follow?       true
    :add?          true
    :count?        true
-   :follow-layers []
+   :follow-layers (fn [walk step] (core/layers))
    :init-step     (fn [walk step] step)
    :update-step   (fn [walk step] step)
    :extract-edges (fn [walk nodes] (sort-by first (mapcat graph/edges nodes)))
@@ -98,13 +99,12 @@
           walk
           (-> (update-record walk
                 (conj! to-follow step)
-                (update-in! steps [(id step)] (fnil conj []) step)
-                (or-max max-rev (:rev step)))
+                (update-in! steps [(id step)] (fnil conj []) step))
               (add-node step)))))))
 
 (defn- make-step
   "Create a new step from the previous step, layer and edge."
-  [walk from-step layer rev [to-id edge]]
+  [walk from-step layer [to-id edge]]
   (<< init-step walk
       (make-record Step
         :id to-id
@@ -112,16 +112,14 @@
         :from-id (id from-step)
         :layer layer
         :source from-step
-        :edge edge
-        :rev rev)))
+        :edge edge)))
 
 (defn- make-layer-steps
   "Create steps for all outgoing edges on this layer for this step's node(s)."
   [walk step layer]
   (let [ids   (or (alt-ids step) [(id step)])
-        nodes (map #(graph/get-node layer %) ids)
-        rev   (apply or-max (map :rev nodes))]
-    (map #(make-step walk step layer rev %)
+        nodes (map #(graph/get-node layer %) ids)]
+    (map #(make-step walk step layer %)
          (<< extract-edges walk nodes))))
 
 (defn- follow

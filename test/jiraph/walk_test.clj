@@ -14,8 +14,9 @@
    :stm (stm/make)})
 
 (defwalk full-walk
-  :add?      true
-  :traverse? true)
+  :add?          true
+  :follow-layers (fn [& args] (jiraph.core/layers))
+  :traverse?     true)
 
 (deftest simple-walk
   (doseq [parallel? [true false]]
@@ -64,11 +65,8 @@
                  (intersection (full-walk "1" :terminate? (at-limit 4))
                                (full-walk "8" :terminate? (at-limit 4))))))
 
-        (testing "max-rev"
-          (at-revision 33
-            (update-node! :foo "1" adjoin {:edges {"8" {:a "one"}}}))
-          (let [walk (full-walk "1")]
-            (is (= 9 (:result-count walk)))
-            (is (= ["1" "2" "3" "8" "4" "5" "6" "9" "7"] (:ids walk)))
-            (is (= ["1" "8"] (map :id (path walk "8"))))
-            (is (= 33  (:max-rev walk)))))))))
+        (update-node! :foo "1" adjoin {:edges {"8" {:a "one"}}})
+        (let [walk (full-walk "1")]
+          (is (= 9 (:result-count walk)))
+          (is (= ["1" "2" "3" "8" "4" "5" "6" "9" "7"] (:ids walk)))
+          (is (= ["1" "8"] (map :id (path walk "8")))))))))
