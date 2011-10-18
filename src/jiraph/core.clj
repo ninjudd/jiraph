@@ -5,7 +5,8 @@
             [retro.core :as retro])
   (:use     [useful.utils :only [memoize-deref]]
             [useful.map :only [update]]
-            [useful.macro :only [macro-do]]))
+            [useful.macro :only [macro-do]])
+  (:import java.io.IOException))
 
 (def ^{:dynamic true} *graph*           nil)
 (def ^{:dynamic true} *verbose*         nil)
@@ -16,9 +17,11 @@
   "Return the layer for a given name from *graph*."
   [layer-name]
   (if *graph*
-    (or (get *graph* layer-name)
-        (throw (java.io.IOException. (format "cannot find layer %s in open graph" layer-name))))
-    (throw (java.io.IOException. (format "attempt to use a layer without an open graph")))))
+    (retro/at-revision (or (get *graph* layer-name)
+                           (throw (IOException.
+                                   (format "cannot find layer %s in open graph" layer-name))))
+                       *revision*)
+    (throw (IOException. (format "attempt to use a layer without an open graph")))))
 
 (defn layers
   "Return the names of all layers in the current graph."
@@ -35,9 +38,13 @@
    single-entry map, an empty sequence operates on all layers, and a sequence of
    keywords causes each to be resolved to its actual layer."
   [layers]
-  (cond (keyword? layers) {layers (layer layers)}
-        (empty? layers)   *graph*
-        :else             (select-keys *graph* layers)))
+  (if (keyword? layers)
+    {layers (layer layers)}
+    (let [names (if (empty? layers)
+                  (keys *graph*)
+                  (filter (set layers) (keys *graph*)))]
+      (into {} (for [name names]
+                 [name (layer name)])))))
 
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
