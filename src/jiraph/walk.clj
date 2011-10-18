@@ -21,7 +21,7 @@
    :follow?       true
    :add?          true
    :count?        true
-   :follow-layers (fn [walk step] (graph/layers))
+   :follow-layers []
    :init-step     (fn [walk step] step)
    :update-step   (fn [walk step] step)
    :extract-edges (fn [walk nodes] (sort-by first (mapcat graph/edges nodes)))
@@ -160,7 +160,8 @@
   (let [map (if *parallel-follow*
               (partial pcollect graph/wrap-bindings)
               map)]
-    (graph/with-caching
+    (do ;; TODO figure out how to get graph/with-caching back? tough since walk
+        ;; doesn't know about core (and thus *graph*)
       (loop [^Walk walk (init-walk traversal focus-id)]
         (let [steps (persistent! (to-follow walk))
               walk  (assoc-record walk :to-follow (transient []))]
