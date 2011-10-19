@@ -188,3 +188,12 @@
   "Enable caching for the given forms. See wrap-caching."
   [& forms]
   `((wrap-caching (fn [] ~@forms))))
+
+
+(defmacro txn-> [layer-name & actions]
+  `(let [layer-name# ~layer-name
+         layer# (layer layer-name#)]
+     (retro/dotxn layer#
+                  (-> layer#
+                      ~@actions))
+     layer-name#))
