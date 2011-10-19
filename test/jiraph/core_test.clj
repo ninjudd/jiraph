@@ -12,9 +12,9 @@
 (def all [:tr :tp :stm :trs])
 
 (defn make-graph []
-  {:tr (bal/make "/tmp/jiraph-test-tokyo-reader")
-   :trs (msl/make "/tmp/jiraph-test-tokyo-reader-sorted")
-   :tp (bal/make (tokyo/make {:path "/tmp/jiraph-test-tokyo-protobuf" :create true}) (paf/make Test$Node))
+  {:tr  (stm/make)
+   :trs (stm/make)
+   :tp  (stm/make)
    :stm (stm/make)})
 
 (deftest add-node
