@@ -29,7 +29,7 @@
                                         :age 39}
                            "profile-9" {:name "William"}}}})})
 
-(def empty-store (sorted-map-by >))
+(def empty-store (sorted-map-by > 0 {}))
 
 (defn current-rev [layer]
   (or (:revision layer) ;; revision explicitly set
@@ -114,10 +114,11 @@
     (close this))
   (optimize! [this] nil)
   (truncate! [this]
-    (ref-set (:store this) empty-store))
+    (dosync ;; since this should only be called outside a retro transaction
+     (ref-set (:store this) empty-store)))
   (node-exists? [this id]
     (-> this nodes (get id) boolean)))
 
 (defn make
   ([] (make nil))
-  ([filename] (STMLayer. (ref {0 {}}) nil filename)))
+  ([filename] (STMLayer. (ref empty-store) nil filename)))
