@@ -1,4 +1,4 @@
-import "clojure/protobuf/extensions.proto";
+import "protobuf/core/extensions.proto";
 
 option java_package = "jiraph";
 option java_outer_classname = "Meta";
@@ -8,10 +8,10 @@ message Node {
   repeated int32 len  = 2;
   repeated int64 mrev = 3; // meta rev
   repeated int32 mlen = 4; // meta len
-  repeated Edge  in   = 5 [(map) = true];
+  repeated Edge  in   = 5 [(set) = true];
 }
 
 message Edge {
-  required string key = 1;
-  required bool   val = 2 [default = true];
+  required string item   = 1;
+  required bool   exists = 2 [default = true];
 }
