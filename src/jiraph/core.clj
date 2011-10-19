@@ -62,15 +62,25 @@
                         (s/join " " (map pr-str '~forms)))))
      ~@forms))
 
+(letfn [(symbol [& args]
+          (apply clojure.core/symbol (map name args)))]
+  (defn- graph-impl [name]
+    (let [impl-name (symbol 'jiraph.graph name)
+          var (resolve impl-name)
+          meta (-> (meta var)
+                   (select-keys [:arglists :doc]))]
+          {:varname impl-name
+           :var var
+           :meta meta ;; for use by functions
+           :fixed-meta (update meta :arglists (partial list 'quote)) ; for macros
+           :func @var})))
+
 ;; define forwarders to resolve keyword layer-names in *graph*
 (macro-do [name]
-  (let [impl (symbol "jiraph.graph" (str name))
-        fn-meta (-> (meta (resolve impl))
-                    (select-keys [:arglists :doc])
-                    (update :arglists (partial list 'quote)))]
-    `(def ~(with-meta name fn-meta)
-       (fn ~name [layer# & args#]
-         (apply ~impl (layer layer#) args#))))
+  (let [{:keys [varname fixed-meta]} (graph-impl name)]
+    `(def ~(with-meta name fixed-meta)
+       (fn ~name [layer-name# & args#]
+         (apply ~varname (layer layer-name#) args#))))
   layer-meta node-id-seq node-count get-property set-property! update-property!
   get-node find-node query-in-node get-in-node get-edges get-in-edge get-edge node-exists?
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
@@ -83,11 +93,8 @@
 ;; we don't want to make the "simple" uses of jiraph.core have to mention
 ;; jiraph.graph at all
 (doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node]]
-  (let [impl (resolve (symbol "jiraph.graph" (str name)))
-        fn-meta (-> (meta impl)
-                    (select-keys [:arglists :doc])
-                    (update :arglists (partial list 'quote)))]
-    (intern *ns* (with-meta name fn-meta) @impl)))
+  (let [{:keys [func meta]} (graph-impl name)]
+    (intern *ns* (with-meta name meta) func)))
 
 (defmacro at-revision
   "Execute the given forms with the curren revision set to rev. Can be used to mark changes with a given
