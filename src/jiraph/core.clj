@@ -96,6 +96,14 @@
   (let [{:keys [func meta]} (graph-impl name)]
     (intern *ns* (with-meta name meta) func)))
 
+;; operations on a list of layers
+(macro-do [name]
+  (let [{:keys [varname fixed-meta]} (graph-impl name)]
+    `(def ~(with-meta name fixed-meta)
+       (fn ~name [& layers#]
+         (apply ~varname (vals (as-layer-map layers#))))))
+  sync! optimize! truncate!)
+
 (defmacro at-revision
   "Execute the given forms with the curren revision set to rev. Can be used to mark changes with a given
    revision, or read the state at a given revision."
