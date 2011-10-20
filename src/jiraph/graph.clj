@@ -105,13 +105,15 @@
   "Store a layer-wide property."
   [layer key val]
   (refuse-readonly [layer])
-  (layer/assoc-layer-meta! layer key val))
+  (with-transaction [layer]
+    (layer/assoc-layer-meta! layer key val)))
 
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
   [layer key f & args]
-  (let [val (get-property layer key)]
-    (set-property! layer key (apply f val args))))
+  (with-transaction [layer]
+    (let [val (get-property layer key)]
+      (set-property! layer key (apply f val args)))))
 
 (defn get-node
   "Fetch a node's data from this layer."
