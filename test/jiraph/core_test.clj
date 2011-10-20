@@ -17,9 +17,8 @@
     (with-each-layer all
       (truncate! layer-name)
       (testing "node-ids, node-count and node-exists?"
-        (dotxn layer
-          (-> layer
-              (assoc-node "1" {:foo 0})))
+        (txn-> layer-name
+               (assoc-node "1" {:foo 0}))
         (is (= #{"1"} (set (node-id-seq layer-name))))
         (is (= 1 (node-count layer-name)))
         (is (node-exists? layer-name "1"))
@@ -50,6 +49,7 @@
                        (txn-> (update-node "1" select-keys [:foo :baz]))
                        (get-node "1")))))))))
 
+;; TODO add a way to test that a node isn't gotten multiple times unless writes happen
 (deftest caching
   (with-graph (make-graph)
     (with-each-layer all
