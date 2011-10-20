@@ -10,7 +10,10 @@
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]))
 
-(def ^{:dynamic true} *read-only* #{})
+(def ^{:private true :dynamic true} *read-only* #{})
+(def ^{:private true :dynamic true} *compacting* false)
+(def ^{:private true :dynamic true} *use-outer-cache* nil)
+(def ^{:private true}               write-count (atom 0))
 
 (defn layer-meta
   "Fetch a metadata key from a layer."
@@ -157,8 +160,6 @@
   ([layer id]
      (layer/node-exists? layer id)))
 
-(def ^{:dynamic true :private true} *compacting* false)
-
 (letfn [(changed-edges [old-edges new-edges]
           (reduce (fn [edges [edge-id edge]]
                     (let [was-present (not (:deleted edge))
@@ -220,7 +221,8 @@
                           (apply f old args))]
                 (layer/assoc-node! layer id new)
                 (update-incoming! layer [id] old new)
-                (update-changelog! layer id)))))))))
+                (update-changelog! layer id)))))))
+    (swap! write-count inc)))
 
 (defn update-in-node
   "Functional version of update-in-node! for use in a transaction."
@@ -306,6 +308,25 @@
   "Wrap the given function with the current graph context."
   [f]
   (bound-fn ([& args] (apply f args))))
+
+(defn wrap-caching
+  "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
+   are collapsed so only the outer cache is used."
+  [f]
+  (fn []
+    (if *use-outer-cache*
+      (f)
+      (binding [*use-outer-cache* true
+                get-node          (memoize-deref [write-count] get-node)
+                get-incoming      (memoize-deref [write-count] get-incoming)
+                get-revisions     (memoize-deref [write-count] get-revisions)
+                get-all-revisions (memoize-deref [write-count] get-all-revisions)]
+        (f)))))
+
+(defmacro with-caching
+  "Enable caching for the given forms. See wrap-caching."
+  [& forms]
+  `((wrap-caching (fn [] ~@forms))))
 
 (comment these guys need to be updated and split up once we've figured out our
          plan for wrapping, and also the split between graph and core.

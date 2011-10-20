@@ -11,7 +11,6 @@
 (def ^{:dynamic true} *graph*           nil)
 (def ^{:dynamic true} *verbose*         nil)
 (def ^{:dynamic true} *revision*        nil)
-(def ^{:dynamic true} *use-outer-cache* nil)
 
 (defn layer
   "Return the layer for a given name from *graph*."
@@ -168,27 +167,6 @@
   "Does the named layer exist in the current graph?"
   [layer-name]
   (contains? *graph* layer-name))
-
-(defn wrap-caching
-  "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
-   are collapsed so only the outer cache is used."
-  [f]
-  (let [vars [#'*graph* #'*revision*]]
-    (fn []
-      (if *use-outer-cache*
-        (f)
-        (binding [*use-outer-cache* true
-                  get-node          (memoize-deref vars get-node)
-                  get-incoming      (memoize-deref vars get-incoming)
-                  get-revisions     (memoize-deref vars get-revisions)
-                  get-all-revisions (memoize-deref vars get-all-revisions)]
-          (f))))))
-
-(defmacro with-caching
-  "Enable caching for the given forms. See wrap-caching."
-  [& forms]
-  `((wrap-caching (fn [] ~@forms))))
-
 
 (defmacro txn-> [layer-name & actions]
   `(let [layer-name# ~layer-name
