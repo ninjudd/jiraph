@@ -138,7 +138,7 @@
 (defn get-in-node
   "Fetch data from inside a node."
   ([layer [id & keys] & [not-found]]
-     (query-in-node [id] get-in keys not-found)))
+     (query-in-node layer [id] get-in keys not-found)))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
