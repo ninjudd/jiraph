@@ -17,8 +17,7 @@
     (with-each-layer all
       (truncate! layer-name)
       (testing "node-ids, node-count and node-exists?"
-        (txn-> layer-name
-               (assoc-node "1" {:foo 0}))
+        (assoc-node! layer-name "1" {:foo 0})
         (is (= #{"1"} (set (node-id-seq layer-name))))
         (is (= 1 (node-count layer-name)))
         (is (node-exists? layer-name "1"))
@@ -100,31 +99,29 @@
     (with-each-layer all
       (truncate! layer-name)
       (testing "layer-wide properties"
-        (with-transaction layer-name
-          (is (not (get-property layer-name :foo)))
-          (set-property! layer-name :foo [1 2 3])
-          (is (= [1 2 3] (get-property layer-name :foo)))
-          (update-property! layer-name :foo conj 5)
-          (is (= [1 2 3 5] (get-property layer-name :foo))))))))
+        (is (not (get-property layer-name :foo)))
+        (set-property! layer-name :foo [1 2 3])
+        (is (= [1 2 3] (get-property layer-name :foo)))
+        (update-property! layer-name :foo conj 5)
+        (is (= [1 2 3 5] (get-property layer-name :foo)))))))
 
 (deftest incoming
   (with-graph (make-graph)
     (with-each-layer all
       (truncate! layer-name)
-      (with-transaction layer-name
-        (testing "keeps track of incoming edges"
-          (is (empty? (get-incoming layer-name "1")))
-          (assoc-node! layer-name "4" {:edges {"1" {:a "one"}}})
-          (is (= #{"4"} (get-incoming layer-name "1")))
-          (is (= #{"1"} (set (keys (get-edges layer-name "4")))))
-          (assoc-node! layer-name "5" {:edges {"1" {:b "two"}}})
-          (is (= #{"4" "5"} (get-incoming layer-name "1")))
-          (update-node! layer-name "5" adjoin {:edges {"1" {:deleted true}}})
-          (is (= #{"4"} (get-incoming layer-name "1")))
-          (update-node! layer-name "4" merge {:edges {"2" {:a "1"} "3" {:b "2"}}})
-          (is (= #{"4"} (get-incoming layer-name "2")))
-          (is (= #{"4"} (get-incoming layer-name "3")))
-          (is (= #{"2" "3"} (set (keys (get-edges layer-name "4"))))))))))
+      (testing "keeps track of incoming edges"
+        (is (empty? (get-incoming layer-name "1")))
+        (assoc-node! layer-name "4" {:edges {"1" {:a "one"}}})
+        (is (= #{"4"} (get-incoming layer-name "1")))
+        (is (= #{"1"} (set (keys (get-edges layer-name "4")))))
+        (assoc-node! layer-name "5" {:edges {"1" {:b "two"}}})
+        (is (= #{"4" "5"} (get-incoming layer-name "1")))
+        (update-node! layer-name "5" adjoin {:edges {"1" {:deleted true}}})
+        (is (= #{"4"} (get-incoming layer-name "1")))
+        (update-node! layer-name "4" merge {:edges {"2" {:a "1"} "3" {:b "2"}}})
+        (is (= #{"4"} (get-incoming layer-name "2")))
+        (is (= #{"4"} (get-incoming layer-name "3")))
+        (is (= #{"2" "3"} (set (keys (get-edges layer-name "4")))))))))
 
 (comment
 
