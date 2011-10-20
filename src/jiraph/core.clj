@@ -67,7 +67,7 @@
     (let [impl-name (symbol 'jiraph.graph name)
           var (resolve impl-name)
           meta (-> (meta var)
-                   (select-keys [:arglists :doc]))]
+                   (select-keys [:arglists :doc :macro :dynamic]))]
           {:varname impl-name
            :var var
            :meta meta ;; for use by functions
@@ -91,7 +91,8 @@
 ;; or any indirection, because they can't meaningfully work with layer names but
 ;; we don't want to make the "simple" uses of jiraph.core have to mention
 ;; jiraph.graph at all
-(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node]]
+(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node
+               wrap-caching with-caching]]
   (let [{:keys [func meta]} (graph-impl name)]
     (intern *ns* (with-meta name meta) func)))
 
