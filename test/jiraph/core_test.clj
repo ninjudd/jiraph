@@ -1,5 +1,6 @@
 (ns jiraph.core-test
   (:use clojure.test jiraph.core
+        [useful.utils :only [adjoin]]
         [retro.core :as retro :only [dotxn]])
   (:require [jiraph.stm-layer :as stm]))
 
@@ -49,20 +50,29 @@
                        (txn-> (update-node "1" select-keys [:foo :baz]))
                        (get-node "1")))))))))
 
+(deftest caching
+  (with-graph (make-graph)
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "with-caching"
+        (with-caching
+          (at-revision 100              ; read rev100, write rev101
+            (txn-> layer-name
+                   (assoc-node "3" {:bar "cat" :baz [5]})
+                   (update-node "3" adjoin {:baz [8]})))
+
+          (at-revision 101
+            (is (= {:bar "cat" :baz [5 8]} (get-node layer-name "3"))))
+
+          (at-revision 101              ; read rev101, write rev102
+              (txn-> layer-name
+                     (update-node "3" adjoin {:baz [9]})))
+
+          (at-revision 102
+            (is (= {:bar "cat" :baz [5 8 9]} (get-node layer-name "3")))))))))
+
 (comment
-    (deftest caching
-    (with-graph (make-graph)
-      (with-each-layer all
-        (truncate! layer-name)
-        (testing "with-caching"
-          (let [get-node-without-caching get-node]
-            (with-caching
-              (at-revision 100 (is (add-node! layer-name "3" {:bar "cat" :baz [5]})))
-              (at-revision 101 (is (append-node! layer-name "3" {:baz [8]})))
-              (is (not= get-node-without-caching get-node))
-              (is (= {:id "3" :bar "cat" :baz [5 8] :rev 101} (get-node layer-name "3")))
-              (at-revision 100
-                (is (= {:id "3" :bar "cat" :baz [5] :rev 100} (get-node layer-name "3"))))))))))
+
 
   (deftest transactions
     (with-graph (make-graph)
