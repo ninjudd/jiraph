@@ -61,12 +61,13 @@
                    (assoc-node "3" {:bar "cat" :baz [5]})
                    (update-node "3" adjoin {:baz [8]})))
 
-          (at-revision 101
-            (is (= {:bar "cat" :baz [5 8]} (get-node layer-name "3"))))
+          (testing "Write to same node twice ignores cache."
+            (at-revision 101
+              (is (= {:bar "cat" :baz [5 8]} (get-node layer-name "3")))))
 
           (at-revision 101              ; read rev101, write rev102
-              (txn-> layer-name
-                     (update-node "3" adjoin {:baz [9]})))
+            (txn-> layer-name
+                   (update-node "3" adjoin {:baz [9]})))
 
           (at-revision 102
             (is (= {:bar "cat" :baz [5 8 9]} (get-node layer-name "3")))))))))
