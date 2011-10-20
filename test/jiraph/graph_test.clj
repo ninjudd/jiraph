@@ -4,9 +4,9 @@
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]))
 
-(deftest test-everything
-  (let [master (stm/make)
-        rev (vec (for [r (range 5)]
+(defn test-layer [master]
+  (truncate! master)
+  (let [rev (vec (for [r (range 5)]
                    (at-revision master r)))
         mike-node {:age 21 :edges {"carla" {:rel :mom}}}]
     (dotxn (rev 0)
@@ -73,3 +73,8 @@
                        (-> (rev 2)
                            (retro/enqueue (fn [_]
                                             (assoc-node! (rev 4) "stevie" {:age 2})))))))))))
+
+
+(deftest layer-impls
+  (doseq [layer [(stm/make)]] ;; add more layers as they're implemented
+    (test-layer layer)))
