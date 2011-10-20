@@ -95,35 +95,38 @@
             (assoc-node! layer-name "7" node))
           (is (= node (get-node layer-name "7"))))))))
 
-(comment
-  (deftest properties
-    (with-graph (make-graph)
-      (with-each-layer all
-        (truncate! layer-name)
-        (testing "layer-wide properties"
-          (is (= nil (get-property layer-name :foo)))
-          (is (= [1 2 3] (set-property! layer-name :foo [1 2 3])))
+(deftest properties
+  (with-graph (make-graph)
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "layer-wide properties"
+        (with-transaction layer-name
+          (is (not (get-property layer-name :foo)))
+          (set-property! layer-name :foo [1 2 3])
           (is (= [1 2 3] (get-property layer-name :foo)))
-          (is (= [1 2 3 5] (update-property! layer-name :foo conj 5)))
-          (is (= [1 2 3 5] (get-property layer-name :foo)))))))
+          (update-property! layer-name :foo conj 5)
+          (is (= [1 2 3 5] (get-property layer-name :foo))))))))
 
-  (deftest incoming
-    (with-graph (make-graph)
-      (with-each-layer all
-        (truncate! layer-name)
+(deftest incoming
+  (with-graph (make-graph)
+    (with-each-layer all
+      (truncate! layer-name)
+      (with-transaction layer-name
         (testing "keeps track of incoming edges"
           (is (empty? (get-incoming layer-name "1")))
-          (is (add-node! layer-name "4" {:edges {"1" {:a "one"}}}))
+          (assoc-node! layer-name "4" {:edges {"1" {:a "one"}}})
           (is (= #{"4"} (get-incoming layer-name "1")))
-          (is (= ["1"] (keys (get-edges layer-name "4"))))
-          (is (add-node! layer-name "5" {:edges {"1" {:b "two"}}}))
+          (is (= #{"1"} (set (keys (get-edges layer-name "4")))))
+          (assoc-node! layer-name "5" {:edges {"1" {:b "two"}}})
           (is (= #{"4" "5"} (get-incoming layer-name "1")))
-          (is (append-node! layer-name "5" {:edges {"1" {:deleted true}}}))
+          (update-node! layer-name "5" adjoin {:edges {"1" {:deleted true}}})
           (is (= #{"4"} (get-incoming layer-name "1")))
-          (is (assoc-node! layer-name "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
+          (update-node! layer-name "4" merge {:edges {"2" {:a "1"} "3" {:b "2"}}})
           (is (= #{"4"} (get-incoming layer-name "2")))
           (is (= #{"4"} (get-incoming layer-name "3")))
-          (is (= ["2" "3"] (keys (get-edges layer-name "4"))))))))
+          (is (= #{"2" "3"} (set (keys (get-edges layer-name "4"))))))))))
+
+(comment
 
   (deftest single-edge
     (with-graph
