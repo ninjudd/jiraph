@@ -72,30 +72,30 @@
           (at-revision 102
             (is (= {:bar "cat" :baz [5 8 9]} (get-node layer-name "3")))))))))
 
+(deftest transactions
+  (with-graph (make-graph)
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "transactions"
+        (let [node {:foo 7 :bar "seven"}]
+          (with-transaction layer-name
+            (assoc-node! layer-name "7" node)
+            (is (= node (get-node layer-name "7"))
+                "Should see past writes in with-transaction")
+            (retro/abort-transaction))
+          (is (not (get-node layer-name "7"))
+              "Aborted transaction shouldn't apply")
+          (is (thrown? Error
+                       (with-transaction layer-name
+                         (assoc-node! layer-name "7" node)
+                         (is (= node (get-node layer-name "7")))
+                         (throw (Error.)))))
+          (is (not (get-node layer-name "7")))
+          (with-transaction layer-name
+            (assoc-node! layer-name "7" node))
+          (is (= node (get-node layer-name "7"))))))))
+
 (comment
-
-
-  (deftest transactions
-    (with-graph (make-graph)
-      (with-each-layer all
-        (truncate! layer-name)
-        (testing "transactions"
-          (let [node {:foo 7 :bar "seven"}]
-            (with-transaction layer-name
-              (is (= node (add-node! layer-name "7" node)))
-              (is (= (assoc node :id "7") (get-node layer-name "7")))
-              (abort-transaction))
-            (is (= nil (get-node layer-name "7")))
-            (is (thrown? Error
-                         (with-transaction layer-name
-                           (is (= node (add-node! layer-name "7" node)))
-                           (is (= (assoc node :id "7") (get-node layer-name "7")))
-                           (throw (Error.)))))
-            (is (= nil (get-node layer-name "7")))
-            (with-transaction layer-name
-              (is (= node (add-node! layer-name "7" node))))
-            (is (= (assoc node :id "7") (get-node layer-name "7"))))))))
-
   (deftest properties
     (with-graph (make-graph)
       (with-each-layer all
