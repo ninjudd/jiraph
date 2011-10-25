@@ -10,7 +10,7 @@
 (def ^{:doc "Should steps be followed in parallel?"} *parallel-follow* false)
 
 (defrecord Step      [id distance from-id layer source edge alt-ids rev data])
-(defrecord Walk      [focus-id steps include? ids result-count to-follow max-rev terminated? traversal])
+(defrecord Walk      [focus-id steps id-set ids result-count to-follow max-rev terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step extract-edges terminate?])
 
 (record-accessors Step Walk)
@@ -73,16 +73,19 @@
      (when-let [source (source step)]
        (from-id source))))
 
+(defn includes? [walk id]
+  (contains? (id-set walk) id))
+
 (defn- add-node
   "Add the node associated with this step to the walk results."
   [^Walk walk step]
   (let [id (id step)]
-    (if (or ((include? walk) id)
+    (if (or ((id-set walk) id)  ;; this can not use the includes? helper fn because transient sets to do not work with contains?
             (not (<< add? walk step)))
       walk
       (update-record walk
         (conj! ids id)
-        (conj! include? id)
+        (conj! id-set id)
         (+ result-count (if (<< count? walk step) 1 0))))))
 
 (defn- traverse
@@ -138,7 +141,7 @@
   (let [walk (make-record Walk
                :focus-id     focus-id
                :steps        (transient {})
-               :include?     (transient #{})
+               :id-set       (transient #{})
                :ids          (transient [])
                :result-count 0
                :to-follow    (transient [])
@@ -150,7 +153,7 @@
   "Transform a transient walk into a persistent walk once the walk is complete."
   [^Walk walk]
   (update-record walk
-    (persistent! include?)
+    (persistent! id-set)
     (persistent! steps)
     (persistent! ids)
     (persistent! to-follow)))
@@ -193,4 +196,4 @@
 (defn intersection
   "Helper function to return the intersection between the ids of two walks."
   [walk1 walk2]
-  (seq (remove nil? (map (:include? walk2) (:ids walk1)))))
+  (seq (remove nil? (map (:id-set walk2) (:ids walk1)))))
