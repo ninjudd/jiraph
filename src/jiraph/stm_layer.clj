@@ -65,7 +65,7 @@
 
       ;; >= is "backward" because we're storing the map sorted in descending order
       ;; really this finds the first revision less than or equal to current
-      (let [[_ store] (? (first (subseq @store >= (? revision))))]
+      (let [[_ store] (first (subseq @store >= revision))]
         (get-in store [:meta k]))))
   (assoc-layer-meta! [this k v]
     (alter store ;; TODO make this work when no revision?
@@ -106,8 +106,7 @@
                (< rev max-rev) (binding [*skip-writes* true] (f (empty-queue layer)))
                :else
                (let [store (.store layer)
-                     prev (get @store max-rev)
-                     rev (inc revision)]
+                     prev (get @store max-rev)]
                  (alter store fix
                         #(not (contains? % rev))
                         #(assoc % rev prev))
