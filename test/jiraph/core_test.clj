@@ -188,18 +188,18 @@
 
       (is (= #{"10" "12" "13"}                  (get-incoming layer-name "11")))
       (at-revision 200 (is (= #{"10" "12"}      (get-incoming layer-name "11"))))
-      (at-revision 201 (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))))))
+      (at-revision 201 (is (= #{"10" "12" "13"} (get-incoming layer-name "11"))))
 
+      (testing "update-in, get-in"
+        (at-revision 202
+          (with-transaction layer-name
+            (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"})))
 
+        (is (= "1" (get-in-node layer-name ["13" :edges "11" :a])))
+        (at-revision 201
+          (is (= "one" (get-in-node layer-name ["13" :edges "11" :a]))))))))
 
 (comment
-(testing "update-in, get-in"
-  (at-revision 203
-    (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"}))
-
-  (is (= "1" (get-in-node layer-name ["13" :edges "11" :a])))
-  (at-revision 202
-    (is (= "one" (get-in-node layer-name ["13" :edges "11" :a])))))
   (deftest compact-node
     (with-graph (make-graph)
       (with-each-layer [:tp :tr]
@@ -215,27 +215,7 @@
             (is (= () (get-revisions layer-name "3")))
             (is (= '(100, 101) (get-all-revisions layer-name "3"))))))))
 
-  (deftest assoc-node
-    (with-graph (make-graph)
-      (with-each-layer [:tp :tr]
-        (truncate! layer-name)
-        (testing "assoc-node! modifies specific attributes"
-          (let [old {:foo 2 :bar "three"}
-                new {:foo 54 :bar "three" :baz [1 2 3]}]
-            (is (add-node! layer-name "1" old))
-            (is (= [old new] (assoc-node! layer-name "1" {:foo 54 :baz [1 2 3]})))
-            (is (= (assoc new :id "1") (get-node layer-name "1")))))
 
-        (testing "assoc-node! creates node if it doesn't exist"
-          (let [node {:foo 9 :bar "the answer"}]
-            (is (= [nil node] (assoc-node! layer-name "2" {:foo 9 :bar "the answer"})))
-            (is (= (assoc node :id "2") (get-node layer-name "2")))))
-
-        (testing "assoc-node wipes edges"
-          (is (assoc-node! layer-name "4" {:edges {"1" {:a "2"}}}))
-          (is (= #{"4"} (get-incoming layer-name "1")))
-          (is (assoc-node! layer-name "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
-          (is (empty? (get-incoming layer-name "1")))))))
 
   (deftest adhere-schema
     (with-graph
