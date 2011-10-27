@@ -7,7 +7,7 @@
 
 (set! *print-meta* true)
 
-(def all [ :trs])
+(def all [:tr :tp :stm :trs])
 
 (defn make-graph []
   {:tr  (stm/make)
