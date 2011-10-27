@@ -58,20 +58,20 @@
       (truncate! layer-name)
       (testing "with-caching"
         (with-caching
-          (at-revision 100              ; read rev100, write rev101
+          (at-revision 100
             (txn-> layer-name
                    (assoc-node "3" {:bar "cat" :baz [5]})
                    (update-node "3" adjoin {:baz [8]})))
 
           (testing "Write to same node twice ignores cache."
-            (at-revision 101
+            (at-revision 100
               (is (= {:bar "cat" :baz [5 8]} (get-node layer-name "3")))))
 
-          (at-revision 101              ; read rev101, write rev102
+          (at-revision 101
             (txn-> layer-name
                    (update-node "3" adjoin {:baz [9]})))
 
-          (at-revision 102
+          (at-revision 101
             (is (= {:bar "cat" :baz [5 8 9]} (get-node layer-name "3")))))))))
 
 (deftest transactions
@@ -154,7 +154,7 @@
         (at-revision 102
           (assoc-node! layer-name "8" {:foo 8}))
         (is (= 8 (:foo (get-node layer-name "8"))))
-        (is (= 103 (layer/max-revision layer))))
+        (is (= 102 (layer/max-revision layer))))
 
       (testing "past revisions are ignored inside of dotxn and txn->"
         (at-revision 101
@@ -172,24 +172,23 @@
                (assoc-node "10" {:edges {"11" {:a "one"}}})))
 
       (is (= #{"10"} (get-incoming layer-name "11")))
-      (is (empty?    (at-revision 100 (get-incoming layer-name "11"))))
-      (is (= #{"10"} (at-revision 101 (get-incoming layer-name "11"))))
+      (is (empty?    (at-revision  99 (get-incoming layer-name "11"))))
+      (is (= #{"10"} (at-revision 100 (get-incoming layer-name "11"))))
 
       (at-revision 200
         (assoc-node! layer-name "12" {:edges {"11" {:a "one"}}}))
 
       (is (= #{"10" "12"} (get-incoming layer-name "11")))
       (is (= #{"10"}      (at-revision 199 (get-incoming layer-name "11"))))
-      (is (= #{"10"}      (at-revision 200 (get-incoming layer-name "11"))))
-      (is (= #{"10" "12"} (at-revision 201 (get-incoming layer-name "11"))))
+      (is (= #{"10" "12"} (at-revision 200 (get-incoming layer-name "11"))))
 
       (at-revision 201
         (txn-> layer-name
                (assoc-node "13" {:edges {"11" {:a "one"}}})))
 
       (is (= #{"10" "12" "13"}                  (get-incoming layer-name "11")))
-      (at-revision 201 (is (= #{"10 12"}        (get-incoming layer-name "11"))))
-      (at-revision 202 (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))))))
+      (at-revision 200 (is (= #{"10" "12"}      (get-incoming layer-name "11"))))
+      (at-revision 201 (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))))))
 
 
 

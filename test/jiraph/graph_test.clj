@@ -9,13 +9,12 @@
   (let [rev (vec (for [r (range 5)]
                    (at-revision master r)))
         mike-node {:age 21 :edges {"carla" {:rel :mom}}}]
-    (dotxn (rev 0)
-      (-> (rev 0)
+    (dotxn (rev 1)
+      (-> (rev 1)
           (assoc-node "mike" mike-node)
           (assoc-node "carla" {:age 48})))
     (testing "Old revisions are untouched"
       (is (= nil (get-node (rev 0) "mike"))))
-    (prn (rev 1))
     (testing "Node data is written"
       (is (= mike-node (get-node (rev 1) "mike"))))
     (testing "Future revisions can be read"
@@ -25,8 +24,8 @@
              (get-incoming (rev 1) "carla")))
       (is (empty? (get-incoming (rev 1) "mike"))))
 
-    (dotxn (rev 1)
-      (let [actions (-> (rev 1)
+    (dotxn (rev 2)
+      (let [actions (-> (rev 2)
                         (assoc-node "charles" {:edges {"carla" {:rel :mom}}})
                         (update-node "charles" assoc :age 18)
                         (update-in-node ["mike" :age] inc))]
@@ -56,8 +55,8 @@
         (is (= 2 (layer/max-revision (rev 1))))))
 
     (testing "Can't rewrite history"
-      (dotxn (rev 0)
-        (-> (rev 0)
+      (dotxn (rev 1)
+        (-> (rev 1)
             (assoc-node "donald" {:age 72})))
       (doseq [r rev]
         (is (nil? (get-node r "donald")))))
@@ -65,13 +64,13 @@
     (testing "Transaction safety"
       (testing "Can't mutate active layer while building a transaction"
         (is (thrown? Exception
-                     (dotxn (rev 2)
-                       (doto (rev 2)
+                     (dotxn (rev 3)
+                       (doto (rev 3)
                          (assoc-node! "stevie" {:age 2}))))))
       (testing "Can't mutate other layer while committing a transaction"
         (is (thrown? Exception
-                     (dotxn (rev 2)
-                       (-> (rev 2)
+                     (dotxn (rev 3)
+                       (-> (rev 3)
                            (retro/enqueue (fn [_]
                                             (assoc-node! (rev 4) "stevie" {:age 2})))))))))))
 
