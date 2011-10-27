@@ -2,9 +2,12 @@
   (:use clojure.test jiraph.core
         [useful.utils :only [adjoin]]
         [retro.core :as retro :only [dotxn]])
-  (:require [jiraph.stm-layer :as stm]))
+  (:require [jiraph.stm-layer :as stm]
+            [jiraph.layer :as layer]))
 
-(def all [:tr :tp :stm :trs])
+(set! *print-meta* true)
+
+(def all [ :trs])
 
 (defn make-graph []
   {:tr  (stm/make)
@@ -75,24 +78,23 @@
   (with-graph (make-graph)
     (with-each-layer all
       (truncate! layer-name)
-      (testing "transactions"
-        (let [node {:foo 7 :bar "seven"}]
-          (with-transaction layer-name
-            (assoc-node! layer-name "7" node)
-            (is (= node (get-node layer-name "7"))
-                "Should see past writes in with-transaction")
-            (retro/abort-transaction))
-          (is (not (get-node layer-name "7"))
-              "Aborted transaction shouldn't apply")
-          (is (thrown? Error
-                       (with-transaction layer-name
-                         (assoc-node! layer-name "7" node)
-                         (is (= node (get-node layer-name "7")))
-                         (throw (Error.)))))
-          (is (not (get-node layer-name "7")))
-          (with-transaction layer-name
-            (assoc-node! layer-name "7" node))
-          (is (= node (get-node layer-name "7"))))))))
+      (let [node {:foo 7 :bar "seven"}]
+        (with-transaction layer-name
+          (assoc-node! layer-name "7" node)
+          (is (= node (get-node layer-name "7"))
+              "Should see past writes in with-transaction")
+          (retro/abort-transaction))
+        (is (not (get-node layer-name "7"))
+            "Aborted transaction shouldn't apply")
+        (is (thrown? Error
+                     (with-transaction layer-name
+                       (assoc-node! layer-name "7" node)
+                       (is (= node (get-node layer-name "7")))
+                       (throw (Error.)))))
+        (is (not (get-node layer-name "7")))
+        (with-transaction layer-name
+          (assoc-node! layer-name "7" node))
+        (is (= node (get-node layer-name "7")))))))
 
 (deftest properties
   (with-graph (make-graph)
@@ -123,100 +125,82 @@
         (is (= #{"4"} (get-incoming layer-name "3")))
         (is (= #{"2" "3"} (set (keys (get-edges layer-name "4")))))))))
 
-(comment
+(deftest non-transactional-revisions
+  (with-graph (make-graph)
+    (with-each-layer all
+      (truncate! layer-name)
 
-  (deftest single-edge
-    (with-graph
-      (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
-      (with-each-layer all
-        (truncate! layer-name)
-        (testing "add-node! and update-node! work with single-edge"
-          (is (empty? (get-incoming layer-name "1")))
-          (is (add-node! layer-name "4" {:edge {:id "1"}}))
-          (is (= #{"4"} (get-incoming layer-name "1")))
-          (is (= {"1" {:id "1"}} (get-edges layer-name "4")))
-          (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
-          (is (= #{"4"} (get-incoming layer-name "2")))
-          (is (= {"2" {:id "2"}} (get-edges layer-name "4")))
-          (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
-          (is (= #{} (get-incoming layer-name "2")))
-          (is (= {"2" {:id "2", :deleted true}} (get-edges layer-name "4"))))
-        (testing "append-node! and append-edge! work with single-edge"
-          (is (empty? (get-incoming layer-name "A")))
-          (is (append-node! layer-name "B" {:edge {:id "A"}}))
-          (is (= #{"B"} (get-incoming layer-name "A")))
-          (is (append-edge! layer-name "C" "A" {}))
-          (is (= #{"B" "C"} (get-incoming layer-name "A")))))))
-
-  (deftest append-and-add
-    (with-graph (make-graph)
-      (with-each-layer all
-        (truncate! layer-name)
-
-        (testing "append-node! supports viewing old revisions"
-          (let [node  {:bar "cat" :baz [5] :rev 100}
-                attrs {:baz [8] :rev 101}]
-            (at-revision 100
-              (is (= node (append-node! layer-name "3" (dissoc node :rev))))
-              (is (= (assoc node :id "3") (get-node layer-name "3"))))
-            (at-revision 101
-              (is (= attrs (append-node! layer-name "3" (dissoc attrs :rev))))
-              (is (= {:id "3" :bar "cat" :baz [5 8] :rev 101} (get-node layer-name "3"))))
-            (at-revision 100
-              (is (= (assoc node :id "3") (get-node layer-name "3"))))))
-
-        (testing "get-node returns nil if node didn't exist at-revision"
-          (at-revision 99
-            (is (= nil (get-node layer-name "3")))))
-
-        (testing "revisions and all-revisions returns an empty list for nodes without revisions"
-          (is (= () (get-revisions layer-name "1")))
-          (is (= () (get-all-revisions layer-name "1"))))
-
-        (testing ":rev property stores max committed revision"
-          (at-revision 102
-            (with-transaction layer-name
-              (add-node! layer-name "8" {:foo 8}))
-            (is (= 8 (:foo (get-node layer-name "8"))))
-            (is (= 102 (get-property layer-name :rev)))))
-
-        (testing "past revisions are ignored inside of transactions"
+      (testing "append-node! supports viewing old revisions"
+        (let [node  {:bar "cat" :baz [5]}
+              attrs {:baz [8]}]
+          (at-revision 100
+            (assoc-node! layer-name "3" node)
+            (is (= node (get-node layer-name "3"))))
           (at-revision 101
-            (with-transaction layer-name
-              (add-node! layer-name "8" {:foo 9})))
-          (is (= 8 (:foo (get-node layer-name "8")))))
+            (update-node! layer-name "3" adjoin attrs)
+            (is (= (adjoin node attrs) (get-node layer-name "3"))))
+          (at-revision 100
+            (is (= node (get-node layer-name "3"))))))
 
-        (testing "keeps track of incoming edges inside at-revision"
-          (at-revision 199 (is (= #{} (get-incoming layer-name "11"))))
-          (at-revision 200
-            (is (add-node! layer-name "10" {:edges {"11" {:a "one"}}})))
+      (testing "get-node returns nil if node didn't exist at-revision"
+        (at-revision 99
+          (is (not (get-node layer-name "3")))))
 
-          (is (= #{"10"} (get-incoming layer-name "11")))
-          (at-revision 199 (is (= #{} (get-incoming layer-name "11"))))
+      (testing "revisions and all-revisions returns an empty list for nodes without revisions"
+        (is (empty? (get-revisions layer-name "1")))
+        (is (empty? (get-all-revisions layer-name "1"))))
 
-          (at-revision 201
-            (is (add-node! layer-name "12" {:edges {"11" {:a "one"}}})))
+      (testing "max-revision"
+        (at-revision 102
+          (assoc-node! layer-name "8" {:foo 8}))
+        (is (= 8 (:foo (get-node layer-name "8"))))
+        (is (= 103 (layer/max-revision layer))))
 
-          (is (= #{"10" "12"} (get-incoming layer-name "11")))
-          (at-revision 199 (is (= #{}     (get-incoming layer-name "11"))))
-          (at-revision 200 (is (= #{"10"} (get-incoming layer-name "11"))))
+      (testing "past revisions are ignored inside of dotxn and txn->"
+        (at-revision 101
+          (txn-> layer-name
+                 (assoc-node "8" {:foo 9})))
+        (is (= 8 (:foo (get-node layer-name "8"))))))))
 
-          (at-revision 202
-            (is (add-node! layer-name "13" {:edges {"11" {:a "one"}}})))
+(deftest revisioned-incoming
+  (with-graph (make-graph)
+    (with-each-layer [:stm]
+      (truncate! layer-name)
+      (at-revision 100 (is (empty? (get-incoming layer-name "11"))))
+      (at-revision 100
+        (txn-> layer-name
+               (assoc-node "10" {:edges {"11" {:a "one"}}})))
 
-          (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))
-          (at-revision 199 (is (= #{}          (get-incoming layer-name "11"))))
-          (at-revision 200 (is (= #{"10"}      (get-incoming layer-name "11"))))
-          (at-revision 201 (is (= #{"10" "12"} (get-incoming layer-name "11")))))
+      (is (= #{"10"} (get-incoming layer-name "11")))
+      (is (empty?    (at-revision 100 (get-incoming layer-name "11"))))
+      (is (= #{"10"} (at-revision 101 (get-incoming layer-name "11"))))
 
-        (testing "append-edge!"
-          (at-revision 203
-            (is (append-edge! layer-name "13" "11" {:a "1"})))
+      (at-revision 200
+        (assoc-node! layer-name "12" {:edges {"11" {:a "one"}}}))
 
-          (is (= "1" (get-in-edge layer-name ["13" "11" :a])))
-          (at-revision 202
-            (is (= "one" (get-in-edge layer-name ["13" "11" :a]))))))))
+      (is (= #{"10" "12"} (get-incoming layer-name "11")))
+      (is (= #{"10"}      (at-revision 199 (get-incoming layer-name "11"))))
+      (is (= #{"10"}      (at-revision 200 (get-incoming layer-name "11"))))
+      (is (= #{"10" "12"} (at-revision 201 (get-incoming layer-name "11"))))
 
+      (at-revision 201
+        (txn-> layer-name
+               (assoc-node "13" {:edges {"11" {:a "one"}}})))
+
+      (is (= #{"10" "12" "13"}                  (get-incoming layer-name "11")))
+      (at-revision 201 (is (= #{"10 12"}        (get-incoming layer-name "11"))))
+      (at-revision 202 (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))))))
+
+
+
+(comment
+(testing "update-in, get-in"
+  (at-revision 203
+    (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"}))
+
+  (is (= "1" (get-in-node layer-name ["13" :edges "11" :a])))
+  (at-revision 202
+    (is (= "one" (get-in-node layer-name ["13" :edges "11" :a])))))
   (deftest compact-node
     (with-graph (make-graph)
       (with-each-layer [:tp :tr]
@@ -360,4 +344,26 @@
               :key {:a {:type :int}}}
              (schema :foo :bap)))))
 
+  (deftest single-edge ;; TODO need to update layers to enforce single-edgedness
+    (with-graph
+      (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
+      (with-each-layer all
+        (truncate! layer-name)
+        (testing "add-node! and update-node! work with single-edge"
+          (is (empty? (get-incoming layer-name "1")))
+          (is (add-node! layer-name "4" {:edge {:id "1"}}))
+          (is (= #{"4"} (get-incoming layer-name "1")))
+          (is (= {"1" {:id "1"}} (get-edges layer-name "4")))
+          (is (update-node! layer-name "4" (constantly {:edge {:id "2"}})))
+          (is (= #{"4"} (get-incoming layer-name "2")))
+          (is (= {"2" {:id "2"}} (get-edges layer-name "4")))
+          (is (update-node! layer-name "4" (constantly {:edge {:id "2" :deleted true}})))
+          (is (= #{} (get-incoming layer-name "2")))
+          (is (= {"2" {:id "2", :deleted true}} (get-edges layer-name "4"))))
+        (testing "append-node! and append-edge! work with single-edge"
+          (is (empty? (get-incoming layer-name "A")))
+          (is (append-node! layer-name "B" {:edge {:id "A"}}))
+          (is (= #{"B"} (get-incoming layer-name "A")))
+          (is (append-edge! layer-name "C" "A" {}))
+          (is (= #{"B" "C"} (get-incoming layer-name "A")))))))
   )

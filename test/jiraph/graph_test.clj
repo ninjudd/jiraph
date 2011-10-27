@@ -15,6 +15,7 @@
           (assoc-node "carla" {:age 48})))
     (testing "Old revisions are untouched"
       (is (= nil (get-node (rev 0) "mike"))))
+    (prn (rev 1))
     (testing "Node data is written"
       (is (= mike-node (get-node (rev 1) "mike"))))
     (testing "Future revisions can be read"

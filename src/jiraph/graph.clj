@@ -10,6 +10,8 @@
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]))
 
+(def ^{:dynamic true} *skip-writes* false)
+
 (def ^{:private true :dynamic true} *read-only* #{})
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
@@ -59,11 +61,11 @@
 
 (defmacro with-transaction
   "Execute forms within a transaction on the specified layers."
-  [layers & forms]
-  `((reduce ;; TODO is this right? Or do we need transactions for read-only mode?
-     retro/wrap-transaction
-     (fn [] ~@forms)
-     (remove read-only? ~layers))))
+  [layer & forms]
+  `(let [layer# ~layer]
+     (retro/with-transaction layer#
+       (do ~@forms
+           layer#))))
 
 (def abort-transaction retro/abort-transaction)
 
@@ -105,13 +107,13 @@
   "Store a layer-wide property."
   [layer key val]
   (refuse-readonly [layer])
-  (with-transaction [layer]
+  (with-transaction layer
     (layer/assoc-layer-meta! layer key val)))
 
 (defn update-property!
   "Update the given layer property by calling function f with the old value and any supplied args."
   [layer key f & args]
-  (with-transaction [layer]
+  (with-transaction layer
     (let [val (get-property layer key)]
       (set-property! layer key (apply f val args)))))
 
@@ -190,41 +192,42 @@
 
   (defn update-in-node! [layer keys f & args]
     (refuse-readonly [layer])
-    (with-transaction [layer]
-      (let [updater (partial layer/update-fn layer)
-            keys (seq keys)]
-        (if-let [update! (updater keys f)]
-          ;; maximally-optimized; the layer can do this exact thing well
-          (let [{:keys [old new]} (apply update! args)]
-            (update-incoming! layer keys old new)
-            (update-changelog! layer (first keys)))
-          (if-let [update! (and (seq keys) ;; don't look for assoc-in of empty keys
-                                (updater (butlast keys) assoc))]
-            ;; they can replace this sub-node efficiently, at least
-            (let [old (get-in-node layer keys)
-                  new (apply f old args)]
-              (update! (last keys) new)
+    (with-transaction layer
+      (when-not *skip-writes*
+        (let [updater (partial layer/update-fn layer)
+              keys (seq keys)]
+          (if-let [update! (updater keys f)]
+            ;; maximally-optimized; the layer can do this exact thing well
+            (let [{:keys [old new]} (apply update! args)]
               (update-incoming! layer keys old new)
               (update-changelog! layer (first keys)))
+            (if-let [update! (and (seq keys) ;; don't look for assoc-in of empty keys
+                                  (updater (butlast keys) assoc))]
+              ;; they can replace this sub-node efficiently, at least
+              (let [old (get-in-node layer keys)
+                    new (apply f old args)]
+                (update! (last keys) new)
+                (update-incoming! layer keys old new)
+                (update-changelog! layer (first keys)))
 
-            ;; need some special logic for unoptimized top-level assoc/dissoc
-            (if-let [update! (and (not keys) ({assoc  layer/assoc-node!
-                                               dissoc layer/dissoc-node!} f))]
-              (let [[id new] args
-                    old (when (layer/manage-incoming? layer)
-                          (get-node layer id))]
-                (apply update! layer args)
-                (update-incoming! layer [id] old new)
-                (update-changelog! layer id))
-              (let [[id & keys] keys
-                    old (get-node layer id)
-                    new (if keys
-                          (apply update-in old keys f args)
-                          (apply f old args))]
-                (layer/assoc-node! layer id new)
-                (update-incoming! layer [id] old new)
-                (update-changelog! layer id)))))))
-    (swap! write-count inc)))
+              ;; need some special logic for unoptimized top-level assoc/dissoc
+              (if-let [update! (and (not keys) ({assoc  layer/assoc-node!
+                                                 dissoc layer/dissoc-node!} f))]
+                (let [[id new] args
+                      old (when (layer/manage-incoming? layer)
+                            (get-node layer id))]
+                  (apply update! layer args)
+                  (update-incoming! layer [id] old new)
+                  (update-changelog! layer id))
+                (let [[id & keys] keys
+                      old (get-node layer id)
+                      new (if keys
+                            (apply update-in old keys f args)
+                            (apply f old args))]
+                  (layer/assoc-node! layer id new)
+                  (update-incoming! layer [id] old new)
+                  (update-changelog! layer id))))))
+        (swap! write-count inc)))))
 
 (defn update-in-node
   "Functional version of update-in-node! for use in a transaction."

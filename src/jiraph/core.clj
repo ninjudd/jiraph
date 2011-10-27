@@ -79,9 +79,10 @@
   (let [{:keys [varname fixed-meta]} (graph-impl name)]
     `(def ~(with-meta name fixed-meta)
        (fn ~name [layer-name# & args#]
-         (apply ~varname (layer layer-name#) args#))))
+         (apply ~varname (layer layer-name#)
+                args#))))
   layer-meta node-id-seq node-count get-property set-property! update-property!
-  get-node find-node query-in-node get-in-node get-edges get-in-edge get-edge node-exists?
+  get-node find-node query-in-node get-in-node get-edges get-edge node-exists?
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   fields node-valid? verify-node
   get-all-revisions get-revisions
@@ -138,8 +139,8 @@
 
 (defmacro with-transaction
   "Execute forms within a transaction on the named layer/layers."
-  [layers & forms]
-  `(graph/with-transaction (vals (as-layer-map ~layers))
+  [layer & forms]
+  `(graph/with-transaction (layer ~layer)
      ~@forms))
 
 (defn current-revision

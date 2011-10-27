@@ -2,9 +2,11 @@
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta
                              ChangeLog skip-applied-revs max-revision get-revisions close]]
-        [retro.core   :only [WrappedTransactional TransactionHooks Revisioned
-                             get-queue at-revision current-revision]]
-        [useful.fn    :only [given]])
+        [jiraph.graph :only [*skip-writes*]]
+        [retro.core   :only [WrappedTransactional Revisioned
+                             get-queue at-revision current-revision empty-queue]]
+        [useful.fn    :only [given fix]]
+        [useful.utils :only [returning]])
   (:import (java.io FileNotFoundException)))
 
 (comment
@@ -42,6 +44,10 @@
 (def ^{:private true} meta (comp :meta now))
 
 (defrecord STMLayer [store revision filename]
+  Object
+  (toString [this]
+    (pr-str this))
+
   Enumerate
   (node-id-seq [this]
     (-> this nodes keys))
@@ -54,9 +60,15 @@
 
   LayerMeta
   (get-layer-meta [this k]
-    (-> this meta (get k)))
+    (if-not revision
+      (-> this meta (get k))
+
+      ;; >= is "backward" because we're storing the map sorted in descending order
+      ;; really this finds the first revision less than or equal to current
+      (let [[_ store] (? (first (subseq @store >= (? revision))))]
+        (get-in store [:meta k]))))
   (assoc-layer-meta! [this k v]
-    (alter (:store this) ;; TODO make this work when no revision?
+    (alter store ;; TODO make this work when no revision?
            assoc-in [(current-rev this) :meta k] v))
 
   Basic
@@ -70,12 +82,12 @@
                                        (drop-while #(> % curr) touched-revisions)
                                        touched-revisions))
                               0)]
-          (-> this :store deref (get-in [most-recent :nodes k] not-found))))))
+          (-> @store (get-in [most-recent :nodes k] not-found))))))
   (assoc-node! [this k v]
-    (alter (:store this)
+    (alter store
            assoc-in [(current-rev this) :nodes k] v))
   (dissoc-node! [this k]
-    (alter (:store this)
+    (alter store
            update-in [(current-rev this) :nodes] dissoc k))
 
   Revisioned
@@ -84,20 +96,25 @@
   (current-revision [this]
     (current-rev this))
 
-  TransactionHooks
-  (before-mutate [this]
-    (-> this
-        (skip-applied-revs)
-        (given (comp seq get-queue)
-               update-in [:store] #(doto %
-                                     (alter (fn [store]
-                                              (let [max-rev (max-revision this)]
-                                                (assoc store (inc max-rev)
-                                                       (get store max-rev)))))))))
-
   WrappedTransactional
-  (txn-wrap [this f]
-    #(dosync (f)))
+  (txn-wrap [_ f]
+    (fn [^STMLayer layer]
+      (dosync
+       (let [rev (.revision layer)
+             max-rev (max-revision layer)]
+         (cond (nil? rev) (f layer)
+               (< rev max-rev) (binding [*skip-writes* true] (f (empty-queue layer)))
+               :else
+               (let [store (.store layer)
+                     prev (get @store max-rev)
+                     rev (inc revision)]
+                 (alter store fix
+                        #(not (contains? % rev))
+                        #(assoc % rev prev))
+                 (returning (f (at-revision layer rev))
+                   (alter store fix
+                          #(identical? prev (get % rev))
+                          #(dissoc % rev)))))))))
 
   Layer
   (open [this]
