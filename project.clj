@@ -5,7 +5,8 @@
                  [masai "0.6.1"]
                  [cereal "0.1.10"]
                  [retro "0.5.2"]
-                 [ego "0.1.7"]]
+                 [ego "0.1.7"]
+                 [unk "0.9.3"]]
   :dev-dependencies [[protobuf "0.5.0-beta2"]
                      [tokyocabinet "1.24.1-SNAPSHOT" :ext true]]
   :cake-plugins [[cake-protobuf "0.5.0-beta1"]])

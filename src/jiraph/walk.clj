@@ -3,7 +3,9 @@
         [useful.utils :only [or-max]]
         [useful.parallel :only [pcollect *pcollect-thread-num*]]
         [useful.java :only [construct]]
-        [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
+        [useful.datatypes :only [make-record assoc-record update-record record-accessors]]
+        [fogus.unk :only [memo-lru]]
+        useful.debug)
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
 
@@ -51,13 +53,18 @@
      :init-step     [walk step]  Initialize a new step after it is created.
      :update-step   [walk step]  Update the current step before traversing it.
      :extract-edges [walk nodes] Extract a sequence of edges from a group of nodes.
-     :terminate?    [walk]       Should the walk terminate (even if there are still unfollowed steps)?"
-  [name & opts]
-  `(let [traversal# (into-map default-traversal ~@opts)]
-     (defn ~name {:traversal traversal#} [focus-id# & opts#]
-       (walk focus-id#
-             (into (make-record Traversal)
-                   (map traversal-fn (into-map traversal# opts#)))))))
+     :terminate?    [walk]       Should the walk terminate (even if there are still unfollowed steps)?
+
+   In, addition if you wish to cache walk results, use the option :cache true."
+  [name & defaults]
+  `(let [defaults# (into-map default-traversal ~@defaults)]
+     (defn ~name {:defaults defaults#} [focus-id# & opts#]
+       (let [opts#  (into-map defaults# opts#)
+             cache# (:cache opts#)]
+         ((if cache# walk cached-walk)
+          focus-id#
+          (into (make-record Traversal)
+                (map traversal-fn (dissoc opts# :cache))))))))
 
 (defn- walked?
   "Has this step already been traversed?"
@@ -173,6 +180,8 @@
             (recur
              (reduce traverse walk
                      (apply concat (map (partial follow walk) steps))))))))))
+
+(def cached-walk (? (memo-lru walk 5)))
 
 (defn make-path
   "Given a step, construct a path of steps from the walk focus to this step's node."
