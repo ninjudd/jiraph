@@ -61,7 +61,7 @@
      (defn ~name {:defaults defaults#} [focus-id# & opts#]
        (let [opts#  (into-map defaults# opts#)
              cache# (:cache opts#)]
-         ((if cache# walk cached-walk)
+         ((if cache# cached-walk walk)
           focus-id#
           (into (make-record Traversal)
                 (map traversal-fn (dissoc opts# :cache))))))))
@@ -181,7 +181,11 @@
              (reduce traverse walk
                      (apply concat (map (partial follow walk) steps))))))))))
 
-(def cached-walk (? (memo-lru walk 5)))
+(defn enable-walk-caching!
+  "Enables caching of complete walks when defwalk is passed :cache true.
+   memo-fn is passed the walk, follwed by args."
+  [memo-fn & args]
+  (def cached-walk (apply memo-fn walk args)))
 
 (defn make-path
   "Given a step, construct a path of steps from the walk focus to this step's node."
