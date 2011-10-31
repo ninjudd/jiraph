@@ -61,10 +61,7 @@
      (defn ~name {:defaults defaults#} [focus-id# & opts#]
        (let [opts#  (into-map defaults# opts#)
              cache# (:cache opts#)]
-         ((if cache# cached-walk walk)
-          focus-id#
-          (into (make-record Traversal)
-                (map traversal-fn (dissoc opts# :cache))))))))
+         ((if cache# cached-walk walk) focus-id# (dissoc opts# :cache))))))
 
 (defn- walked?
   "Has this step already been traversed?"
@@ -167,8 +164,10 @@
 
 (defn walk
   "Perform a walk starting at focus-id using traversal which should be of type jiraph.walk.Traversal."
-  [focus-id traversal]
-  (let [map (if *parallel-follow*
+  [focus-id opts]
+  (let [traversal (into (make-record Traversal)
+                        (map traversal-fn (dissoc opts :cache)))
+        map (if *parallel-follow*
               (partial pcollect graph/wrap-bindings)
               map)]
     (graph/with-caching
