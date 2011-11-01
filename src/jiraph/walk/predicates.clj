@@ -1,14 +1,15 @@
 (ns jiraph.walk.predicates
+  (:use [useful.utils :only [defm]])
   (:use [jiraph.walk :only [result-count from-id distance]]))
 
-(defn at-limit
+(defm at-limit
   "Returns a function that can be passed as the :terminate? traversal parameter
    to limit a walk to a specific number of steps."
   [num]
   (fn [walk]
     (<= num (result-count walk))))
 
-(defn has-distance
+(defm has-distance
   "Return a predicate taking [walk step], which applies the supplied test to the
    step's distance. The distance of a step is the distance from the walk's
    initial node to the step's destination node."
