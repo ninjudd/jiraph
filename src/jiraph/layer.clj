@@ -241,6 +241,10 @@
   (node-count [layer]
     (fallback-warning)
     (apply + (map (constantly 1) (node-id-seq layer))))
+  (inc-count [layer]
+    )
+  (dec-count [layer]
+    )
 
   Optimized
   ;; can't optimize anything
