@@ -302,7 +302,7 @@
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer id]
-  (layer/get-incoming layer id))
+  (into-set #{} (layer/get-incoming layer id)))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."

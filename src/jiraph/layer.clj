@@ -46,6 +46,12 @@
   (update-meta! [layer id key f args]
     "Update the metadata for a node."))
 
+(defprotocol Meta
+  (layer-meta-key [layer key]
+    "The key to store layer meta in.")
+  (node-meta-key [layer id key]
+    "The key to store node meta in."))
+
 (defprotocol Incoming
   (get-incoming [layer id]
     "Return the ids of all nodes that have an incoming edge to this one.")
@@ -136,55 +142,55 @@
     "Is it illegal to have more than one outgoing edge per node on this layer?"))
 
 ;; Meta-related protocols
-(letfn [(layer-meta-key [id] (str "_" id))
-        (node-meta-key [id key] (str "_" node "_" key))
-        (incoming-key [id] "incoming")]
-  (extend-type Object
-    ChangeLog
-    (get-revisions [layer id]
-      (get-meta layer id "affected-by"))
-    (get-changed-ids [layer rev]
-      (get-layer-meta layer (str "changed-ids-" rev)))
-    (max-revision [layer]
-      (-> layer
-          (retro/at-revision nil)
-          (get-layer-meta "revision-id")
-          (or 0)))
+(extend-type Object
+  Meta
+  (layer-meta-key [layer id]
+    (str "_" id))
+  (node-meta-key [layer id key]
+    (str "_" id "_" key))
 
-    LayerMeta
-    ;; default behavior: create specially-named regular nodes to hold metadata
-    (get-layer-meta [layer key]
-      (fallback-warning)
-      (get-node layer (layer-meta-key key) nil))
-    (assoc-layer-meta! [layer key value]
-      (fallback-warning)
-      (assoc-node! layer (layer-meta-key key) value))
+  ChangeLog
+  (get-revisions [layer id]
+    (get-meta layer id "affected-by"))
+  (get-changed-ids [layer rev]
+    (get-layer-meta layer (str "changed-ids-" rev)))
+  (max-revision [layer]
+    (-> layer
+        (retro/at-revision nil)
+        (get-layer-meta "revision-id")
+        (or 0)))
 
-    NodeMeta
-    ;; default behavior: use specially-named layer-wide meta to fake node metadata
-    (get-meta [layer id key]
-      (fallback-warning)
-      (get-layer-meta layer (node-meta-key id key)))
-    (assoc-meta! [layer id key val]
-      (fallback-warning)
-      (assoc-layer-meta! layer (node-meta-key id key) val))
+  LayerMeta
+  ;; default behavior: create specially-named regular nodes to hold metadata
+  (get-layer-meta [layer key]
+    (get-node layer (layer-meta-key layer key) nil))
+  (assoc-layer-meta! [layer key value]
+    (assoc-node! layer (layer-meta-key layer key) value))
 
-    UpdateMeta
-    ;; default behavior: get old meta, apply f, set new value
-    (update-meta! [layer id key f args]
-      (assoc-meta! layer id key (apply f (get-meta layer id key) args)))
+  NodeMeta
+  ;; default behavior: use specially-named layer-wide meta to fake node metadata
+  (get-meta [layer id key]
+    (get-layer-meta layer (node-meta-key layer id key)))
+  (assoc-meta! [layer id key val]
+    (assoc-layer-meta! layer (node-meta-key layer id key) val))
 
-    Incoming
-    ;; default behavior: use node meta with special prefix to track incoming edges
-    (get-incoming [layer id]
-      (fallback-warning)
-      (get-meta layer id (incoming-key id)))
-    (add-incoming! [layer id from-id]
-      (fallback-warning)
-      (update-meta! layer id (incoming-key id) (fnil conj #{}) [from-id]))
-    (drop-incoming! [layer id from-id]
-      (fallback-warning)
-      (update-meta! layer id (incoming-key id) disj [from-id]))))
+  UpdateMeta
+  ;; default behavior: try to use update-fn;
+  ;;  fall back to getting old meta, applying f, setting new value
+  (update-meta! [layer id key f args]
+    (let [meta-key (node-meta-key layer id key)]
+      (if-let [update! (update-fn layer [meta-key] f)]
+        (apply update! args)
+        (assoc-meta! layer id key (apply f (get-meta layer id key) args)))))
+
+  Incoming
+  ;; default behavior: use node meta with special prefix to track incoming edges
+  (get-incoming [layer id]
+    (get-meta layer id "incoming"))
+  (add-incoming! [layer id from-id]
+    (update-meta! layer id "incoming" adjoin [{from-id true}]))
+  (drop-incoming! [layer id from-id]
+    (update-meta! layer id "incoming" adjoin [{from-id false}])))
 
 ;; these guys want a default/permanent sentinel
 (let [sentinel (Object.)]
