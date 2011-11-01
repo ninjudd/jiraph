@@ -1,6 +1,6 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta
+  (:use [jiraph.layer :only [Enumerate Counted Basic Layer LayerMeta
                              ChangeLog skip-applied-revs max-revision get-revisions close]]
         [jiraph.graph :only [*skip-writes*]]
         [retro.core   :only [WrappedTransactional Revisioned
