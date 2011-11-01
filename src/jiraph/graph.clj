@@ -159,11 +159,6 @@
   ([layer id to-id & [not-found]]
      (get-in-edge layer [id to-id] not-found)))
 
-(defn node-exists?
-  "Check if a node exists on this layer."
-  ([layer id]
-     (layer/node-exists? layer id)))
-
 (letfn [(changed-edges [old-edges new-edges]
           (reduce (fn [edges [edge-id edge]]
                     (let [was-present (not (:deleted edge))

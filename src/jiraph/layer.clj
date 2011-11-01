@@ -115,9 +115,7 @@
   (optimize! [layer]
     "Optimize underlying layer storage.")
   (truncate! [layer]
-    "Removes all node data from the layer.")
-  (node-exists? [layer id]
-    "Check if a node exists on this layer."))
+    "Removes all node data from the layer."))
 
 (defprotocol ChangeLog
   (get-revisions [layer id]
@@ -203,11 +201,7 @@
     (truncate! [layer]
       (fallback-warning)
       (doseq [id (node-id-seq layer)]
-        (dissoc-node! layer id)))
-
-    (node-exists? [layer id]
-      (fallback-warning)
-      (not= sentinel (get-node layer id sentinel)))))
+        (dissoc-node! layer id)))))
 
 ;; Don't need any special closures here
 (extend-type Object

@@ -131,9 +131,7 @@
   (optimize! [this] nil)
   (truncate! [this]
     (dosync ;; since this should only be called outside a retro transaction
-     (ref-set (:store this) empty-store)))
-  (node-exists? [this id]
-    (-> this nodes (get id) boolean)))
+     (ref-set (:store this) empty-store))))
 
 (defn make
   ([] (make nil))

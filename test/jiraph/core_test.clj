@@ -19,13 +19,10 @@
   (with-graph (make-graph)
     (with-each-layer all
       (truncate! layer-name)
-      (testing "node-ids, node-count and node-exists?"
+      (testing "node-ids and node-count"
         (assoc-node! layer-name "1" {:foo 0})
         (is (= #{"1"} (set (node-id-seq layer-name))))
-        (is (= 1 (node-count layer-name)))
-        (is (node-exists? layer-name "1"))
-        (doseq [id ["8" "9" "234"]]
-          (is (not (node-exists? layer-name id))))))))
+        (is (= 1 (node-count layer-name)))))))
 
 (deftest update-test
   (with-graph (make-graph)
