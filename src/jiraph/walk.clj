@@ -4,7 +4,6 @@
         [useful.parallel :only [pcollect *pcollect-thread-num*]]
         [useful.java :only [construct]]
         [useful.datatypes :only [make-record assoc-record update-record record-accessors]]
-        [fogus.unk :only [memo-lru]]
         useful.debug)
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
@@ -180,11 +179,17 @@
              (reduce traverse walk
                      (apply concat (map (partial follow walk) steps))))))))))
 
-(defn enable-walk-caching!
+(defn enable-walk-cache!
   "Enables caching of complete walks when defwalk is passed :cache true.
    memo-fn is passed the walk, follwed by args."
   [memo-fn & args]
-  (def cached-walk (apply memo-fn walk args)))
+  (def ^{:memo-fn memo-fn :args args} cached-walk (apply memo-fn walk args)))
+
+(defn reset-walk-cache!
+  "Rebinds the var for the memoized walk fn, clearing all cached walks"
+  []
+  (let [{:keys [memo-fn args]} (meta #'cached-walk)]
+    (apply enable-walk-caching! memo-fn args)))
 
 (defn make-path
   "Given a step, construct a path of steps from the walk focus to this step's node."

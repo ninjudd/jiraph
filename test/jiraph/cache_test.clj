@@ -1,6 +1,7 @@
 (ns jiraph.cache-test
   (:use clojure.test jiraph.graph
-        [jiraph.walk :only [defwalk path paths *parallel-follow* intersection enable-walk-caching!]]
+        [jiraph.walk :only
+         [defwalk path paths *parallel-follow* intersection enable-walk-caching! reset-cache!]]
         [jiraph.walk.predicates :only [at-limit]]
         [fogus.unk :only [memo-lru snapshot]])
   (:require [jiraph.masai-layer :as bal]
@@ -20,7 +21,7 @@
   :cache     true)
 
 (deftest test-lru
-  (enable-walk-caching! memo-lru 5)
+  (enable-walk-cache! memo-lru 5)
   (with-graph test-graph
     (truncate!)
 
@@ -34,4 +35,6 @@
       (dotimes [n 2]
         (full-walk focus)))
     (is (= (sort foci)
-           (sort (map first (keys (snapshot jiraph.walk/cached-walk))))))))
+           (sort (map first (keys (snapshot jiraph.walk/cached-walk))))))
+    (reset-cache!)
+    (is (= 0 (count(keys (snapshot jiraph.walk/cached-walk)))))))
