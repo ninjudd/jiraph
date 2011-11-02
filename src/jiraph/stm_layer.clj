@@ -94,7 +94,7 @@
   (at-revision [this rev]
     (assoc this :revision rev))
   (current-revision [this]
-    (current-rev this))
+    revision)
 
   WrappedTransactional
   (txn-wrap [_ f]
