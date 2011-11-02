@@ -72,7 +72,11 @@
                      (dotxn (rev 3)
                        (-> (rev 3)
                            (retro/enqueue (fn [_]
-                                            (assoc-node! (rev 4) "stevie" {:age 2})))))))))))
+                                            (assoc-node! (rev 4) "stevie" {:age 2})))))))))
+    
+    (testing "Reporting of revision views"
+      (is (= 2 (retro/current-revision (rev 2))))
+      (is (nil? (retro/current-revision master))))))
 
 
 (deftest layer-impls
