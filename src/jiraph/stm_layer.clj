@@ -93,7 +93,7 @@
 
   Revisioned
   (at-revision [this rev]
-    (assoc this :revision rev))
+    (assoc-record this :revision rev))
   (current-revision [this]
     revision)
 
