@@ -189,7 +189,7 @@
   "Rebinds the var for the memoized walk fn, clearing all cached walks"
   []
   (let [{:keys [memo-fn args]} (meta #'cached-walk)]
-    (apply enable-walk-caching! memo-fn args)))
+    (apply enable-walk-cache! memo-fn args)))
 
 (defn make-path
   "Given a step, construct a path of steps from the walk focus to this step's node."
