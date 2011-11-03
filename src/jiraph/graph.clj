@@ -1,7 +1,7 @@
 (ns jiraph.graph
   (:use [useful.map :only [into-map update-each filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [memoize-deref adjoin into-set]]
-        [useful.fn :only [any]]
+        [useful.fn :only [any fix]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
@@ -389,8 +389,10 @@
 
 (defmacro with-caching
   "Enable caching for the given forms. See wrap-caching."
-  [& forms]
-  `((wrap-caching (fn [] ~@forms))))
+  ([form]
+     `((wrap-caching (fn [] ~form))))
+  ([cache form]
+     `((fix (fn [] ~form) (boolean ~cache) wrap-caching))))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."

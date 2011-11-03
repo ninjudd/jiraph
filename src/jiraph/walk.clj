@@ -165,11 +165,11 @@
   "Perform a walk starting at focus-id using traversal which should be of type jiraph.walk.Traversal."
   [focus-id opts]
   (let [traversal (into (make-record Traversal)
-                        (map traversal-fn (dissoc opts :cache)))
+                        (map traversal-fn opts))
         map (if *parallel-follow*
               (partial pcollect graph/wrap-bindings)
               map)]
-    (graph/with-caching
+    (graph/with-caching (:node-cache opts true)
       (loop [^Walk walk (init-walk traversal focus-id)]
         (let [steps (persistent! (to-follow walk))
               walk  (assoc-record walk :to-follow (transient []))]
