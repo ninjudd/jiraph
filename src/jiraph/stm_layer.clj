@@ -1,12 +1,13 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer :only [Enumerate Counted Basic Layer LayerMeta
-                             ChangeLog skip-applied-revs max-revision get-revisions close]]
-        [jiraph.graph :only [*skip-writes*]]
-        [retro.core   :only [WrappedTransactional Revisioned
-                             get-queue at-revision current-revision empty-queue]]
-        [useful.fn    :only [given fix]]
-        [useful.utils :only [returning]])
+  (:use [jiraph.layer     :only [Enumerate Counted Basic Layer LayerMeta
+                                 ChangeLog skip-applied-revs max-revision get-revisions close]]
+        [jiraph.graph     :only [*skip-writes*]]
+        [retro.core       :only [WrappedTransactional Revisioned
+                                 get-queue at-revision current-revision empty-queue]]
+        [useful.fn        :only [given fix]]
+        [useful.utils     :only [returning]]
+        [useful.datatypes :only [assoc-record]])
   (:import (java.io FileNotFoundException)))
 
 (comment
