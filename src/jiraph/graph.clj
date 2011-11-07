@@ -135,9 +135,11 @@
   ([layer keyseq f & args]
      (if-let [query-fn (layer/query-fn layer keyseq f)]
        (apply query-fn args)
-       (let [[id & keys] keyseq
-             node (get-node layer id)]
-         (apply f (get-in node keys) args)))))
+       (if-let [query-fn (layer/query-fn layer keyseq identity)]
+         (apply f (query-fn) args)
+         (let [[id & keys] keyseq
+               node (get-node layer id)]
+           (apply f (get-in node keys) args))))))
 
 (defn get-in-node
   "Fetch data from inside a node."

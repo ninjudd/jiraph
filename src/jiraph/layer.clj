@@ -73,7 +73,8 @@
   layer. These functions will be called on a layer in preparation to actually performing an
   operation on some internal node. The layer is responsible for determining whether that operation
   can be optimized at that position in the tree; this will usually be implemented by inspecting
-  the function passed in and testing it against some internal list of optimizable functions.
+  the function passed in and testing it against some internal list of optimizable functions, or by
+  checking the keyseq to see if optimized access is possible at this node.
 
   If nil is returned, the operation will be done in some less optimized way, often by calling
   get-node, applying the update, and then assoc-node!. If an optimization is possible, you should
