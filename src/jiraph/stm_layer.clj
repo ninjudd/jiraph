@@ -1,12 +1,13 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer     :only [Enumerate Counted Basic Layer LayerMeta
+  (:use [jiraph.layer     :only [Enumerate Counted Basic Layer LayerMeta Optimized
                                  ChangeLog skip-applied-revs max-revision get-revisions close]]
         [jiraph.graph     :only [*skip-writes*]]
         [retro.core       :only [WrappedTransactional Revisioned
                                  get-queue at-revision current-revision empty-queue]]
         [useful.fn        :only [given fix]]
         [useful.utils     :only [returning]]
+        [useful.map       :only [keyed]]
         [useful.datatypes :only [assoc-record]])
   (:import (java.io FileNotFoundException)))
 
@@ -58,6 +59,24 @@
   Counted
   (node-count [this]
     (-> this nodes count))
+
+  ;; the STM layer can't optimize any of these things; these are simply
+  ;; reference/testing implementations
+  Optimized
+  (query-fn [this keyseq f]
+    (when (= 'specialized-count f)
+      (fn [update-counter]
+        (do (swap! update-counter inc)
+            (count (get-in (nodes this) keyseq))))))
+  (update-fn [this [id key :as keyseq] f]
+    (when (= :edges key)
+      (fn [& args]
+        (let [old (get-in (nodes this) keyseq)
+              new (apply f old args)]
+          (alter store
+                 assoc-in (list* (current-rev this) :nodes keyseq)
+                 new)
+          (keyed [old new])))))
 
   LayerMeta
   (get-layer-meta [this k]
