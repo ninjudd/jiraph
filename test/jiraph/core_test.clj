@@ -19,10 +19,9 @@
   (with-graph (make-graph)
     (with-each-layer all
       (truncate! layer-name)
-      (testing "node-ids and node-count"
+      (testing "node-ids"
         (assoc-node! layer-name "1" {:foo 0})
-        (is (= #{"1"} (set (node-id-seq layer-name))))
-        (is (= 1 (node-count layer-name)))))))
+        (is (= #{"1"} (set (node-id-seq layer-name))))))))
 
 (deftest update-test
   (with-graph (make-graph)

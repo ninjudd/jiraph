@@ -1,6 +1,6 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer     :only [Enumerate Counted Basic Layer LayerMeta Optimized
+  (:use [jiraph.layer     :only [Enumerate Basic Layer LayerMeta Optimized
                                  ChangeLog skip-applied-revs max-revision get-revisions close]]
         [jiraph.graph     :only [*skip-writes*]]
         [retro.core       :only [WrappedTransactional Revisioned
@@ -55,10 +55,6 @@
     (-> this nodes keys))
   (node-seq [this]
     (-> this nodes seq))
-
-  Counted
-  (node-count [this]
-    (-> this nodes count))
 
   ;; the STM layer can't optimize any of these things; these are simply
   ;; reference/testing implementations

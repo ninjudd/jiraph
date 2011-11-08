@@ -81,7 +81,7 @@
        (fn ~name [layer-name# & args#]
          (apply ~varname (layer layer-name#)
                 args#))))
-  layer-meta node-id-seq node-count get-property set-property! update-property!
+  layer-meta node-id-seq get-property set-property! update-property!
   get-node find-node query-in-node get-in-node get-edges get-edge
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   fields node-valid? verify-node

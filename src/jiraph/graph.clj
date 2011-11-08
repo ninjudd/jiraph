@@ -93,11 +93,6 @@
   [layer]
   (layer/node-id-seq layer))
 
-(defn node-count
-  "Return the total number of nodes in this layer."
-  [layer]
-  (layer/node-count layer))
-
 (defn get-property
   "Fetch a layer-wide property."
   [layer key]
@@ -333,7 +328,7 @@
 (comment these guys need to be updated and split up once we've figured out our
          plan for wrapping, and also the split between graph and core.
   (wrap-multiple #'*read-wrappers*
-                 node-id-seq node-count get-property current-revision
+                 node-id-seq get-property current-revision
                  get-node node-exists? get-incoming)
   (wrap-multiple #'*write-wrappers*
                  update-node! optimize! truncate! set-property! update-property!

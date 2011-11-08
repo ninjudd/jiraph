@@ -20,10 +20,6 @@
   (node-seq [layer]
     "A seq of all nodes in this layer"))
 
-(defprotocol Counted
-  (node-count [layer]
-    "Return the total number of nodes in this layer."))
-
 (defprotocol Schema
   (fields [layer] [layer subfields]
     "A list of canonical fields stored in this layer. Can be empty.")
@@ -236,16 +232,6 @@
   (node-id-seq [layer] ())
   (node-seq [layer]
     (map #(get-node layer % nil) (node-id-seq layer)))
-
-  Counted
-  ;; default behavior: walk through all node ids, counting. not very fast
-  (node-count [layer]
-    (fallback-warning)
-    (apply + (map (constantly 1) (node-id-seq layer))))
-  (inc-count [layer]
-    )
-  (dec-count [layer]
-    )
 
   Optimized
   ;; can't optimize anything
