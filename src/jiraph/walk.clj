@@ -3,8 +3,7 @@
         [useful.utils :only [or-max]]
         [useful.parallel :only [pcollect *pcollect-thread-num*]]
         [useful.java :only [construct]]
-        [useful.datatypes :only [make-record assoc-record update-record record-accessors]]
-        useful.debug)
+        [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [jiraph.graph :as graph]
             [clojure.set :as set]))
 
