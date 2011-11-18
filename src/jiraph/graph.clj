@@ -17,27 +17,10 @@
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
 (def ^{:private true}               write-count (atom 0))
 
-(defn layer-meta
-  "Fetch a metadata key from a layer."
-  [layer key]
-  (key (meta layer)))
-
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
   [node]
   (:edges node))
-
-(defn edges-valid? [layer edges]
-  (or (not (layer/single-edge? layer))
-      (> 2 (count edges))))
-
-(defn types-valid? [layer id node]
-  (let [types (layer-meta layer :types)]
-    (or (not types)
-        (let [node-type (type-key id)]
-          (and (contains? types node-type)
-               (every? (partial contains? (types node-type))
-                       (map type-key (keys (edges node)))))))))
 
 (defn filter-edge-ids [pred node]
   (filter-keys-by-val pred (edges node)))
@@ -93,24 +76,21 @@
   [layer]
   (layer/node-id-seq layer))
 
-(defn get-property
-  "Fetch a layer-wide property."
-  [layer key]
-  (layer/get-layer-meta layer key))
+(defn node-seq
+  "Return a lazy sequence of all nodes in the layer."
+  [layer]
+  (layer/node-seq layer))
 
-(defn set-property!
-  "Store a layer-wide property."
-  [layer key val]
-  (refuse-readonly [layer])
-  (with-transaction layer
-    (layer/assoc-layer-meta! layer key val)))
-
-(defn update-property!
-  "Update the given layer property by calling function f with the old value and any supplied args."
-  [layer key f & args]
-  (with-transaction layer
-    (let [val (get-property layer key)]
-      (set-property! layer key (apply f val args)))))
+(defn- meta-keyseq [layer keys]
+  (let [[first & more] keys]
+    (if (= :meta first)
+      (let [[second & rest] more]
+        (if (keyword? second)
+          (list* (layer/meta-key layer "_layer")
+                 (name second)
+                 more)
+          (cons (layer/meta-key layer second)
+                more))))))
 
 (defn get-node
   "Fetch a node's data from this layer."
@@ -128,13 +108,14 @@
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
   ([layer keyseq f & args]
-     (if-let [query-fn (layer/query-fn layer keyseq f)]
-       (apply query-fn args)
-       (if-let [query-fn (layer/query-fn layer keyseq identity)]
-         (apply f (query-fn) args)
-         (let [[id & keys] keyseq
-               node (get-node layer id)]
-           (apply f (get-in node keys) args))))))
+     (let [keyseq (meta-keyseq layer keyseq)]
+       (if-let [query-fn (layer/query-fn layer keyseq f)]
+         (apply query-fn args)
+         (if-let [query-fn (layer/query-fn layer keyseq identity)]
+           (apply f (query-fn) args)
+           (let [[id & keys] keyseq
+                 node (get-node layer id)]
+             (apply f (get-in node keys) args)))))))
 
 (defn get-in-node
   "Fetch data from inside a node."
@@ -156,51 +137,57 @@
   ([layer id to-id & [not-found]]
      (get-in-edge layer [id to-id] not-found)))
 
-(letfn [(changed-edges [old-edges new-edges]
-          (reduce (fn [edges [edge-id edge]]
-                    (let [was-present (not (:deleted edge))
-                          is-present  (when-let [e (get edges edge-id)] (not (:deleted e)))]
-                      (if (= was-present is-present)
-                        (dissoc edges edge-id)
-                        (assoc-in edges [edge-id :deleted] was-present))))
-                  new-edges old-edges))
+(declare update-in-node! assoc-in-node!)
 
-        (update-incoming! [layer [id & keys] old new]
-          (when (layer/manage-incoming? layer)
-            (doseq [[edge-id {:keys [deleted]}]
-                    (apply changed-edges
-                           (map (comp :edges (to-fix keys (partial assoc-in {} keys)))
-                                [old new]))]
-              ((if deleted layer/drop-incoming! layer/add-incoming!)
-               layer edge-id id))))
+(defn- changed-edges [old-edges new-edges]
+  (reduce (fn [edges [edge-id edge]]
+            (let [was-present (not (:deleted edge))
+                  is-present  (when-let [e (get edges edge-id)] (not (:deleted e)))]
+              (if (= was-present is-present)
+                (dissoc edges edge-id)
+                (assoc-in edges [edge-id :deleted] was-present))))
+          new-edges old-edges))
 
-        (update-changelog! [layer node-id]
-          (when (layer/manage-changelog? layer)
-            (when-let [rev-id (retro/current-revision layer)]
-              (set-property! layer "revision-id" rev-id)
-              (when node-id
-                (layer/update-meta! layer node-id "affected-by" conj [rev-id])
-                (update-property! layer (str "changed-ids-" rev-id) conj node-id)))))]
+(defn- update-incoming! [layer [id & keys] old new]
+  (when (layer/manage-incoming? layer)
+    (doseq [[edge-id {:keys [deleted]}]
+            (apply changed-edges ;; TODO does this to-fix work? could it just be an if?
+                   (map (comp :edges (to-fix keys (partial assoc-in {} keys)))
+                        [old new]))]
+      ((if deleted layer/drop-incoming! layer/add-incoming!)
+       layer edge-id id))))
 
-  (defn update-in-node! [layer keys f & args]
-    (refuse-readonly [layer])
-    (with-transaction layer
-      (when-not *skip-writes*
+(defn- update-changelog! [layer node-id]
+  (when (layer/manage-changelog? layer)
+    (when-let [rev-id (retro/current-revision layer)]
+      (assoc-in-node! layer [:meta :revision-id] rev-id)
+      (when node-id
+        (update-in-node! layer [:meta node-id "affected-by"] conj rev-id)
+        (update-in-node! layer [:meta :changed-ids rev-id] conj node-id)))))
+
+(defn update-in-node! [layer keyseq f & args]
+  (refuse-readonly [layer])
+  (with-transaction layer
+    (when-not *skip-writes*
+      (let [keys (meta-keyseq layer keyseq)
+            update-meta! (if (identical? keys keyseq) ; not a meta-node
+                           (fn [keys old new]
+                             (update-incoming! layer keys old new)
+                             (update-changelog! layer (first keys)))
+                           (constantly nil))]
         (let [updater (partial layer/update-fn layer)
               keys (seq keys)]
           (if-let [update! (updater keys f)]
             ;; maximally-optimized; the layer can do this exact thing well
             (let [{:keys [old new]} (apply update! args)]
-              (update-incoming! layer keys old new)
-              (update-changelog! layer (first keys)))
+              (update-meta! keys old new))
             (if-let [update! (and (seq keys) ;; don't look for assoc-in of empty keys
                                   (updater (butlast keys) assoc))]
               ;; they can replace this sub-node efficiently, at least
               (let [old (get-in-node layer keys)
                     new (apply f old args)]
                 (update! (last keys) new)
-                (update-incoming! layer keys old new)
-                (update-changelog! layer (first keys)))
+                (update-meta! keys old new))
 
               ;; need some special logic for unoptimized top-level assoc/dissoc
               (if-let [update! (and (not keys) ({assoc  layer/assoc-node!
@@ -209,16 +196,14 @@
                       old (when (layer/manage-incoming? layer)
                             (get-node layer id))]
                   (apply update! layer args)
-                  (update-incoming! layer [id] old new)
-                  (update-changelog! layer id))
+                  (update-meta! [id] old new))
                 (let [[id & keys] keys
                       old (get-node layer id)
                       new (if keys
                             (apply update-in old keys f args)
                             (apply f old args))]
                   (layer/assoc-node! layer id new)
-                  (update-incoming! layer [id] old new)
-                  (update-changelog! layer id))))))
+                  (update-meta! [id] old new))))))
         (swap! write-count inc)))))
 
 (defn update-in-node
@@ -269,6 +254,18 @@
   ([layer subfields]
      (layer/fields layer subfields)))
 
+(defn edges-valid? [layer edges]
+  (or (not (layer/single-edge? layer))
+      (> 2 (count edges))))
+
+(defn types-valid? [layer id node]
+  (let [types (get-in-node layer [:meta :types])]
+    (or (not types)
+        (let [node-type (type-key id)]
+          (and (contains? types node-type)
+               (every? (partial contains? (types node-type))
+                       (map type-key (keys (edges node)))))))))
+
 (defn node-valid?
   "Check if the given node is valid for the specified layer."
   [layer id attrs]
@@ -295,6 +292,34 @@
   [layer id]
   (reverse
    (take-while pos? (reverse (layer/get-revisions layer id)))))
+
+
+(extend-type Object
+  layer/Meta
+  (meta-key [layer key]
+    (str "_" key))
+  (meta-key? [layer key]
+    (.startsWith ^String key "_"))
+
+  layer/ChangeLog
+  (get-revisions [layer id]
+    (get-in-node layer [:meta id "affected-by"]))
+  (get-changed-ids [layer rev]
+    (get-in-node layer [:meta :changed-ids rev]))
+  (max-revision [layer]
+    (-> layer
+        (retro/at-revision nil)
+        (get-in-node [:meta :revision-id])
+        (or 0)))
+
+  layer/Incoming
+  ;; default behavior: use node meta with special prefix to track incoming edges
+  (get-incoming [layer id]
+    (get-in-node layer [:meta id "incoming"]))
+  (add-incoming! [layer id from-id]
+    (update-in-node! layer [id "incoming"] adjoin {from-id true}))
+  (drop-incoming! [layer id from-id]
+    (update-in-node! layer [id "incoming"] adjoin {from-id false})))
 
 (defn get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."

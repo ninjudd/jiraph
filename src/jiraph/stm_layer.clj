@@ -1,6 +1,6 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer     :only [Enumerate Basic Layer LayerMeta Optimized
+  (:use [jiraph.layer     :only [Enumerate Basic Layer Optimized Meta meta-key?
                                  ChangeLog skip-applied-revs max-revision get-revisions close]]
         [jiraph.graph     :only [*skip-writes*]]
         [retro.core       :only [WrappedTransactional Revisioned
@@ -74,31 +74,26 @@
                  new)
           (keyed [old new])))))
 
-  LayerMeta
-  (get-layer-meta [this k]
-    (if-not revision
-      (-> this meta (get k))
-
-      ;; >= is "backward" because we're storing the map sorted in descending order
-      ;; really this finds the first revision less than or equal to current
-      (let [[_ store] (first (subseq @store >= revision))]
-        (get-in store [:meta k]))))
-  (assoc-layer-meta! [this k v]
-    (alter store ;; TODO make this work when no revision?
-           assoc-in [(current-rev this) :meta k] v))
+  Meta
+  (meta-key [this k]
+    [k])
+  (meta-key? [this k]
+    (vector? k))
 
   Basic
   (get-node [this k not-found]
-    (let [n (-> this nodes (get k not-found))]
-      (if-not (identical? n not-found)
-        n
-        (let [touched-revisions (get-revisions (at-revision this nil) k)
-              curr (current-revision this)
-              most-recent (or (first (if curr
-                                       (drop-while #(> % curr) touched-revisions)
-                                       touched-revisions))
-                              0)]
-          (-> @store (get-in [most-recent :nodes k] not-found))))))
+    (if (meta-key? this k)
+      (-> this meta (get (first k) not-found))
+      (let [n (-> this nodes (get k not-found))]
+        (if-not (identical? n not-found)
+          n
+          (let [touched-revisions (get-revisions (at-revision this nil) k)
+                curr (current-revision this)
+                most-recent (or (first (if curr
+                                         (drop-while #(> % curr) touched-revisions)
+                                         touched-revisions))
+                                0)]
+            (-> @store (get-in [most-recent :nodes k] not-found)))))))
   (assoc-node! [this k v]
     (alter store
            assoc-in [(current-rev this) :nodes k] v))

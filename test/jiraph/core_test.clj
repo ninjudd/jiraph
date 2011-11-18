@@ -97,11 +97,14 @@
     (with-each-layer all
       (truncate! layer-name)
       (testing "layer-wide properties"
-        (is (not (get-property layer-name :foo)))
-        (set-property! layer-name :foo [1 2 3])
-        (is (= [1 2 3] (get-property layer-name :foo)))
-        (update-property! layer-name :foo conj 5)
-        (is (= [1 2 3 5] (get-property layer-name :foo)))))))
+        (let [keys [:meta :foo]
+              curr-foo (fn []
+                         (get-in-node layer-name keys))]
+          (is (not (curr-foo)))
+          (assoc-in-node! layer-name keys [1 2 3])
+          (is (= [1 2 3] (curr-foo)))
+          (update-in-node! layer-name keys conj 5)
+          (is (= [1 2 3 5] (curr-foo))))))))
 
 (deftest incoming
   (with-graph (make-graph)
@@ -210,8 +213,6 @@
             (is (= [old new] (compact-node! layer-name "3")))
             (is (= () (get-revisions layer-name "3")))
             (is (= '(100, 101) (get-all-revisions layer-name "3"))))))))
-
-
 
   (deftest adhere-schema
     (with-graph

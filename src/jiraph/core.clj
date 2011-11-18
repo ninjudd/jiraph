@@ -81,8 +81,7 @@
        (fn ~name [layer-name# & args#]
          (apply ~varname (layer layer-name#)
                 args#))))
-  layer-meta node-id-seq get-property set-property! update-property!
-  get-node find-node query-in-node get-in-node get-edges get-edge
+  node-id-seq get-node find-node query-in-node get-in-node get-edges get-edge
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   fields node-valid? verify-node
   get-all-revisions get-revisions
@@ -147,7 +146,7 @@
   "The maximum revision on all specified layers, or all layers if none are specified."
   [& layers]
   (apply max 0 (for [layer (vals (as-layer-map layers))]
-                 (or (graph/get-property layer :rev) 0))))
+                 (graph/get-in-node layer [:meta :rev] 0))))
 
 (defn schema
   "Return a map of fields for a given type to the metadata for each layer. If a subfield is
