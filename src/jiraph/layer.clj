@@ -26,27 +26,11 @@
   (node-valid? [layer attrs]
     "Check if the given node is valid according to the layer schema."))
 
-(defprotocol LayerMeta
-  (get-layer-meta [layer key]
-    "Fetch layer-wide meta.")
-  (assoc-layer-meta! [layer key val]
-    "Store layer-wide meta."))
-
-(defprotocol NodeMeta
-  (get-meta [layer id key]
-    "Fetch the metadata for a specific node.")
-  (assoc-meta! [layer id key val]
-    "Set the metadata for a node."))
-
-(defprotocol UpdateMeta
-  (update-meta! [layer id key f args]
-    "Update the metadata for a node."))
-
 (defprotocol Meta
-  (layer-meta-key [layer key]
-    "The key to store layer meta in.")
-  (node-meta-key [layer id key]
-    "The key to store node meta in."))
+  (meta-key [layer id]
+    "Convert a node-id to the id of the meta-node holding metadata for that node.")
+  (meta-key? [layer id]
+    "Is the specified id a meta-node id?"))
 
 (defprotocol Incoming
   (get-incoming [layer id]
@@ -138,56 +122,14 @@
   (single-edge? [layer]
     "Is it illegal to have more than one outgoing edge per node on this layer?"))
 
-;; Meta-related protocols
+;; the other meta-related protocols are extended in jiraph.graph because they use
+;; update-in-node! which has some fairly complicated machinery in it
 (extend-type Object
   Meta
-  (layer-meta-key [layer id]
+  (meta-key [layer id]
     (str "_" id))
-  (node-meta-key [layer id key]
-    (str "_" id "_" key))
-
-  ChangeLog
-  (get-revisions [layer id]
-    (get-meta layer id "affected-by"))
-  (get-changed-ids [layer rev]
-    (get-layer-meta layer (str "changed-ids-" rev)))
-  (max-revision [layer]
-    (-> layer
-        (retro/at-revision nil)
-        (get-layer-meta "revision-id")
-        (or 0)))
-
-  LayerMeta
-  ;; default behavior: create specially-named regular nodes to hold metadata
-  (get-layer-meta [layer key]
-    (get-node layer (layer-meta-key layer key) nil))
-  (assoc-layer-meta! [layer key value]
-    (assoc-node! layer (layer-meta-key layer key) value))
-
-  NodeMeta
-  ;; default behavior: use specially-named layer-wide meta to fake node metadata
-  (get-meta [layer id key]
-    (get-layer-meta layer (node-meta-key layer id key)))
-  (assoc-meta! [layer id key val]
-    (assoc-layer-meta! layer (node-meta-key layer id key) val))
-
-  UpdateMeta
-  ;; default behavior: try to use update-fn;
-  ;;  fall back to getting old meta, applying f, setting new value
-  (update-meta! [layer id key f args]
-    (let [meta-key (node-meta-key layer id key)]
-      (if-let [update! (update-fn layer [meta-key] f)]
-        (apply update! args)
-        (assoc-meta! layer id key (apply f (get-meta layer id key) args)))))
-
-  Incoming
-  ;; default behavior: use node meta with special prefix to track incoming edges
-  (get-incoming [layer id]
-    (get-meta layer id "incoming"))
-  (add-incoming! [layer id from-id]
-    (update-meta! layer id "incoming" adjoin [{from-id true}]))
-  (drop-incoming! [layer id from-id]
-    (update-meta! layer id "incoming" adjoin [{from-id false}])))
+  (meta-key? [layer id]
+    (= \_ (first id))))
 
 ;; these guys want a default/permanent sentinel
 (let [sentinel (Object.)]

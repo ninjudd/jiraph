@@ -4,7 +4,10 @@
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]))
 
+(prn "COMPILE GRAPH")
+
 (defn test-layer [master]
+  (prn "LAYER TEST")
   (truncate! master)
   (let [rev (vec (for [r (range 5)]
                    (at-revision master r)))
@@ -17,8 +20,11 @@
       (is (= nil (get-node (rev 0) "mike"))))
     (testing "Node data is written"
       (is (= mike-node (get-node (rev 1) "mike"))))
+    (prn "=============START=============")
+    (prn (rev 4))
     (testing "Future revisions can be read"
       (is (= mike-node (get-node (rev 4) "mike"))))
+    (prn "==============END==============")
     (testing "Basic incoming"
       (is (= #{"mike"}
              (get-incoming (rev 1) "carla")))
@@ -73,7 +79,7 @@
                        (-> (rev 3)
                            (retro/enqueue (fn [_]
                                             (assoc-node! (rev 4) "stevie" {:age 2})))))))))
-    
+
     (testing "Reporting of revision views"
       (is (= 2 (retro/current-revision (rev 2))))
       (is (nil? (retro/current-revision master))))))

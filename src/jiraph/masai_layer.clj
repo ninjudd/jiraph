@@ -1,26 +1,23 @@
 (ns jiraph.masai-layer
-  (:use [jiraph.layer :only [Enumerate Counted Optimized Basic Layer LayerMeta]]
-        [retro.core   :only [WrappedTransactional Revisioned]]
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer LayerMeta NodeMeta
+                             ChangeLog node-meta-key]]
+        [retro.core   :only [WrappedTransactional Revisioned txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin]]
         [useful.seq :only [find-with]])
   (:require [masai.db :as db]
-            [cereal.format :as f]
-            [cereal.reader :as reader-append-format])
+            [cereal.core :as cereal]
+            [jiraph.graph :as graph])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]))
 
 
 
 (defrecord MasaiLayer [db revision node-format node-meta-format layer-meta-format]
   Enumerate
-  (node-ids-seq [this]
+  (node-id-seq [this]
     (remove #(.startsWith % "_") (db/key-seq db)))
   (node-seq [this]
-    (map #(get-node layer % nil) (node-id-seq this)))
-
-  Counted
-  (node-count [this]
-    (or (db/fetch db count-key) 0))
+    (map #(graph/get-node this %) (node-id-seq this)))
 
   LayerMeta
   (get-layer-meta [this key]
@@ -80,11 +77,11 @@
   ;;        (catch Exception e)))
 
   ChangeLog
-  (get-revisions [layer id]
-    (:revisions (get-node layer id)))
+  (get-revisions [this id]
+    (:revisions (graph/get-node this id)))
 
   WrappedTransactional
-  (txn-wrap [layer f]
+  (txn-wrap [this f]
     ;; todo *skip-writes* for past revisions
     (txn-wrap f db))
 

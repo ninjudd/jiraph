@@ -1,12 +1,12 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer     :only [Enumerate Basic Layer LayerMeta Optimized
+  (:use [jiraph.layer     :only [Enumerate Basic Layer Optimized Meta meta-key?
                                  ChangeLog skip-applied-revs max-revision get-revisions close]]
         [jiraph.graph     :only [*skip-writes*]]
         [retro.core       :only [WrappedTransactional Revisioned
                                  get-queue at-revision current-revision empty-queue]]
         [useful.fn        :only [given fix]]
-        [useful.utils     :only [returning]]
+        [useful.utils     :only [returning or-min]]
         [useful.map       :only [keyed]]
         [useful.datatypes :only [assoc-record]])
   (:import (java.io FileNotFoundException)))
@@ -35,9 +35,18 @@
 
 (def empty-store (sorted-map-by > 0 {}))
 
+(defn storage-area [k]
+  (if (vector? k), :meta, :nodes))
+
+(defn storage-name [k]
+  (fix k vector? first))
+
 (defn current-rev [layer]
-  (or (:revision layer) ;; revision explicitly set
-      (first (keys (-> layer :store deref))))) ;;  get most recent revision
+  (let [store (-> layer :store deref)
+        rev (:revision layer)]
+    (if (and rev (contains? store rev))
+      rev
+      (first (keys store)))))
 
 (defn now [layer]
   (-> layer :store deref (get (current-rev layer))))
@@ -74,37 +83,31 @@
                  new)
           (keyed [old new])))))
 
-  LayerMeta
-  (get-layer-meta [this k]
-    (if-not revision
-      (-> this meta (get k))
-
-      ;; >= is "backward" because we're storing the map sorted in descending order
-      ;; really this finds the first revision less than or equal to current
-      (let [[_ store] (first (subseq @store >= revision))]
-        (get-in store [:meta k]))))
-  (assoc-layer-meta! [this k v]
-    (alter store ;; TODO make this work when no revision?
-           assoc-in [(current-rev this) :meta k] v))
+  Meta
+  (meta-key [this k]
+    [k])
+  (meta-key? [this k]
+    (vector? k))
 
   Basic
   (get-node [this k not-found]
-    (let [n (-> this nodes (get k not-found))]
-      (if-not (identical? n not-found)
-        n
-        (let [touched-revisions (get-revisions (at-revision this nil) k)
-              curr (current-revision this)
-              most-recent (or (first (if curr
-                                       (drop-while #(> % curr) touched-revisions)
-                                       touched-revisions))
-                              0)]
-          (-> @store (get-in [most-recent :nodes k] not-found))))))
+    (if (meta-key? this k)
+      (-> this meta ? (get (? (first (? k))) not-found) ?)
+      (let [n (-> this nodes (get k not-found))]
+        (if-not (identical? n not-found)
+          n
+          (let [touched-revisions (? (get-revisions (at-revision (? this) nil) (? k)))
+                most-recent (or (first (if revision
+                                         (drop-while #(> % revision) touched-revisions)
+                                         touched-revisions))
+                                0)]
+            (-> @store (get-in [most-recent :nodes k] not-found)))))))
   (assoc-node! [this k v]
     (alter store
-           assoc-in [(current-rev this) :nodes k] v))
+           assoc-in [(current-rev this) (storage-area k) (storage-name k)] v))
   (dissoc-node! [this k]
     (alter store
-           update-in [(current-rev this) :nodes] dissoc k))
+           update-in [(current-rev this) (storage-area k)] dissoc (storage-name k)))
 
   Revisioned
   (at-revision [this rev]
@@ -122,10 +125,11 @@
                (< rev max-rev) (binding [*skip-writes* true] (f (empty-queue layer)))
                :else
                (let [store (.store layer)
-                     prev (get @store max-rev)]
-                 (alter store fix
-                        #(not (contains? % rev))
-                        #(assoc % rev prev))
+                     prev (? (get @store (? max-rev)))]
+                 (?
+                  (alter store fix
+                         #(not (contains? % rev))
+                         #(assoc % rev prev)))
                  (returning (f (at-revision layer rev))
                    (alter store fix
                           #(identical? prev (get % rev))
