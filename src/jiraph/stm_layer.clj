@@ -42,11 +42,10 @@
   (fix k vector? first))
 
 (defn current-rev [layer]
-  (let [store (-> layer :store deref)
-        rev (:revision layer)]
-    (if (and rev (contains? store rev))
-      rev
-      (first (keys store)))))
+  (let [store @(:store layer)]
+    (ffirst (if-let [rev (:revision layer)]
+              (subseq store >= rev)
+              store))))
 
 (defn now [layer]
   (-> layer :store deref (get (current-rev layer))))
