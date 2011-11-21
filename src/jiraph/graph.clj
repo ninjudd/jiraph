@@ -245,7 +245,8 @@
 (do (defn assoc-in-node!
       "Set attributes inside of a node."
       [layer keys value]
-      (update-in-node! layer (butlast keys) assoc (last keys) value))
+      (let [keyseq (vec (meta-keyseq layer keys))]
+        (update-in-node! layer (pop keyseq) assoc (peek keyseq) value)))
     (defn assoc-in-node
       "Functional version of assoc-in-node! for use in a transaction."
       [layer keys value]
