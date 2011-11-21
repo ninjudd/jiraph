@@ -110,7 +110,7 @@
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
   ([layer keyseq f & args]
-     (let [keyseq (? (meta-keyseq layer (? keyseq)))]
+     (let [keyseq (meta-keyseq layer keyseq)]
        (if-let [query-fn (layer/query-fn layer keyseq f)]
          (apply query-fn args)
          (if-let [query-fn (layer/query-fn layer keyseq identity)]
@@ -175,7 +175,6 @@
       (let [keys (meta-keyseq layer keyseq)
             update-meta! (if (identical? keys keyseq) ; not a meta-node
                            (fn [keys old new]
-;                             (println "Updating meta:" keys old new)
                              (update-incoming! layer keys old new)
                              (update-changelog! layer (first keys)))
                            (constantly nil))]
@@ -320,7 +319,7 @@
   layer/Incoming
   ;; default behavior: use node meta with special prefix to track incoming edges
   (get-incoming [layer id]
-    (? (meta-keyseq layer [:meta id "incoming"]))
+    (meta-keyseq layer [:meta id "incoming"])
     (get-in-node layer [:meta id "incoming"]))
   (add-incoming! [layer id from-id]
     (update-in-node! layer [:meta id "incoming"] adjoin {from-id true}))

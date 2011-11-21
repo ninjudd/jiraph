@@ -5,8 +5,6 @@
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]))
 
-(set! *print-meta* true)
-
 (def all [:tr :tp :stm :trs])
 
 (defn make-graph []

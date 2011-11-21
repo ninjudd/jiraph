@@ -91,11 +91,11 @@
   Basic
   (get-node [this k not-found]
     (if (meta-key? this k)
-      (-> this meta ? (get (? (first (? k))) not-found) ?)
+      (-> this meta (get (first k) not-found))
       (let [n (-> this nodes (get k not-found))]
         (if-not (identical? n not-found)
           n
-          (let [touched-revisions (? (get-revisions (at-revision (? this) nil) (? k)))
+          (let [touched-revisions (get-revisions (at-revision this nil) k)
                 most-recent (or (first (if revision
                                          (drop-while #(> % revision) touched-revisions)
                                          touched-revisions))
@@ -124,11 +124,10 @@
                (< rev max-rev) (binding [*skip-writes* true] (f (empty-queue layer)))
                :else
                (let [store (.store layer)
-                     prev (? (get @store (? max-rev)))]
-                 (?
-                  (alter store fix
-                         #(not (contains? % rev))
-                         #(assoc % rev prev)))
+                     prev (get @store max-rev)]
+                 (alter store fix
+                        #(not (contains? % rev))
+                        #(assoc % rev prev))
                  (returning (f (at-revision layer rev))
                    (alter store fix
                           #(identical? prev (get % rev))
