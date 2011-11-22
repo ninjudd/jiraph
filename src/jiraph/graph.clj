@@ -319,7 +319,6 @@
   layer/Incoming
   ;; default behavior: use node meta with special prefix to track incoming edges
   (get-incoming [layer id]
-    (meta-keyseq layer [:meta id "incoming"])
     (get-in-node layer [:meta id "incoming"]))
   (add-incoming! [layer id from-id]
     (update-in-node! layer [:meta id "incoming"] adjoin {from-id true}))
