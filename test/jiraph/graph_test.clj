@@ -2,10 +2,13 @@
   (:use clojure.test jiraph.graph
         [retro.core :as retro :only [dotxn at-revision]])
   (:require [jiraph.stm-layer :as stm]
-            [jiraph.layer :as layer]))
+            [jiraph.layer :as layer]
+            [jiraph.masai-layer :as masai]))
+(set! *print-meta* true)
 
 (defn test-layer [master]
   (truncate! master)
+  (? master)
   (let [rev (vec (for [r (range 5)]
                    (at-revision master r)))
         mike-node {:age 21 :edges {"carla" {:rel :mom}}}]
@@ -80,5 +83,9 @@
 
 
 (deftest layer-impls
-  (doseq [layer [(stm/make)]] ;; add more layers as they're implemented
-    (test-layer layer)))
+  (doseq [layer [(stm/make)
+                 (masai/make "test/masai1.db")]] ;; add more layers as they're implemented
+    (layer/open layer)
+    (try
+      (test-layer layer)
+      (finally (layer/close layer)))))
