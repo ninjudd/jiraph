@@ -3,13 +3,14 @@
         [useful.utils :only [adjoin]]
         [retro.core :as retro :only [dotxn]])
   (:require [jiraph.stm-layer :as stm]
-            [jiraph.layer :as layer]))
+            [jiraph.layer :as layer]
+            [jiraph.masai-layer :as masai]))
 
 (def all [:tr :tp :stm :trs])
 
 (defn make-graph []
   {:tr  (stm/make)
-   :trs (stm/make)
+   :trs (masai/make (?! (.getAbsolutePath (java.io.File/createTempFile "layer" "db"))))
    :tp  (stm/make)
    :stm (stm/make)})
 

@@ -4,11 +4,9 @@
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
             [jiraph.masai-layer :as masai]))
-(set! *print-meta* true)
 
 (defn test-layer [master]
   (truncate! master)
-  (? master)
   (let [rev (vec (for [r (range 5)]
                    (at-revision master r)))
         mike-node {:age 21 :edges {"carla" {:rel :mom}}}]

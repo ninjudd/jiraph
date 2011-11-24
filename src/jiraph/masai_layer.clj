@@ -17,7 +17,7 @@
 
 (defn- format-for [layer node-id]
   (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
-                   (meta-key? layer node-id) :meta-format
+                   (meta-key? layer node-id) :node-meta-format
                    :else :node-format)))
 
 ;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
@@ -92,8 +92,11 @@
   WrappedTransactional
   (txn-wrap [this f]
     ;; todo *skip-writes* for past revisions
-    (println "wrapping")
-    (txn-wrap db f))
+    (fn [^MasaiLayer layer]
+      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
+                                 (fn [_]
+                                   (f layer)))]
+        (db-wrapped (.db layer)))))
 
   Revisioned
   (at-revision [this rev]
