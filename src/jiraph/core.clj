@@ -3,7 +3,7 @@
             [jiraph.layer :as layer]
             [clojure.string :as s]
             [retro.core :as retro])
-  (:use     [useful.utils :only [memoize-deref map-entry]]
+  (:use     [useful.utils :only [returning memoize-deref map-entry]]
             [useful.map :only [update]]
             [useful.macro :only [macro-do]])
   (:import java.io.IOException))

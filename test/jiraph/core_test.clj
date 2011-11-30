@@ -10,7 +10,7 @@
 
 (defn make-graph []
   {:tr  (stm/make)
-   :trs (masai/make (?! (.getAbsolutePath (java.io.File/createTempFile "layer" "db"))))
+   :trs (masai/make (.getAbsolutePath (java.io.File/createTempFile "layer" "db")))
    :tp  (stm/make)
    :stm (stm/make)})
 
