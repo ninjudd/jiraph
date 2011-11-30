@@ -24,27 +24,27 @@
 
 (deftest update-test
   (with-graph (make-graph)
-      (with-each-layer all
-        (truncate! layer-name)
-        (testing "update-node! supports artitrary functions"
-          (let [node1 {:foo 2 :bar "three" :baz [1 2 3]}
-                node2 {:foo 2 :bar "three"}
-                node3 {:foo 2 :bar "three" :baz [5]}
-                node4 {:foo 2 :baz [5]}]
-            (is (= node2
-                   (-> layer-name
-                       (txn-> (assoc-node "1" node2)
-                              (update-node "1" assoc :baz [1 2 3])
-                              (update-node "1" dissoc :baz))
-                       (get-node "1"))))
-            (is (= node3
-                   (-> layer-name
-                       (txn-> (update-node "1" assoc :baz [5]))
-                       (get-node "1"))))
-            (is (= node4
-                   (-> layer-name
-                       (txn-> (update-node "1" select-keys [:foo :baz]))
-                       (get-node "1")))))))))
+    (with-each-layer all
+      (truncate! layer-name)
+      (testing "update-node! supports artitrary functions"
+        (let [node1 {:foo 2 :bar "three" :baz [1 2 3]}
+              node2 {:foo 2 :bar "three"}
+              node3 {:foo 2 :bar "three" :baz [5]}
+              node4 {:foo 2 :baz [5]}]
+          (is (= node2
+                 (-> layer-name
+                     (txn-> (assoc-node "1" node2)
+                            (update-node "1" assoc :baz [1 2 3])
+                            (update-node "1" dissoc :baz))
+                     (get-node "1"))))
+          (is (= node3
+                 (-> layer-name
+                     (txn-> (update-node "1" assoc :baz [5]))
+                     (get-node "1"))))
+          (is (= node4
+                 (-> layer-name
+                     (txn-> (update-node "1" select-keys [:foo :baz]))
+                     (get-node "1")))))))))
 
 ;; TODO add a way to test that a node isn't gotten multiple times unless writes happen
 (deftest caching
