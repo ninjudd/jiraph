@@ -235,7 +235,8 @@
   (deftest test-edges-valid
     (with-graph {:stm1 (stm/make)
                  :stm2 (with-meta (stm/make) {:single-edge true})}
-      (map truncate! (keys *graph*))
+      (doseq [layer (keys *graph*)]
+        (truncate! layer))
       (testing "behaves properly when :single-edge is false"
         (is (not (edges-valid? :stm1 {:edge {:id "1"}})))
         (is (edges-valid? :stm1 {:edges {"1" {:a "b"}}})))
@@ -247,7 +248,8 @@
     (with-graph {:a (with-meta (bal/make (tokyo/make {:path "/tmp/jiraph-test-a" :create true})
                                          (paf/make Test$Node))
                       {:types {:foo #{:baz} :bar #{:baz}} :single-edge true})}
-      (map truncate! (keys *graph*))
+      (doseq [layer (keys *graph*)]
+        (truncate! layer))
       (testing "invalid node and edge types"
         (is (not (node-valid? :a "baz-1" {:edge {:id "baz-1"}})))
         (is (not (node-valid? :a "foo-1" {:edge {:id "bar-1"}})))
