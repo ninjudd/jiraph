@@ -14,3 +14,4 @@ native/
 pom.xml
 .DS_Store
 docs
+.lein*
