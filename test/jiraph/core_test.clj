@@ -8,11 +8,13 @@
 
 (def all [:tr :tp :stm :trs])
 
-(defn make-graph []
-  {:tr  (stm/make)
-   :trs (masai/make (.getAbsolutePath (java.io.File/createTempFile "layer" "db")))
-   :tp  (stm/make)
-   :stm (stm/make)})
+(letfn [(masai []
+          (masai/make (.getAbsolutePath (java.io.File/createTempFile "layer" "db"))))]
+  (defn make-graph []
+    {:tr  (masai)
+     :trs (masai)
+     :tp  (masai)
+     :stm (stm/make)}))
 
 (deftest node-info
   (with-graph (make-graph)

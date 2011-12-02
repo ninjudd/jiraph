@@ -1,14 +1,16 @@
 (ns jiraph.codecs.protobuf
-  (:use [jiraph.codecs :only [revisioned]]
+  (:use [jiraph.codecs :only [revisioned-codec]]
         [useful.map :only [adjoin]])
   (:require [protobuf.codec :as protobuf]))
 
 (defn protobuf-codec [proto reduce-fn]
-  (let [optimized? (= adjoin reduce-fn)
-        full       (protobuf/protobuf-codec proto)
-        revisioned (-> (protobuf/protobuf-codec proto :repeated true)
+  (let [revisioned (-> (protobuf/protobuf-codec proto :repeated true)
                        (revisioned-codec reduce-fn))]
-    (fn [{:keys [revision]}]
-      (if (and optimized? (nil? revision))
-        full
+    (if (= adjoin reduce-fn)
+      (let [full (protobuf/protobuf-codec proto)]
+        (fn [{:keys [revision]}]
+          (if (nil? revision)
+            full
+            (revisioned revision))))
+      (fn [{:keys [revision]}]
         (revisioned revision)))))

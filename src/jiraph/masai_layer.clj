@@ -44,6 +44,7 @@
       (decode ((format-for this id) revision id) [(ByteBuffer/wrap data)])
       not-found))
   (assoc-node! [this id attrs]
+    ;; TODO make assoc/get use new codecs opt-map api
     (db/put! db id (bufseq->bytes (encode ((format-for this id) revision id) attrs))))
   (dissoc-node! [this id]
     (db/delete! db id))
@@ -51,7 +52,7 @@
   Optimized
   (query-fn [layer keyseq f] nil)
   (update-fn [layer keyseq f]
-    #_(when (= f adjoin)
+    #_(when (= f adjoin) ;; TODO uncomment and fix this
         (fn [attrs]
           (db/append! db (node-meta-key id key)
                       (encode (node-meta-format revision id) attrs))
@@ -86,7 +87,7 @@
   ;; TODO these two are stubbed, will need to work eventually
   (get-changed-ids [layer rev]
     #{})
-  (max-revision [layer]
+  (max-revision [layer] ;; how to do this? store in a meta-node? that adds a lot of writes
     nil)
 
   WrappedTransactional
@@ -105,7 +106,7 @@
     revision)
 
   Preferences
-  (manage-changelog? [this] false)
+  (manage-changelog? [this] false) ;; TODO wish this were more granular
   (manage-incoming? [this] true)
   (single-edge? [this] ;; TODO accept option to (make)
     false))
