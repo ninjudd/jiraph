@@ -46,23 +46,26 @@
 
   Basic
   (get-node [this id not-found]
-    (if-let [data (db/fetch db id)]
-      (decode ((format-for this id) revision id) [(ByteBuffer/wrap data)])
-      not-found))
+    (-> (raw-get-node this id not-found)
+        (dissoc :revisions)))
   (assoc-node! [this id attrs]
     ;; TODO make assoc/get use new codecs opt-map api
-    (db/put! db id (bufseq->bytes (encode ((format-for this id) revision id) attrs))))
+    (db/put! db id (bufseq->bytes (encode ((format-for this id) {:revision revision})
+                                          attrs))))
   (dissoc-node! [this id]
     (db/delete! db id))
 
   Optimized
-  (query-fn [layer keyseq f] nil)
-  (update-fn [layer keyseq f]
-    #_(when (= f adjoin) ;; TODO uncomment and fix this
-        (fn [attrs]
-          (db/append! db (node-meta-key id key)
-                      (encode (node-meta-format revision id) attrs))
-          )))
+  (query-fn [this keyseq f] nil)
+  (update-fn [this keyseq f]
+    (when-let [[id & keys] (seq keyseq)]
+      (let [encoder (format-for this id)]
+        (when (= f (:reduce-fn (meta encoder)))
+          (fn [m]
+            (db/append! db id
+                        (bufseq->bytes (encode (encoder {:revision revision})
+                                               (reduce #(hash-map %2 %1) m keys))))
+            {:old nil :new m})))))
 
   Layer
   (open [layer]
