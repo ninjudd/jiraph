@@ -10,8 +10,8 @@
         [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
-            [cereal.core :as cereal]
-            [jiraph.graph :as graph])
+            [jiraph.graph :as graph]
+            [jiraph.codecs.cereal :as cereal])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
            [java.nio ByteBuffer]))
 
@@ -24,6 +24,12 @@
 (defn- main-node-id [meta-id]
   {:pre [(= "_" (first meta-id))]}
   (subs meta-id 1))
+
+(defn- raw-get-node [layer id not-found]
+  (if-let [data (db/fetch (:db layer) id)]
+    (decode ((format-for layer id) {:revision (:revision layer)})
+            [(ByteBuffer/wrap data)])
+    not-found))
 
 (defrecord MasaiLayer [db revision node-format node-meta-format layer-meta-format]
   Meta
@@ -82,7 +88,7 @@
 
   ChangeLog
   (get-revisions [this id]
-    (:revisions (graph/get-node this id)))
+    (:revisions (raw-get-node this id nil)))
 
   ;; TODO these two are stubbed, will need to work eventually
   (get-changed-ids [layer rev]
@@ -127,13 +133,14 @@
        (defn- make-db [db]
          db))
 
-(defn- codec-fn [codec default-thunk]
-  (as-fn (or codec (default-thunk))))
+(defn- codec-fn [codec default]
+  (as-fn (or codec default)))
 
 ;; formats should be functions from revision (and optionally node-id) to codec.
 ;; plain old codecs will be accepted as well
 (defn make [db & [node-format meta-format layer-meta-format :as formats]]
-  (let [[node-format meta-format layer-meta-format] (for [f (take 3 (concat formats (repeat nil)))]
-                                                      (codec-fn f cereal/clojure-codec))]
-    (MasaiLayer. (make-db db) 0
+  (let [[node-format meta-format layer-meta-format]
+        (for [f (take 3 (concat formats (repeat nil)))]
+          (codec-fn f (cereal/clojure-codec adjoin)))]
+    (MasaiLayer. (make-db db) nil
                  node-format, meta-format, layer-meta-format)))
