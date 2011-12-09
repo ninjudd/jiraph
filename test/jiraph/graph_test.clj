@@ -21,7 +21,6 @@
       (testing "Node data is written"
         (is (= mike-node (get-node (rev 1) "mike"))))
 
-      (println "About to fail")
       (testing "Nil revision reads latest data"
         (is (= mike-node (get-node master "mike"))))
       (testing "Future revisions can be read"
