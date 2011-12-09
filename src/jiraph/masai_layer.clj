@@ -84,7 +84,9 @@
           (fn [m]
             (db/append! db id
                         (bufseq->bytes (encode (encoder {:revision revision})
-                                               (reduce #(hash-map %2 %1) m keys))))
+                                               (if keys
+                                                 (assoc-in {} keys m)
+                                                 m))))
             {:old nil :new m})))))
 
   Layer
