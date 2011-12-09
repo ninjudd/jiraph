@@ -11,18 +11,20 @@
 
 (defn revisioned-codec [codec reduce-fn] ;; Codec -> (a -> a) -> (opts -> Codec)
   ;; TODO take in a map of reduce-fn and (optionally) init-val
-  (letfn [(combine [items]
+  (letfn [(reducer [acc x]
+            (if (:_reset x), x, (reduce-fn acc x)))
+          (combine [items]
             (when (seq items)
-              (reduce reduce-fn items)))
+              (reduce reducer items)))
           (frame [pre-encode post-decode]
             (gloss/compile-frame codec
                                  (comp list pre-encode)
                                  (comp combine post-decode)))]
     (-> (fn [{:keys [revision]}]
           (if revision
-            (frame #(assoc % :revisions [revision])
+            (frame #(assoc % :_revs [revision])
                    (fn [vals]
-                     (take-while #(<= (peek (:revisions %)) revision)
+                     (take-while #(<= (peek (:_revs %)) revision)
                                  vals)))
             (frame identity identity)))
         (with-meta {:reduce-fn reduce-fn}))))

@@ -1,10 +1,10 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer     :only [Enumerate Basic Layer Optimized Meta meta-key?
-                                 ChangeLog skip-applied-revs max-revision get-revisions close]]
+                                 ChangeLog get-revisions close]]
         [jiraph.graph     :only [*skip-writes*]]
-        [retro.core       :only [WrappedTransactional Revisioned
-                                 get-queue at-revision current-revision empty-queue]]
+        [retro.core       :only [WrappedTransactional Revisioned OrderedRevisions
+                                 max-revision get-queue at-revision current-revision empty-queue]]
         [useful.fn        :only [given fix]]
         [useful.utils     :only [returning or-min]]
         [useful.map       :only [keyed]]
@@ -113,6 +113,10 @@
     (assoc-record this :revision rev))
   (current-revision [this]
     revision)
+
+  OrderedRevisions
+  (max-revision [this]
+    (-> @store ))
 
   WrappedTransactional
   (txn-wrap [_ f]

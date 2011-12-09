@@ -1,9 +1,9 @@
 (ns jiraph.masai-layer
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences
                              node-id-seq meta-key meta-key?] :as layer]
-        [retro.core   :only [WrappedTransactional Revisioned txn-wrap]]
+        [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
-        [useful.utils :only [if-ns adjoin]]
+        [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn]]
         [useful.datatypes :only [assoc-record]]
@@ -12,7 +12,8 @@
   (:require [masai.db :as db]
             [jiraph.graph :as graph]
             [jiraph.codecs.cereal :as cereal])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
+            DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
 (defn- format-for [layer node-id]
@@ -31,7 +32,32 @@
             [(ByteBuffer/wrap data)])
     not-found))
 
-(defrecord MasaiLayer [db revision node-format node-meta-format layer-meta-format]
+(defn- bytes->long [bytes]
+  (-> bytes (ByteArrayInputStream.) (DataInputStream.) (.readLong)))
+
+(defn- long->bytes [long]
+  (-> (ByteArrayOutputStream. 8)
+      (doto (-> (DataOutputStream.) (.writeLong long)))
+      (.toByteArray)))
+
+(let [revision-key "__revision"]
+  (defn- save-maxrev [layer]
+    (when-let [rev (:revision layer)]
+      (db/put! (:db layer) revision-key (long->bytes rev))))
+  (defn- read-maxrev [layer]
+    (when-let [bytes (db/fetch (:db layer) revision-key)]
+      (bytes->long bytes))))
+
+;; Assumes you're in a scope where 'this and 'revision are bound.
+(defmacro ^{:private true} revisioned-do [& body]
+  `(if (or (not (? ~'revision))
+           (let [max# (? (read-maxrev ~'this))]
+             (or (not max#)
+                 (? (> ~'revision max#)))))
+     (do ~@body)
+     (println "NOT APPLYING")))
+
+(defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
   Meta
   (meta-key [this k]
     (str "_" k))
@@ -47,11 +73,15 @@
   Basic
   (get-node [this id not-found]
     (-> (raw-get-node this id not-found)
-        (dissoc :revisions)))
+        (dissoc :_revs :_reset)))
   (assoc-node! [this id attrs]
-    ;; TODO make assoc/get use new codecs opt-map api
-    (db/put! db id (bufseq->bytes (encode ((format-for this id) {:revision revision})
-                                          attrs))))
+    (revisioned-do
+      (letfn [(bytes [data]
+                (bufseq->bytes (encode ((format-for this id) {:revision revision})
+                                       (? data))))]
+        (if append-only?
+          (db/append! db id (bytes (assoc attrs :_reset true)))
+          (db/put!    db id (bytes attrs))))))
   (dissoc-node! [this id]
     (db/delete! db id))
 
@@ -62,9 +92,10 @@
       (let [encoder (format-for this id)]
         (when (= f (:reduce-fn (meta encoder)))
           (fn [m]
-            (db/append! db id
-                        (bufseq->bytes (encode (encoder {:revision revision})
-                                               (reduce #(hash-map %2 %1) m keys))))
+            (revisioned-do
+              (db/append! db id
+                          (bufseq->bytes (encode (encoder {:revision revision})
+                                                 (reduce #(hash-map %2 %1) m keys)))))
             {:old nil :new m})))))
 
   Layer
@@ -91,21 +122,22 @@
 
   ChangeLog
   (get-revisions [this id]
-    (:revisions (raw-get-node this id nil)))
+    (:_revs (raw-get-node this id nil)))
 
-  ;; TODO these two are stubbed, will need to work eventually
+  ;; TODO this is stubbed, will need to work eventually
   (get-changed-ids [layer rev]
     #{})
-  (max-revision [layer] ;; how to do this? store in a meta-node? that adds a lot of writes
-    nil)
 
+  ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
+  ;; been applied, and refusing to do any more writing to that revision. What is the answer?
   WrappedTransactional
   (txn-wrap [this f]
     ;; todo *skip-writes* for past revisions
     (fn [^MasaiLayer layer]
       (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
                                  (fn [_]
-                                   (f layer)))]
+                                   (returning (f layer)
+                                     (save-maxrev layer))))]
         (db-wrapped (.db layer)))))
 
   Revisioned
@@ -113,6 +145,10 @@
     (assoc-record this :revision rev))
   (current-revision [this]
     revision)
+
+  OrderedRevisions
+  (max-revision [this]
+    (read-maxrev this))
 
   Preferences
   (manage-changelog? [this] false) ;; TODO wish this were more granular
@@ -141,9 +177,13 @@
 
 ;; formats should be functions from revision (and optionally node-id) to codec.
 ;; plain old codecs will be accepted as well
-(defn make [db & [node-format meta-format layer-meta-format :as formats]]
+(defn make [db & {{:keys [node meta layer-meta]} :formats,
+                  :keys [assoc-mode] :or {assoc-mode :append}}]
   (let [[node-format meta-format layer-meta-format]
-        (for [f (take 3 (concat formats (repeat nil)))]
+        (for [f [node meta layer-meta]]
           (codec-fn f (cereal/clojure-codec adjoin)))]
     (MasaiLayer. (make-db db) nil
+                 (case assoc-mode
+                   :append true
+                   :overwrite false)
                  node-format, meta-format, layer-meta-format)))

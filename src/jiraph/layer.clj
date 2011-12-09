@@ -108,9 +108,7 @@
   (get-revisions [layer id]
     "The revisions that changed the given node.")
   (get-changed-ids [layer rev]
-    "The nodes changed by the given revision.")
-  (max-revision [layer]
-    "The most recent revision of this layer, disregarding `at-revision` restrictions."))
+    "The nodes changed by the given revision."))
 
 (defprotocol Preferences
   "Indicate to Jiraph what things you want it to do for you. These preferences should not
@@ -182,19 +180,3 @@
 
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
-
-(defn skip-applied-revs
-  "Useful building block for skipping applied revisions. Calling this on a layer
-  will empty the layer's queue if the revision has already been applied; it
-  will otherwise increment the layer's revision to point to the to-be-written
-  revision number."
-  [layer]
-  (let [[rev max] ((juxt retro/current-revision max-revision) layer)]
-    (if rev
-      (if (and max (< rev max))
-        (retro/empty-queue layer)
-        (retro/at-revision layer (inc rev)))
-      (if max
-        (throw (IllegalStateException.
-                "Trying to write to revisioned layer without a revision set."))
-        layer))))

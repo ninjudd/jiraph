@@ -14,7 +14,7 @@
     {:tr  (masai)
      :trs (masai)
      :tp  (masai)
-     :stm (stm/make)}))
+     :stm (masai)}))
 
 (deftest node-info
   (with-graph (make-graph)
@@ -154,7 +154,7 @@
         (at-revision 102
           (assoc-node! layer-name "8" {:foo 8}))
         (is (= 8 (:foo (get-node layer-name "8"))))
-        (is (= 102 (layer/max-revision layer))))
+        (is (= 102 (retro/max-revision layer))))
 
       (testing "past revisions are ignored inside of dotxn and txn->"
         (at-revision 101
