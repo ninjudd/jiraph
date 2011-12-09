@@ -48,15 +48,6 @@
     (when-let [bytes (db/fetch (:db layer) revision-key)]
       (bytes->long bytes))))
 
-;; Assumes you're in a scope where 'this and 'revision are bound.
-(defmacro ^{:private true} revisioned-do [& body]
-  `(if (or (not (? ~'revision))
-           (let [max# (? (read-maxrev ~'this))]
-             (or (not max#)
-                 (? (> ~'revision max#)))))
-     (do ~@body)
-     (println "NOT APPLYING")))
-
 (defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
   Meta
   (meta-key [this k]
@@ -75,13 +66,12 @@
     (-> (raw-get-node this id not-found)
         (dissoc :_revs :_reset)))
   (assoc-node! [this id attrs]
-    (revisioned-do
-      (letfn [(bytes [data]
-                (bufseq->bytes (encode ((format-for this id) {:revision revision})
-                                       (? data))))]
-        (if append-only?
-          (db/append! db id (bytes (assoc attrs :_reset true)))
-          (db/put!    db id (bytes attrs))))))
+    (letfn [(bytes [data]
+              (bufseq->bytes (encode ((format-for this id) {:revision revision})
+                                     data)))]
+      (if append-only?
+        (db/append! db id (bytes (assoc attrs :_reset true)))
+        (db/put!    db id (bytes attrs)))))
   (dissoc-node! [this id]
     (db/delete! db id))
 
@@ -92,10 +82,9 @@
       (let [encoder (format-for this id)]
         (when (= f (:reduce-fn (meta encoder)))
           (fn [m]
-            (revisioned-do
-              (db/append! db id
-                          (bufseq->bytes (encode (encoder {:revision revision})
-                                                 (reduce #(hash-map %2 %1) m keys)))))
+            (db/append! db id
+                        (bufseq->bytes (encode (encoder {:revision revision})
+                                               (reduce #(hash-map %2 %1) m keys))))
             {:old nil :new m})))))
 
   Layer
