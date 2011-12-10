@@ -26,12 +26,6 @@
   {:pre [(= "_" (first meta-id))]}
   (subs meta-id 1))
 
-(defn- raw-get-node [layer id not-found]
-  (if-let [data (db/fetch (:db layer) id)]
-    (decode ((format-for layer id) {:revision (:revision layer)})
-            [(ByteBuffer/wrap data)])
-    not-found))
-
 (defn- bytes->long [bytes]
   (-> bytes (ByteArrayInputStream.) (DataInputStream.) (.readLong)))
 
@@ -63,8 +57,10 @@
 
   Basic
   (get-node [this id not-found]
-    (-> (raw-get-node this id not-found)
-        (dissoc :_revs :_reset)))
+    (if-let [data (db/fetch db id)]
+      (decode ((format-for this id) {:revision revision})
+              [(ByteBuffer/wrap data)])
+      not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
               (bufseq->bytes (encode ((format-for this id) {:revision revision})
@@ -113,7 +109,13 @@
 
   ChangeLog
   (get-revisions [this id]
-    (:_revs (raw-get-node this id nil)))
+    (let [format (format-for this id)
+          rev-codec (-> format meta :revisions)]
+      (when-let [data (db/fetch db id)]
+        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
+          (if-not revision
+            revs
+            (take-while #(<= % revision) revs))))))
 
   ;; TODO this is stubbed, will need to work eventually
   (get-changed-ids [layer rev]

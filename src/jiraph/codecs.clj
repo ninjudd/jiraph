@@ -15,16 +15,21 @@
             (if (:_reset x), x, (reduce-fn acc x)))
           (combine [items]
             (when (seq items)
-              (reduce reducer items)))
+              (let [node (reduce reducer items)]
+                (with-meta (dissoc node :_rev :_reset)
+                  {:revision (:_rev node)}))))
           (frame [pre-encode post-decode]
             (gloss/compile-frame codec
                                  (comp list pre-encode)
                                  (comp combine post-decode)))]
     (-> (fn [{:keys [revision]}]
           (if revision
-            (frame #(assoc % :_revs [revision])
+            (frame #(assoc % :_rev revision)
                    (fn [vals]
-                     (take-while #(<= (peek (:_revs %)) revision)
+                     (take-while #(<= (:_rev %) revision)
                                  vals)))
             (frame identity identity)))
-        (with-meta {:reduce-fn reduce-fn}))))
+        (with-meta {:reduce-fn reduce-fn
+                    :revisions (gloss/compile-frame codec
+                                                    nil ;; never write with this codec
+                                                    (partial map :_rev))}))))
