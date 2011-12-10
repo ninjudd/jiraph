@@ -62,11 +62,13 @@
           (testing "Don't know about future revisions"
             (is (= #{1} (set (get-revisions (rev 1) "mike")))))
           (is (= #{1} (set (get-revisions master "carla")))))
-        (testing "get-changed-ids"
-          (is (= #{"mike" "carla"}
-                 (set (layer/get-changed-ids master 1))))
-          (is (= #{"mike" "charles"}
-                 (set (layer/get-changed-ids (rev 2) 2)))))
+        (comment We decided not to support/implement this yet, and it's not a crucial feature.
+                 Leaving tests in so that it's clear how layers *should* behave.
+                 (testing "get-changed-ids"
+                   (is (= #{"mike" "carla"}
+                          (set (layer/get-changed-ids master 1))))
+                   (is (= #{"mike" "charles"}
+                          (set (layer/get-changed-ids (rev 2) 2))))))
         (testing "max-revision"
           (is (= 2 (retro/max-revision master)))
           (is (= 2 (retro/max-revision (rev 1))))))
