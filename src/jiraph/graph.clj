@@ -94,7 +94,7 @@
         [(layer/meta-key layer "_layer")])
       keys)))
 
-(defn get-node
+(defn ^{:dynamic true} get-node
   "Fetch a node's data from this layer."
   ([layer id & [not-found]]
      (layer/get-node layer id not-found)))
@@ -285,13 +285,13 @@
   (assert (edges-valid? layer attrs))
   (assert (layer/node-valid? layer attrs)))
 
-(defn get-all-revisions
+(defn ^{:dynamic true} get-all-revisions
   "Return a seq of all revisions that have ever modified this node on this layer, even if the data has been
    subsequently compacted."
   [layer id]
   (filter pos? (layer/get-revisions layer id)))
 
-(defn get-revisions
+(defn ^{:dynamic true} get-revisions
   "Return a seq of all revisions with data for this node."
   [layer id]
   (reverse
@@ -325,7 +325,7 @@
   (drop-incoming! [layer id from-id]
     (update-in-node! layer [:meta id "incoming"] adjoin {from-id false})))
 
-(defn get-incoming
+(defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer id]
   (into-set #{} (layer/get-incoming layer id)))
