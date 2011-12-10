@@ -8,7 +8,9 @@
             [jiraph.core  :as core]
             [clojure.set :as set]))
 
-(def ^{:doc "Should steps be followed in parallel?"} *parallel-follow* false)
+(def ^{:doc "Should steps be followed in parallel?"
+       :dynamic true}
+  *parallel-follow* false)
 
 (defrecord Step      [id distance from-id layer source edge alt-ids data])
 (defrecord Walk      [focus-id steps include? ids result-count to-follow terminated? traversal])
