@@ -54,22 +54,23 @@
     (with-each-layer all
       (truncate! layer-name)
       (testing "with-caching"
-        (with-caching
-          (at-revision 100
-            (txn-> layer-name
-                   (assoc-node "3" {:bar "cat" :baz [5]})
-                   (update-node "3" adjoin {:baz [8]})))
-
-          (testing "Write to same node twice ignores cache."
+        (with-caching true
+          (do
             (at-revision 100
-              (is (= {:bar "cat" :baz [5 8]} (get-node layer-name "3")))))
+              (txn-> layer-name
+                     (assoc-node "3" {:bar "cat" :baz [5]})
+                     (update-node "3" adjoin {:baz [8]})))
 
-          (at-revision 101
-            (txn-> layer-name
-                   (update-node "3" adjoin {:baz [9]})))
+            (testing "Write to same node twice ignores cache."
+              (at-revision 100
+                (is (= {:bar "cat" :baz [5 8]} (get-node layer-name "3")))))
 
-          (at-revision 101
-            (is (= {:bar "cat" :baz [5 8 9]} (get-node layer-name "3")))))))))
+            (at-revision 101
+              (txn-> layer-name
+                     (update-node "3" adjoin {:baz [9]})))
+
+            (at-revision 101
+              (is (= {:bar "cat" :baz [5 8 9]} (get-node layer-name "3"))))))))))
 
 (deftest transactions
   (with-graph (make-graph)
