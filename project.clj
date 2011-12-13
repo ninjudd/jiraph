@@ -1,9 +1,12 @@
-(defproject jiraph "0.6.1"
+(defproject jiraph "0.7.0"
   :description "embedded graph db library for clojure"
   :dependencies [[clojure "1.2.0"]
-                 [clojure-useful "0.3.8"]
-                 [masai "0.5.1"]
-                 [retro "0.5.0"]]
-  :dev-dependencies [[clojure-protobuf "0.4.0"]
-                     [tokyocabinet "1.24.1-SNAPSHOT"]]
-  :tasks [protobuf.tasks])
+                 [useful "0.7.5"]
+                 [masai "0.6.2"]
+                 [cereal "0.1.10"]
+                 [retro "0.5.2"]
+                 [ego "0.1.7"]]
+  :dev-dependencies [[protobuf "0.5.0"]
+                     [tokyocabinet "1.24.1" :ext true]
+                     [unk "0.9.3"]]
+  :cake-plugins [[cake-protobuf "0.5.0"]])

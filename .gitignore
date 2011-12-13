@@ -8,5 +8,8 @@ classes
 *.java
 *~
 #*#
+.#*
 *.swp
 pom.xml
+.DS_Store
+docs

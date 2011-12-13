@@ -1,4 +1,4 @@
-import "clojure/protobuf/extensions.proto";
+import "protobuf/core/extensions.proto";
 
 option java_package = "jiraph";
 option java_outer_classname = "Meta";

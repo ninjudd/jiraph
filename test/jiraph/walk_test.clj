@@ -1,16 +1,19 @@
 (ns jiraph.walk-test
   (:use clojure.test jiraph.graph
-        [jiraph.walk :only [defwalk path paths limit *parallel-follow*]])
-  (:require [jiraph.byte-append-layer :as bal]
+        [jiraph.walk :only [defwalk path paths *parallel-follow* intersection]]
+        [jiraph.walk.predicates :only [at-limit]])
+  (:require [jiraph.masai-layer :as bal]
+            [jiraph.stm-layer :as stm]
             [masai.tokyo :as tokyo]
-            [jiraph.reader-append-format :as raf]
-            [jiraph.protobuf-append-format :as paf])
+            [cereal.reader :as raf]
+            [cereal.protobuf :as paf])
   (:import [jiraph Test$Node]))
 
 (def test-graph
   {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-foo" :create true}) (raf/make))
    :bar (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-bar" :create true}) (paf/make Test$Node))
-   :baz (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-baz" :create true}) (raf/make))})
+   :baz (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-baz" :create true}) (raf/make))
+   :stm (with-meta (stm/make) {:single-edge true})})
 
 (defwalk full-walk
   :add?      true
@@ -28,20 +31,21 @@
         (add-node! :bar "2" {:edges {"3" {:a "foo"} "4" {:a "bar"}}})
         (add-node! :baz "2" {:edges {"5" {:a "foo"} "6" {:a "bar"}}})
         (add-node! :baz "4" {:edges {"7" {:a "foo"} "8" {:a "bar"}}})
-        (add-node! :baz "8" {:edges {"1" {:a "foo"} "2" {:a "bar"}}})
+        (add-node! :baz "8" {:edges {"8" {:a "foo"} "9" {:a "bar"}}})
+        (add-node! :stm "9" {:edge  {:id "2"}})
 
         (let [walk (full-walk "1")]
-          (is (= 8 (:result-count walk)))
-          (is (= ["1" "2" "3" "4" "5" "6" "7" "8"] (:ids walk)))
+          (is (= 9 (:result-count walk)))
+          (is (= ["1" "2" "3" "4" "5" "6" "7" "8" "9"] (:ids walk)))
           (is (= ["1" "2" "4" "8"] (map :id (path walk "8"))))
           (is (= ["1" "2" "4" "7"] (map :id (path walk "7"))))
           (is (= ["1" "2" "6"]     (map :id (path walk "6"))))
           (is (= ["1" "2"]         (map :id (path walk "2"))))
-          (is (= [["1" "2"] ["1" "2" "4" "8" "2"]] (map (partial map :id) (paths walk "2"))))
-          (is (= [["1"]     ["1" "2" "4" "8" "1"]] (map (partial map :id) (paths walk "1")))))
+          (is (= [["1" "2"] ["1" "2" "4" "8" "9" "2"]] (map (partial map :id) (paths walk "2"))))
+          (is (= [["1" "3"]             ["1" "2" "3"]] (map (partial map :id) (paths walk "3")))))
 
         (testing "early termination"
-          (let [walk (full-walk "1" :terminate? (limit 5))]
+          (let [walk (full-walk "1" :terminate? (at-limit 5))]
             (is (= 5 (:result-count walk)))
             (is (= ["1" "2" "3" "4" "5"] (:ids walk)))
             (is (= nil (path walk "8")))
@@ -51,12 +55,22 @@
             (is (= [["1" "2"]] (map (partial map :id) (paths walk "2"))))
             (is (= [["1"]]     (map (partial map :id) (paths walk "1"))))))
 
+        (testing "intersection"
+          (is (= nil
+                 (intersection (full-walk "1" :terminate? (at-limit 2))
+                               (full-walk "8" :terminate? (at-limit 2)))))
+          (is (= '("2")
+                 (intersection (full-walk "1" :terminate? (at-limit 3))
+                               (full-walk "8" :terminate? (at-limit 3)))))
+          (is (= '("2" "3")
+                 (intersection (full-walk "1" :terminate? (at-limit 4))
+                               (full-walk "8" :terminate? (at-limit 4))))))
+
         (testing "max-rev"
           (at-revision 33
-                       (append-node! :foo "1" {:edges {"8" {:a "one"}}}))
+            (append-node! :foo "1" {:edges {"8" {:a "one"}}}))
           (let [walk (full-walk "1")]
-            (is (= 8 (:result-count walk)))
-            (is (= ["1" "2" "3" "8" "4" "5" "6" "7"] (:ids walk)))
+            (is (= 9 (:result-count walk)))
+            (is (= ["1" "2" "3" "8" "4" "5" "6" "9" "7"] (:ids walk)))
             (is (= ["1" "8"] (map :id (path walk "8"))))
             (is (= 33  (:max-rev walk)))))))))
-
