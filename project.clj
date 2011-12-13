@@ -7,7 +7,7 @@
                  [retro "0.6.0-beta1"]
                  [io "0.1.0-alpha2"]
                  [ego "0.1.7"]]
-  :dev-dependencies [[protobuf "0.5.0"]
+  :dev-dependencies [[protobuf "0.6.0-beta1"]
                      [tokyocabinet "1.24.1" :ext true]
                      [unk "0.9.3"]]
-  :cake-plugins [[cake-protobuf "0.5.0"]])
+  :hooks [leiningen.protobuf])
