@@ -1,11 +1,16 @@
 (ns jiraph.masai-layer
-  (:refer-clojure :exclude [sync count])
-  (:use jiraph.layer
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences
+                             node-id-seq meta-key meta-key?] :as layer]
+        [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
-        [retro.core :only [*revision*]]
-        [useful.utils :only [if-ns]]
-        [useful.seq :only [find-with]])
+        [useful.utils :only [if-ns adjoin returning]]
+        [useful.seq :only [find-with]]
+        [useful.fn :only [as-fn]]
+        [useful.datatypes :only [assoc-record]]
+        [gloss.io :only [encode decode]]
+        [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
+<<<<<<< HEAD
             [cereal.format :as f]
             [cereal.reader :as reader-append-format])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
@@ -122,6 +127,147 @@
 
   (set-revision! [layer rev]
     (set-property! layer :rev rev)))
+=======
+            [jiraph.graph :as graph]
+            [jiraph.codecs.cereal :as cereal])
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
+            DataOutputStream DataInputStream]
+           [java.nio ByteBuffer]))
+
+(defn- format-for [layer node-id]
+  (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
+                   (meta-key? layer node-id) :node-meta-format
+                   :else :node-format)))
+
+;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
+(defn- main-node-id [meta-id]
+  {:pre [(= "_" (first meta-id))]}
+  (subs meta-id 1))
+
+(defn- bytes->long [bytes]
+  (-> bytes (ByteArrayInputStream.) (DataInputStream.) (.readLong)))
+
+(defn- long->bytes [long]
+  (-> (ByteArrayOutputStream. 8)
+      (doto (-> (DataOutputStream.) (.writeLong long)))
+      (.toByteArray)))
+
+(let [revision-key "__revision"]
+  (defn- save-maxrev [layer]
+    (when-let [rev (:revision layer)]
+      (db/put! (:db layer) revision-key (long->bytes rev))))
+  (defn- read-maxrev [layer]
+    (when-let [bytes (db/fetch (:db layer) revision-key)]
+      (bytes->long bytes))))
+
+(defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
+  Meta
+  (meta-key [this k]
+    (str "_" k))
+  (meta-key? [this k]
+    (.startsWith ^String k "_"))
+
+  Enumerate
+  (node-id-seq [this]
+    (remove #(meta-key? this %) (db/key-seq db)))
+  (node-seq [this]
+    (map #(graph/get-node this %) (node-id-seq this)))
+
+  Basic
+  (get-node [this id not-found]
+    (if-let [data (db/fetch db id)]
+      (decode ((format-for this id) {:revision revision})
+              [(ByteBuffer/wrap data)])
+      not-found))
+  (assoc-node! [this id attrs]
+    (letfn [(bytes [data]
+              (bufseq->bytes (encode ((format-for this id) {:revision revision}) ;; TODO pass id
+                                     data)))]
+      (if append-only?
+        (db/append! db id (bytes (assoc attrs :_reset true)))
+        (db/put!    db id (bytes attrs)))))
+  (dissoc-node! [this id]
+    (db/delete! db id))
+
+  Optimized
+  (query-fn [this keyseq f] nil)
+  (update-fn [this keyseq f]
+    (when-let [[id & keys] (seq keyseq)]
+      (let [encoder (format-for this id)]
+        (when (= f (:reduce-fn (meta encoder)))
+          (fn [m]
+            (db/append! db id
+                        (bufseq->bytes (encode (encoder {:revision revision})
+                                               (if keys
+                                                 (assoc-in {} keys m)
+                                                 m))))
+            {:old nil :new m})))))
+
+  Layer
+  (open [layer]
+    (db/open db))
+  (close [layer]
+    (db/close db))
+  (sync! [layer]
+    (db/sync! db))
+  (optimize! [layer]
+    (db/optimize! db))
+  (truncate! [layer]
+    (db/truncate! db))
+
+  ;; Schema
+  ;; (fields [layer]
+  ;;   (f/fields format))
+  ;; (fields [layer subfields]
+  ;;   (f/fields format subfields))
+  ;; (node-valid? [layer attrs]
+  ;;   (try (f/encode format (make-node attrs))
+  ;;        true
+  ;;        (catch Exception e)))
+
+  ChangeLog
+  (get-revisions [this id]
+    (let [format (format-for this id)
+          rev-codec-builder (-> format meta :revisions)
+          rev-codec (rev-codec-builder {})]
+      (when-let [data (db/fetch db id)]
+        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
+          (if-not revision
+            revs
+            (take-while #(<= % revision) revs))))))
+
+  ;; TODO this is stubbed, will need to work eventually
+  (get-changed-ids [layer rev]
+    #{})
+
+  ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
+  ;; been applied, and refusing to do any more writing to that revision. What is the answer?
+  WrappedTransactional
+  (txn-wrap [this f]
+    ;; todo *skip-writes* for past revisions
+    (fn [^MasaiLayer layer]
+      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
+                                 (fn [_]
+                                   (returning (f layer)
+                                     (save-maxrev layer))))]
+        (db-wrapped (.db layer)))))
+
+  Revisioned
+  (at-revision [this rev]
+    (assoc-record this :revision rev))
+  (current-revision [this]
+    revision)
+
+  OrderedRevisions
+  (max-revision [this]
+    (read-maxrev this))
+
+  Preferences
+  (manage-changelog? [this] false) ;; TODO wish this were more granular
+  (manage-incoming? [this] true)
+  (single-edge? [this] ;; TODO accept option to (make)
+    false))
+>>>>>>> f/protocols
 
 (if-ns (:require protobuf.core
                  [cereal.protobuf :as protobuf])
@@ -139,6 +285,7 @@
        (defn- make-db [db]
          db))
 
+<<<<<<< HEAD
 (defn make [db & [format meta-format]]
   (let [format (or format (reader-append-format/make))]
     (MasaiLayer.
@@ -206,3 +353,20 @@
 
 (defn- dec-count! [^MasaiLayer layer]
   (db/inc! (:db layer) count-key -1))
+=======
+(defn- codec-fn [codec default]
+  (as-fn (or codec default)))
+
+;; formats should be functions from revision (and optionally node-id) to codec.
+;; plain old codecs will be accepted as well
+(defn make [db & {{:keys [node meta layer-meta]} :formats,
+                  :keys [assoc-mode] :or {assoc-mode :append}}]
+  (let [[node-format meta-format layer-meta-format]
+        (for [f [node meta layer-meta]]
+          (codec-fn f (cereal/clojure-codec adjoin)))]
+    (MasaiLayer. (make-db db) nil
+                 (case assoc-mode
+                   :append true
+                   :overwrite false)
+                 node-format, meta-format, layer-meta-format)))
+>>>>>>> f/protocols

@@ -1,134 +1,160 @@
 (ns jiraph.stm-layer
-  (:use jiraph.layer
-        retro.core
-        [useful.map :only [update]]
-        [useful.utils :only [adjoin]]))
+  (:refer-clojure :exclude [meta])
+  (:use [jiraph.layer     :only [Enumerate Basic Layer Optimized Meta meta-key?
+                                 ChangeLog get-revisions close]]
+        [jiraph.graph     :only [*skip-writes*]]
+        [retro.core       :only [WrappedTransactional Revisioned OrderedRevisions
+                                 max-revision get-queue at-revision current-revision empty-queue]]
+        [useful.fn        :only [given fix]]
+        [useful.utils     :only [returning or-min]]
+        [useful.map       :only [keyed]]
+        [useful.datatypes :only [assoc-record]])
+  (:import (java.io FileNotFoundException)))
 
-(defn- update-incoming [meta layer to-id from-id operation]
-  (let [f (case operation :add (fnil conj #{}) :drop disj)]
-    (adjoin
-     (when *revision*
-       (update-in
-        meta
-        [to-id :revs *revision* :in]
-        (fn [old] (into (f old from-id) (get-in meta [to-id :in])))))
-     (update-in meta [to-id :in] f from-id))))
+(comment
+  The STM layer stores a single ref, pointing to a series of whole-layer
+  snapshots over time, one per committed revision. Each snapshot contains
+  a :nodes section and a :meta section - the meta is managed entirely by
+  jiraph.graph. Note that while metadata is revisioned, it does not keep a
+  changelog like nodes do, so you can't meaningfully read metadata from a
+  revision in the future (which you can do for nodes).
 
-(defn- get-meta [layer id] (get @(:meta layer) id))
+  The layer also tracks a current revision, to allow any snapshot to be
+  viewed as if it were the full graph.
 
-(def reverse-compare (comp #(- %) compare))
+  So a sample STM layer might look like the following.
 
-(def reverse-sorted-map
-     ^{:doc "Returns a sorted-map that is sorted by its keys from highest to lowest."}
-     (partial sorted-map-by reverse-compare))
+  {:revision 2
+   :store (ref {0 {}
+                1 {:meta {"some-key" "some-value"}
+                   :nodes {"profile-4" {:name "Rita" :edges {"profile-9" {:rel :child}}}}}
+                2 {:meta {"some-key" "other-value"}
+                   :nodes {"profile-4" {:name "Rita" :edges {"profile-9" {:rel :child}}
+                                        :age 39}
+                           "profile-9" {:name "William"}}}})})
 
-(defn- create-rev
-  "Create a revision."
-  [layer id node]
-  (alter (:meta layer) adjoin {id {:all-revs [*revision*]}})
-  (get-in
-   (alter (:meta layer) assoc-in [id :revs *revision*] node)
-   [id :revs *revision*]))
+(def empty-store (sorted-map-by > 0 {}))
 
-(defn- append-rev
-  "Modify a revision."
-  [layer id node]
-  (get-in
-   (alter (:meta layer)
-          adjoin
-          (adjoin
-           {id {:revs {*revision*
-                       (binding [*revision* nil]
-                         (dissoc (get-node layer id) :id))}
-                :all-revs [*revision*]}}
-           {id {:revs {*revision* node}}}))
-   [id :revs *revision*]))
+(defn storage-area [k]
+  (if (vector? k), :meta, :nodes))
 
-(defn- wipe-revs
-  "Collapse all of an id's revisions."
-  [layer id] (alter (:meta layer) assoc-in [id :revs] (reverse-sorted-map)))
+(defn storage-name [k]
+  (fix k vector? first))
 
-(defn- initiate-revs
-  "Create an initial sorted map for :revs if one doesn't yet exist."
-  [layer id]
-  (when-not (:revs (get-meta layer id)) (wipe-revs layer id)))
+(defn current-rev [layer]
+  (let [store @(:store layer)]
+    (ffirst (if-let [rev (:revision layer)]
+              (subseq store >= rev)
+              store))))
 
-(defn- get-rev
-  "Fetch a particular revision of an id."
-  [layer id]
-  (when-let [revs (:revs (get-meta layer id))]
-    (->> *revision* (subseq revs >=) first second)))
+(defn now [layer]
+  (-> layer :store deref (get (current-rev layer))))
 
-(defrecord STMLayer [data meta properties]
-  jiraph.layer/Layer
+(def ^{:private true} nodes (comp :nodes now))
+(def ^{:private true} meta (comp :meta now))
 
-  (open [layer] nil)
-  (close [layer] nil)
-  (sync! [layer] nil)
+(defrecord STMLayer [store revision filename]
+  Object
+  (toString [this]
+    (pr-str this))
 
-  (truncate! [layer]
-    (dosync (ref-set data {})
-            (ref-set meta {})
-            (ref-set properties {})))
+  Enumerate
+  (node-id-seq [this]
+    (-> this nodes keys))
+  (node-seq [this]
+    (-> this nodes seq))
 
-  (node-count [layer] (count @data))
+  ;; the STM layer can't optimize any of these things; these are simply
+  ;; reference/testing implementations
+  Optimized
+  (query-fn [this keyseq f]
+    (when (= 'specialized-count f)
+      (fn [update-counter]
+        (do (swap! update-counter inc)
+            (count (get-in (nodes this) keyseq))))))
+  (update-fn [this [id key :as keyseq] f]
+    (when (= :edges key)
+      (fn [& args]
+        (let [old (get-in (nodes this) keyseq)
+              new (apply f old args)]
+          (alter store
+                 assoc-in (list* (current-rev this) :nodes keyseq)
+                 new)
+          (keyed [old new])))))
 
-  (node-ids [layer] (keys @data))
+  Meta
+  (meta-key [this k]
+    [k])
+  (meta-key? [this k]
+    (vector? k))
 
-  (get-property [layer key] (get @properties key))
+  Basic
+  (get-node [this k not-found]
+    (if (meta-key? this k)
+      (-> this meta (get (first k) not-found))
+      (let [n (-> this nodes (get k not-found))]
+        (if-not (identical? n not-found)
+          n
+          (let [touched-revisions (get-revisions (at-revision this nil) k)
+                most-recent (or (first (if revision
+                                         (drop-while #(> % revision) touched-revisions)
+                                         touched-revisions))
+                                0)]
+            (-> @store (get-in [most-recent :nodes k] not-found)))))))
+  (assoc-node! [this k v]
+    (alter store
+           assoc-in [(current-rev this) (storage-area k) (storage-name k)] v))
+  (dissoc-node! [this k]
+    (alter store
+           update-in [(current-rev this) (storage-area k)] dissoc (storage-name k)))
 
-  (set-property! [layer key val] (dosync ((alter properties assoc key val) key)))
+  Revisioned
+  (at-revision [this rev]
+    (assoc-record this :revision rev))
+  (current-revision [this]
+    revision)
 
-  (get-node [layer id]
-    (when-let [rev (if *revision* (get-rev layer id) (get @data id))]
-      (assoc rev :id id)))
+  OrderedRevisions
+  (max-revision [this]
+    (-> @store ))
 
-  (node-exists? [layer id] (contains? @data id))
+  WrappedTransactional
+  (txn-wrap [_ f]
+    (fn [^STMLayer layer]
+      (dosync
+       (let [rev (.revision layer)
+             max-rev (max-revision layer)]
+         (cond (nil? rev) (f layer)
+               (< rev max-rev) (binding [*skip-writes* true] (f (empty-queue layer)))
+               :else
+               (let [store (.store layer)
+                     prev (get @store max-rev)]
+                 (alter store fix
+                        #(not (contains? % rev))
+                        #(assoc % rev prev))
+                 (returning (f (at-revision layer rev))
+                   (alter store fix
+                          #(identical? prev (get % rev))
+                          #(dissoc % rev)))))))))
 
-  (add-node! [layer id attrs]
-    (let [node (make-node attrs)]
-      (when-not (node-exists? layer id)
-        (dosync
-         (initiate-revs layer id)
-         (let [id-meta (get-meta layer id)]
-           (when-not (:in id-meta)
-             (alter meta assoc id (assoc id-meta :in #{}))))
-         (when *revision* (append-rev layer id node))
-         (alter data into {id node}))
-        node)))
+  Layer
+  (open [this]
+    (when filename
+      (dosync
+       (try
+         (doto this
+           (-> :store (ref-set (read-string (slurp filename)))))
+         (catch FileNotFoundException e this)))))
+  (close [this]
+    (when filename
+      (spit filename @store)))
+  (sync! [this]
+    (close this))
+  (optimize! [this] nil)
+  (truncate! [this]
+    (dosync ;; since this should only be called outside a retro transaction
+     (ref-set (:store this) empty-store))))
 
-  (set-node! [layer id attrs]
-    (dosync
-     (initiate-revs layer id)
-     (let [node (make-node attrs)]
-       (when *revision* (create-rev layer id node))
-       (alter data assoc id node)
-       (dissoc node :id))))
-
-  (get-revisions [layer id] (-> layer (get-meta id) :all-revs))
-
-  (get-incoming [layer id]
-    (get-in
-     (get-meta layer id)
-     (if *revision*
-       [:revs *revision* :in]
-       [:in])))
-
-  (add-incoming! [layer id from-id]
-    (dosync (alter meta update-incoming layer id from-id :add)))
-
-  (drop-incoming! [layer id from-id]
-    (dosync (alter meta update-incoming layer id from-id :drop)))
-
-  retro.core/Revisioned
-
-  (get-revision [layer] (get-property layer :rev))
-
-  (set-revision! [layer rev] (set-property! layer :rev rev))
-
-  retro.core/WrappedTransactional
-
-  (txn-wrap [layer f] #(dosync (f))))
-
-(defn make []
-  (STMLayer. (ref {}) (ref {}) (ref {})))
+(defn make
+  ([] (make nil))
+  ([filename] (STMLayer. (ref empty-store) nil filename)))

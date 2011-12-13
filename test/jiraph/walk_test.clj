@@ -1,38 +1,35 @@
 (ns jiraph.walk-test
-  (:use clojure.test jiraph.graph
+  (:use clojure.test
+        jiraph.core
         [jiraph.walk :only [defwalk path paths *parallel-follow* intersection]]
+        [useful.utils :only [adjoin]]
         [jiraph.walk.predicates :only [at-limit]])
-  (:require [jiraph.masai-layer :as bal]
-            [jiraph.stm-layer :as stm]
-            [masai.tokyo :as tokyo]
-            [cereal.reader :as raf]
-            [cereal.protobuf :as paf])
+  (:require [jiraph.stm-layer :as stm])
   (:import [jiraph Test$Node]))
 
-(def test-graph
-  {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-foo" :create true}) (raf/make))
-   :bar (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-bar" :create true}) (paf/make Test$Node))
-   :baz (bal/make (tokyo/make {:path "/tmp/jiraph-walk-test-baz" :create true}) (raf/make))
-   :stm (with-meta (stm/make) {:single-edge true})})
+(defn test-graph []
+  {:foo (stm/make)
+   :bar (stm/make)
+   :baz (stm/make)
+   :stm (stm/make)})
 
 (defwalk full-walk
-  :add?      true
-  :traverse? true)
+  :add?          true
+  :follow-layers (fn [& args] (jiraph.core/layers))
+  :traverse?     true)
 
 (deftest simple-walk
   (doseq [parallel? [true false]]
     (binding [*parallel-follow* parallel?]
-      (with-graph test-graph
-        (truncate!)
-
+      (with-graph (test-graph)
         (is (= ["1"] (:ids (full-walk "1"))))
 
-        (add-node! :foo "1" {:edges {"2" {:a "foo"} "3" {:a "bar"}}})
-        (add-node! :bar "2" {:edges {"3" {:a "foo"} "4" {:a "bar"}}})
-        (add-node! :baz "2" {:edges {"5" {:a "foo"} "6" {:a "bar"}}})
-        (add-node! :baz "4" {:edges {"7" {:a "foo"} "8" {:a "bar"}}})
-        (add-node! :baz "8" {:edges {"8" {:a "foo"} "9" {:a "bar"}}})
-        (add-node! :stm "9" {:edge  {:id "2"}})
+        (assoc-node! :foo "1" {:edges {"2" {:a "foo"} "3" {:a "bar"}}})
+        (assoc-node! :bar "2" {:edges {"3" {:a "foo"} "4" {:a "bar"}}})
+        (assoc-node! :baz "2" {:edges {"5" {:a "foo"} "6" {:a "bar"}}})
+        (assoc-node! :baz "4" {:edges {"7" {:a "foo"} "8" {:a "bar"}}})
+        (assoc-node! :baz "8" {:edges {"8" {:a "foo"} "9" {:a "bar"}}})
+        (assoc-node! :stm "9" {:edges {"2" {}}})
 
         (let [walk (full-walk "1")]
           (is (= 9 (:result-count walk)))
@@ -66,11 +63,8 @@
                  (intersection (full-walk "1" :terminate? (at-limit 4))
                                (full-walk "8" :terminate? (at-limit 4))))))
 
-        (testing "max-rev"
-          (at-revision 33
-            (append-node! :foo "1" {:edges {"8" {:a "one"}}}))
-          (let [walk (full-walk "1")]
-            (is (= 9 (:result-count walk)))
-            (is (= ["1" "2" "3" "8" "4" "5" "6" "9" "7"] (:ids walk)))
-            (is (= ["1" "8"] (map :id (path walk "8"))))
-            (is (= 33  (:max-rev walk)))))))))
+        (update-node! :foo "1" adjoin {:edges {"8" {:a "one"}}})
+        (let [walk (full-walk "1")]
+          (is (= 9 (:result-count walk)))
+          (is (= ["1" "2" "3" "8" "4" "5" "6" "9" "7"] (:ids walk)))
+          (is (= ["1" "8"] (map :id (path walk "8")))))))))

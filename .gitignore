@@ -6,6 +6,7 @@ classes
 *.jar
 *.class
 *.java
+native/
 *~
 #*#
 .#*
@@ -13,3 +14,4 @@ classes
 pom.xml
 .DS_Store
 docs
+.lein*
