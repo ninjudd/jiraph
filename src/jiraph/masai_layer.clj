@@ -168,7 +168,7 @@
 
 ;; formats should be functions from revision (and optionally node-id) to codec.
 ;; plain old codecs will be accepted as well
-(let [default-codec (cereal/clojure-codec adjoin)
+(let [default-codec (cereal/revisioned-clojure-codec adjoin)
       codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
   (defn make [db & {{:keys [node meta layer-meta]} :formats,
                     :keys [assoc-mode] :or {assoc-mode :append}}]

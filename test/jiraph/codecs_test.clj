@@ -4,7 +4,7 @@
   (:import (java.nio ByteBuffer)))
 
 (deftest revisioned-codecs
-  (doseq [impl [clojure-codec java-codec] ; (a -> a) -> (opts -> Codec)
+  (doseq [impl [revisioned-clojure-codec revisioned-java-codec] ; (a -> a) -> (opts -> Codec)
           :let [codec (impl adjoin)]]     ; (opts -> Codec)
     (testing "append two simple encoded data structures"
       (let [data1 (encode codec {:foo 1 :bar 2}              {:revision 1})

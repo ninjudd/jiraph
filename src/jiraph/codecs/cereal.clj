@@ -7,5 +7,5 @@
             (-> (constantly (codec :repeated true))
                 (revisioned-codec reduce-fn))))]
 
-  (def java-codec    (cereal-codec cereal/java-codec)) ;; (a -> a) -> (opts -> Codec)
-  (def clojure-codec (cereal-codec cereal/clojure-codec)))
+  (def revisioned-java-codec    (cereal-codec cereal/java-codec)) ;; (a -> a) -> (opts -> Codec)
+  (def revisioned-clojure-codec (cereal-codec cereal/clojure-codec)))
