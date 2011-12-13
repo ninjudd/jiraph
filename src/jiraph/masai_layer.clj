@@ -166,18 +166,16 @@
        (defn- make-db [db]
          db))
 
-(defn- codec-fn [codec default]
-  (as-fn (or codec default)))
-
 ;; formats should be functions from revision (and optionally node-id) to codec.
 ;; plain old codecs will be accepted as well
-(defn make [db & {{:keys [node meta layer-meta]} :formats,
-                  :keys [assoc-mode] :or {assoc-mode :append}}]
-  (let [[node-format meta-format layer-meta-format]
-        (for [f [node meta layer-meta]]
-          (codec-fn f (cereal/clojure-codec adjoin)))]
-    (MasaiLayer. (make-db db) nil
-                 (case assoc-mode
-                   :append true
-                   :overwrite false)
-                 node-format, meta-format, layer-meta-format)))
+(let [default-codec (cereal/clojure-codec adjoin)
+      codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
+  (defn make [db & {{:keys [node meta layer-meta]} :formats,
+                    :keys [assoc-mode] :or {assoc-mode :append}}]
+    (let [[node-format meta-format layer-meta-format]
+          (map codec-fn [node meta layer-meta])]
+      (MasaiLayer. (make-db db) nil
+                   (case assoc-mode
+                     :append true
+                     :overwrite false)
+                   node-format, meta-format, layer-meta-format))))
