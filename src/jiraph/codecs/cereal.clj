@@ -4,7 +4,7 @@
 
 (letfn [(cereal-codec [codec] ;; Codec -> (a -> a) -> (opts -> Codec)
           (fn [reduce-fn]
-            (-> (codec :repeated true)
+            (-> (constantly (codec :repeated true))
                 (revisioned-codec reduce-fn))))]
 
   (def java-codec    (cereal-codec cereal/java-codec)) ;; (a -> a) -> (opts -> Codec)

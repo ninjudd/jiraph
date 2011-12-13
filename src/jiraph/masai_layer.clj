@@ -63,7 +63,7 @@
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
-              (bufseq->bytes (encode ((format-for this id) {:revision revision})
+              (bufseq->bytes (encode ((format-for this id) {:revision revision}) ;; TODO pass id
                                      data)))]
       (if append-only?
         (db/append! db id (bytes (assoc attrs :_reset true)))
@@ -110,7 +110,8 @@
   ChangeLog
   (get-revisions [this id]
     (let [format (format-for this id)
-          rev-codec (-> format meta :revisions)]
+          rev-codec-builder (-> format meta :revisions)
+          rev-codec (rev-codec-builder {})]
       (when-let [data (db/fetch db id)]
         (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
           (if-not revision
