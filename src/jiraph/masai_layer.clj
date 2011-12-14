@@ -179,3 +179,16 @@
                      :append true
                      :overwrite false)
                    node-format, meta-format, layer-meta-format))))
+
+(defn make-temp [& args]
+  (let [file (java.io.File/createTempFile "layer" "db")
+        name (.getAbsolutePath file)]
+    (returning [file (doto (apply make name args) layer/open)]
+      (.deleteOnExit file))))
+
+(defmacro with-temp-layer [[binding & args] & body]
+  `(let [[file# layer#] (make-temp ~@args)
+         ~binding layer#]
+     (returning ~@body
+       (layer/close layer#)
+       (.delete file#))))
