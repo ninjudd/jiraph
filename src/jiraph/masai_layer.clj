@@ -58,12 +58,12 @@
   Basic
   (get-node [this id not-found]
     (if-let [data (db/fetch db id)]
-      (decode ((format-for this id) {:revision revision})
+      (decode ((format-for this id) {:revision revision :id id})
               [(ByteBuffer/wrap data)])
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
-              (bufseq->bytes (encode ((format-for this id) {:revision revision}) ;; TODO pass id
+              (bufseq->bytes (encode ((format-for this id) {:revision revision :id id})
                                      data)))]
       (if append-only?
         (db/append! db id (bytes (assoc attrs :_reset true)))
