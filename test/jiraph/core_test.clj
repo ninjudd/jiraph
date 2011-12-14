@@ -9,7 +9,7 @@
 (def all [:tr :tp :stm :trs])
 
 (letfn [(masai []
-          (masai/make (.getAbsolutePath (java.io.File/createTempFile "layer" "db"))))]
+          (masai/make-temp))]
   (defn make-graph []
     {:tr  (masai)
      :trs (masai)

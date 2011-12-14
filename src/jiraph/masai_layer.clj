@@ -180,15 +180,21 @@
                      :overwrite false)
                    node-format, meta-format, layer-meta-format))))
 
-(defn make-temp [& args]
+(defn temp-layer
+  "Create a masai layer on a temporary file, deleting the file when the JVM exits.
+   Returns a pair of [file layer]."
+  [& args]
   (let [file (java.io.File/createTempFile "layer" "db")
         name (.getAbsolutePath file)]
-    (returning [file (doto (apply make name args) layer/open)]
+    (returning [file (apply make name args)]
       (.deleteOnExit file))))
 
+(def make-temp (comp second temp-layer))
+
 (defmacro with-temp-layer [[binding & args] & body]
-  `(let [[file# layer#] (make-temp ~@args)
+  `(let [[file# layer#] (temp-layer ~@args)
          ~binding layer#]
+     (layer/open layer#)
      (returning ~@body
        (layer/close layer#)
        (.delete file#))))

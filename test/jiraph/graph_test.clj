@@ -100,7 +100,7 @@
 
 (deftest layer-impls
   (doseq [layer [;(stm/make)
-                 (masai/make "test/masai1.db")]] ;; add more layers as they're implemented
+                 (masai/make-temp)]] ;; add more layers as they're implemented
     (layer/open layer)
     (try
       (test-layer layer)
