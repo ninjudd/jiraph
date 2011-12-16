@@ -14,16 +14,14 @@
 ;; TODO still needs work
 (defn matching-subpaths [node path]
   (if-let [[k & ks] (seq path)]
-    (if (= :* k)
-      (for [[k v] node
-            path (matching-subpaths v ks)]
-        (cons k path))
-      (when-let [v (get node k)]
-        (for [path (matching-subpaths v ks)]
-          (cons k path))))
+    (for [[k v] (if (= :* k)
+                  node ;; each k/v in the node
+                  (when-let [e (find node k)]
+                    [e])) ;; a single k/v pair, if the key exists in the map
+          path (matching-subpaths v ks)]
+      (cons k path))
     '(())))
 
-;; TODO doesn't make sense at all
 (defn write-node [node writers]
   (reduce (fn [node [path writer]]
             (if (seq path)
