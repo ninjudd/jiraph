@@ -4,15 +4,14 @@
         [useful.map :only [update]]
         [useful.utils :only [adjoin]]))
 
-(defn- update-incoming [meta layer to-id from-id operation]
-  (let [f (case operation :add (fnil conj #{}) :drop disj)]
-    (adjoin
-     (when *revision*
-       (update-in
-        meta
-        [to-id :revs *revision* :in]
-        (fn [old] (into (f old from-id) (get-in meta [to-id :in])))))
-     (update-in meta [to-id :in] f from-id))))
+(defn- update-incoming [meta layer to-id from-id val]
+  (adjoin
+   (when *revision*
+     (update-in meta [to-id :revs *revision* :in]
+                (fn [old]
+                  (into (assoc old from-id val)
+                        (get-in meta [to-id :in])))))
+   (update-in meta [to-id :in] assoc from-id val)))
 
 (defn- get-meta [layer id] (get @(:meta layer) id))
 
@@ -92,7 +91,7 @@
          (initiate-revs layer id)
          (let [id-meta (get-meta layer id)]
            (when-not (:in id-meta)
-             (alter meta assoc id (assoc id-meta :in #{}))))
+             (alter meta assoc id (assoc id-meta :in {}))))
          (when *revision* (append-rev layer id node))
          (alter data into {id node}))
         node)))
@@ -115,10 +114,10 @@
        [:in])))
 
   (add-incoming! [layer id from-id]
-    (dosync (alter meta update-incoming layer id from-id :add)))
+    (dosync (alter meta update-incoming layer id from-id true)))
 
   (drop-incoming! [layer id from-id]
-    (dosync (alter meta update-incoming layer id from-id :drop)))
+    (dosync (alter meta update-incoming layer id from-id false)))
 
   retro.core/Revisioned
 

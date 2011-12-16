@@ -126,6 +126,7 @@
         (is (= #{"4" "5"} (get-incoming layer-name "1")))
         (is (append-node! layer-name "5" {:edges {"1" {:deleted true}}}))
         (is (= #{"4"} (get-incoming layer-name "1")))
+        (is (= {"4" true "5" false} (get-incoming-map layer-name "1")))
         (is (assoc-node! layer-name "4" {:edges {"2" {:a "1"} "3" {:b "2"}}}))
         (is (= #{"4"} (get-incoming layer-name "2")))
         (is (= #{"4"} (get-incoming layer-name "3")))
@@ -193,25 +194,25 @@
         (is (= 8 (:foo (get-node layer-name "8")))))
 
       (testing "keeps track of incoming edges inside at-revision"
-        (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
+        (at-revision 199 (is (= #{} (get-incoming layer-name "11"))))
         (at-revision 200
           (is (add-node! layer-name "10" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10"} (get-incoming layer-name "11")))
-        (at-revision 199 (is (= nil (get-incoming layer-name "11"))))
+        (at-revision 199 (is (= #{} (get-incoming layer-name "11"))))
 
         (at-revision 201
           (is (add-node! layer-name "12" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10" "12"} (get-incoming layer-name "11")))
-        (at-revision 199 (is (= nil     (get-incoming layer-name "11"))))
+        (at-revision 199 (is (= #{}     (get-incoming layer-name "11"))))
         (at-revision 200 (is (= #{"10"} (get-incoming layer-name "11"))))
 
         (at-revision 202
           (is (add-node! layer-name "13" {:edges {"11" {:a "one"}}})))
 
         (is (= #{"10" "12" "13"} (get-incoming layer-name "11")))
-        (at-revision 199 (is (= nil          (get-incoming layer-name "11"))))
+        (at-revision 199 (is (= #{}          (get-incoming layer-name "11"))))
         (at-revision 200 (is (= #{"10"}      (get-incoming layer-name "11"))))
         (at-revision 201 (is (= #{"10" "12"} (get-incoming layer-name "11")))))
 

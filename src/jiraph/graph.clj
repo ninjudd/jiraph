@@ -367,10 +367,17 @@
   (reverse
    (take-while pos? (reverse (layer/get-revisions (layer layer-name) id)))))
 
-(defn get-incoming
-  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+(defn get-incoming-map
+  "Return a map with keys for each node id with an incoming edge to this node. Each val is a boolean
+  indicating the value of the :deleted attribute on the edge."
   [layer-name id]
   (layer/get-incoming (layer layer-name) id))
+
+(defn get-incoming
+  "Return the ids of all nodes that have incoming edges on this layer to this node; excludes edges
+  marked :deleted."
+  [layer-name id]
+  (into-set #{} (get-incoming-map layer-name id)))
 
 (defn wrap-caching
   "Wrap the given function with a new function that memoizes read methods. Nested wrap-caching calls
