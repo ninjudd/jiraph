@@ -39,42 +39,6 @@
                   [node []]
                   writers)))
 
-(defn substring-after [^String delim]
-  (fn [^String s]
-    (subs s (inc (.lastIndexOf s delim)))))
-
-(let [char-after (fn [c]
-                   (char (inc (int c))))
-      after-colon (char-after \:)
-      str-after (fn [s] ;; the string immediately after this one in lexical order
-                  (str s \u0001))]
-  (defn bounds [path]
-    (let [path       (vec path)
-          last       (peek path)
-          multi?     (= :* last)
-          path       (pop path)
-          top-level? (empty? path)
-          start      (s/join ":" (map name path))]
-      (if top-level?
-        {:start last, :stop (str-after last)
-         :keyfn (constantly last), :parent []}
-        (into {:parent path}
-              (if multi?
-                {:start (str start ":")
-                 :stop (str start after-colon)
-                 :keyfn (substring-after ":")}
-                (let [start-key (str start ":" (name last))]
-                  {:start start-key
-                   :stop (str-after start-key)
-                   :keyfn (constantly last)})))))))
-
-(defn assoc-levels
-  "Like assoc-in, but an empty keyseq replaces whole map."
-  [m ks v]
-  (if-let [[k & ks] (seq ks)]
-    (assoc m k (assoc-levels (get m k) ks v))
-    v))
-
 (defn read-node [db id codecs]
   (reduce adjoin
           (for [[path codec] codecs

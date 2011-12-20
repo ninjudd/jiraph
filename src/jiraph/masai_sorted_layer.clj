@@ -1,249 +1,209 @@
 (ns jiraph.masai-sorted-layer
-  (:refer-clojure :exclude [sync count])
-  (:use jiraph.layer
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences
+                             node-id-seq meta-key meta-key?] :as layer]
+        [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
-        [retro.core :only [*revision*]]
-        [useful.utils :only [if-ns]]
+        useful.debug
+        [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
-        [useful.map :only [map-vals]])
+        [useful.fn :only [as-fn]]
+        [useful.datatypes :only [assoc-record]]
+        [gloss.io :only [encode decode]]
+        [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
-            [cereal.format :as f]
-            [cereal.reader :as reader-append-format])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader]
-           [clojure.lang LineNumberingPushbackReader]))
+            [jiraph.graph :as graph]
+            [jiraph.codecs.cereal :as cereal]
+            [clojure.string :as s])
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
+            DataOutputStream DataInputStream]
+           [java.nio ByteBuffer]))
 
-(def meta-prefix     "_")
-(def internal-prefix "__")
-(def property-prefix "___")
+(defn substring-after [^String delim]
+  (fn [^String s]
+    (subs s (inc (.lastIndexOf s delim)))))
 
-(defn- meta-key [id]
-  (str meta-prefix id))
+(let [char-after (fn [c]
+                   (char (inc (int c))))
+      after-colon (char-after \:)
+      str-after (fn [s] ;; the string immediately after this one in lexical order
+                  (str s \u0001))]
+  (defn bounds [path]
+    (let [path       (vec path)
+          last       (peek path)
+          multi?     (= :* last)
+          path       (pop path)
+          top-level? (empty? path)
+          start      (s/join ":" (map name path))]
+      (if top-level?
+        {:start last, :stop (str-after last)
+         :keyfn (constantly last), :parent []}
+        (into {:parent path}
+              (if multi?
+                {:start (str start ":")
+                 :stop (str start after-colon)
+                 :keyfn (substring-after ":")}
+                (let [start-key (str start ":" (name last))]
+                  {:start start-key
+                   :stop (str-after start-key)
+                   :keyfn (constantly last)})))))))
 
-(def count-key (str internal-prefix "count"))
+(defn assoc-levels
+  "Like assoc-in, but an empty keyseq replaces whole map."
+  [m ks v]
+  (if-let [[k & ks] (seq ks)]
+    (assoc m k (assoc-levels (get m k) ks v))
+    v))
 
-(defn- property-key [key]
-  (str property-prefix key))
+(defn- codecs-for [layer node-id revision]
+  (for [[path codec-fn] (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
+                                         (meta-key? layer node-id) :node-meta-format
+                                         :else :node-format))]
+    [path (codec-fn {:revision revision, :id node-id})]))
 
-(declare meta-len)
-(defn- get-meta [layer key rev]
-  (let [db (.db layer)
-        mf (.meta-format layer)]
-    (if rev
-      (let [len (meta-len layer key rev)]
-        (when (< 0 len)
-          (f/decode mf (db/get db key) 0 len)))
-      (f/decode mf (db/get db key)))))
+;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
+(defn- main-node-id [meta-id]
+  {:pre [(= "_" (first meta-id))]}
+  (subs meta-id 1))
 
-(defn- len
-  "The byte length of the node at revision rev."
-  [layer id rev]
-  (if-not rev
-    (db/len (.db layer) id)
-    (let [meta (get-meta layer (meta-key id) nil)
-          len  (find-with (partial >= rev)
-                          (reverse (:rev meta))
-                          (reverse (:len meta)))]
-      (when (and len (<= 0 len))
-        len))))
+(defn- bytes->long [bytes]
+  (-> bytes (ByteArrayInputStream.) (DataInputStream.) (.readLong)))
 
-(defn- meta-len
-  "The byte length of the meta node at revision rev."
-  [layer key rev]
-  (or (when rev
-        (let [meta (get-meta layer key nil)]
-          ;; Must shift meta lengths by one since they store the length of the previous revision.
-          (find-with (partial >= rev)
-                     (reverse (cons 0 (:mrev meta)))
-                     (cons nil (reverse (:mlen meta))))))
-      (db/len (.db layer) key)))
+(defn- long->bytes [long]
+  (-> (ByteArrayOutputStream. 8)
+      (doto (-> (DataOutputStream.) (.writeLong long)))
+      (.toByteArray)))
 
-(defn- append-meta! [layer id attrs & [rev]]
-  (let [db (.db layer)
-        mf (.meta-format layer)
-        key (meta-key id)]
-    (->> (if rev
-           (assoc attrs :mrev rev :mlen (db/len db key))
-           attrs)
-         (f/encode mf)
-         (db/append! db key))))
+(let [revision-key "__revision"]
+  (defn- save-maxrev [layer]
+    (when-let [rev (:revision layer)]
+      (db/put! (:db layer) revision-key (long->bytes rev))))
+  (defn- read-maxrev [layer]
+    (when-let [bytes (db/fetch (:db layer) revision-key)]
+      (bytes->long bytes))))
 
-(defn- set-len! [layer id len]
-  (if *revision*
-    (append-meta! layer id {:rev *revision* :len len})))
+(defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
+  Meta
+  (meta-key [this k]
+    (str "_" k))
+  (meta-key? [this k]
+    (.startsWith ^String k "_"))
 
-(defn- reset-len! [layer id & [len]]
-  ;; Insert a length of -1 to indicate that all lengths before the current one are no longer valid.
-  (append-meta! layer id
-    (if (and *revision* len)
-      {:rev [0 *revision*] :len [-1 len]}
-      {:rev 0 :len -1})))
+  Enumerate
+  (node-id-seq [this]
+    (remove #(meta-key? this %) (db/key-seq db)))
+  (node-seq [this]
+    (map #(graph/get-node this %) (node-id-seq this)))
 
-(defn- inc-count! [layer]
-  (db/inc! (.db layer) count-key 1))
+  Basic
+  (get-node [this id not-found]
+    (reduce (fn ;; for an empty list (no keys found), reduce calls with no args
+              ([] not-found)
+              ([a b] (adjoin a b)))
+            (for [[path codec] (codecs-for this id revision)
+                  :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
+                        kvs (seq (for [[k v] (db/fetch-seq db start)
+                                       :while (neg? (compare k stop))]
+                                   [(keyfn k) (decode codec [(ByteBuffer/wrap (doto v (-> seq ?)))])]))]
+                  :when kvs]
+              (assoc-levels {} parent
+                            (into {} kvs)))))
+  (assoc-node! [this id attrs]
+    #_(letfn [(bytes [data]
+              (bufseq->bytes (encode ((format-for this id) {:revision revision :id id})
+                                     data)))]
+      (if append-only?
+        (db/append! db id (bytes (assoc attrs :_reset true)))
+        (db/put!    db id (bytes attrs)))))
+  (dissoc-node! [this id]
+    (db/delete! db id))
 
-(defn- dec-count! [layer]
-  (db/inc! (.db layer) count-key -1))
+  Optimized
+  (query-fn [this keyseq f] nil)
+  (update-fn [this keyseq f]
+    #_
+    (when-let [[id & keys] (seq keyseq)]
+      (let [encoder (format-for this id)]
+        (when (= f (:reduce-fn (meta encoder)))
+          (fn [m]
+            (db/append! db id
+                        (bufseq->bytes (encode (encoder {:revision revision})
+                                               (if keys
+                                                 (assoc-in {} keys m)
+                                                 m))))
+            {:old nil :new m})))))
 
-(defn separate-edges [node]
-  (let [edges (or (:edges node) (:edge node))]
-    [(dissoc node :edges :edge)
-     (if (map? edges)
-       edges
-       (and edges {(:id edges) edges}))]))
+  Layer
+  (open [layer]
+    (db/open db))
+  (close [layer]
+    (db/close db))
+  (sync! [layer]
+    (db/sync! db))
+  (optimize! [layer]
+    (db/optimize! db))
+  (truncate! [layer]
+    (db/truncate! db))
 
-(defn decode-data [layer id data & [rev]]
-  (let [{:keys [format db]} layer]
-    (if rev
-      (when-let [length (len layer id rev)]
-        (f/decode format data 0 length))
-      (f/decode format data))))
-  
-(defn decode [layer id & [rev]]
-  (decode-data layer id (db/get layer id) rev))
+  ;; Schema
+  ;; (fields [layer]
+  ;;   (f/fields format))
+  ;; (fields [layer subfields]
+  ;;   (f/fields format subfields))
+  ;; (node-valid? [layer attrs]
+  ;;   (try (f/encode format (make-node attrs))
+  ;;        true
+  ;;        (catch Exception e)))
 
-(defrecord MasaiSortedLayer [db format meta-format]
-  jiraph.layer/Layer
+  ChangeLog
+  (get-revisions [this id]
+    #_
+    (let [format (format-for this id)
+          rev-codec-builder (-> format meta :revisions)
+          rev-codec (rev-codec-builder {})]
+      (when-let [data (db/fetch db id)]
+        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
+          (if-not revision
+            revs
+            (take-while #(<= % revision) revs))))))
 
-  (open      [layer] (db/open      db))
-  (close     [layer] (db/close     db))
-  (sync!     [layer] (db/sync!     db))
-  (optimize! [layer] (db/optimize! db))
+  ;; TODO this is stubbed, will need to work eventually
+  (get-changed-ids [layer rev]
+    #{})
 
-  (node-count [layer]
-    (db/inc! db count-key 0))
+  ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
+  ;; been applied, and refusing to do any more writing to that revision. What is the answer?
+  WrappedTransactional
+  (txn-wrap [this f]
+    ;; todo *skip-writes* for past revisions
+    (fn [^MasaiLayer layer]
+      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
+                                 (fn [_]
+                                   (returning (f layer)
+                                     (save-maxrev layer))))]
+        (db-wrapped (.db layer)))))
 
-  (node-ids [layer]
-    (remove #(.startsWith % meta-prefix) (db/key-seq db)))
+  Revisioned
+  (at-revision [this rev]
+    (assoc-record this :revision rev))
+  (current-revision [this]
+    revision)
 
-  (fields [layer]
-    (f/fields format))
+  OrderedRevisions
+  (max-revision [this]
+    (read-maxrev this))
 
-  (fields [layer subfields]
-    (f/fields format subfields))
+  Preferences
+  (manage-changelog? [this] false) ;; TODO wish this were more granular
+  (manage-incoming? [this] true)
+  (single-edge? [this] ;; TODO accept option to (make)
+    false))
 
-  (node-valid? [layer attrs]
-    (try (f/encode format (make-node attrs))
-         true
-         (catch Exception e)))
-
-  (get-property  [layer key]
-    (if-let [bytes (db/get db (property-key key))]
-      (read-string (String. bytes))))
-
-  (set-property! [layer key val]
-    (let [bytes (.getBytes (pr-str val))]
-      (db/put! db (property-key key) bytes)
-      val))
-
-  (node-exists? [layer id]
-    (< 0 (len layer id *revision*)))
-
-  (add-node! [layer id attrs]
-    (let [[node edges] (separate-edges (make-node attrs))
-          data (f/encode format node)]
-      (when (db/add! db id data)
-        (when edges
-          (doseq [[name data] edges :let [data (f/encode format data)
-                                          id (str id ":" data)]]
-            (db/add! db id data)
-            (set-len! layer id (alength data))))
-        (inc-count! layer)
-        (set-len! layer id (alength data))
-        (f/decode format data))))
-
-  (set-node! [layer id attrs]
-    (let [[node edges] (separate-edges (make-node attrs))
-          data (f/encode format node)]
-      (when edges
-        (doseq [[name data] edges :let [data (f/encode format data)
-                                        id (str id ":" data)]]
-          (db/put! db id data)
-          (reset-len! layer id (alength data))))
-      (db/put! db id data)
-      (reset-len! layer id (alength data))
-      (f/decode format data)))
-
-  (delete-node! [layer id]
-    (let [node (get-node layer id)] ;fixme
-      (when (db/delete! db id)
-        (when-let [edges (get-edges layer id)]
-          (doseq [k (keys edges) :let [id (str id ":" k)]]
-            (db/delete! db id)
-            (reset-len! layer id)))
-        (dec-count! layer)
-        (reset-len! layer id)
-        node)))
-
-  (get-revisions [layer id] (:rev (get-meta layer (meta-key id) *revision*)))
-  (get-incoming  [layer id] (:in  (get-meta layer (meta-key id) *revision*)))
-
-  (add-incoming!  [layer id from-id] (append-meta! layer id {:in {from-id true}}  *revision*))
-  (drop-incoming! [layer id from-id] (append-meta! layer id {:in {from-id false}} *revision*))
-
-  (truncate! [layer] (db/truncate! db))
-
-  jiraph.layer.Append
-
-  (append-node! [layer id attrs]
-    (when-not (empty? attrs)
-      (let [len  (db/len db id)
-            [node edges] (separate-edges (make-node attrs))
-            data (f/encode format node)]
-        (db/append! db id data)
-        (doseq [[name data] edges :let [data (f/encode format data)
-                                        id (str id ":" data)
-                                        len (db/len db id)]]
-          (db/append! db id data)
-          (set-len! layer id (+ (max len 0) (alength data))))
-        (when (= -1 len)
-          (inc-count! layer))
-        (set-len! layer id (+ (max len 0) (alength data)))
-        (f/decode format data))))
-
-  retro.core/WrappedTransactional
-
-  (txn-wrap [layer f]
-    (retro.core/wrapped-txn f db))
-
-  retro.core/Revisioned
-
-  (get-revision [layer]
-    (get-property layer :rev))
-
-  (set-revision! [layer rev]
-    (set-property! layer :rev rev))
-
-  jiraph.layer.Sorted
-  
-  (edges-subseq [layer id test key]
-    (map-vals (partial decode-data layer id)
-              (db/subseq db test (str id ":" key))))
-  
-  (edges-subseq [layer id stest skey etest ekey]
-    (map-vals (partial decode-data layer id)
-              (db/subseq db stest (str id ":" skey) etest (str id ":" ekey))))
-  
-  (edges-rsubseq [layer id test key]
-    (map-vals (partial decode-data layer id)
-              (db/rsubseq db test (str id ":" key))))
-
-  (edges-rsubseq [layer id stest skey etest ekey]
-    (map-vals (partial decode-data layer id)
-              (db/rsubseq db stest (str id ":" skey) etest (str id ":" ekey))))
-
-  jiraph.layer.Split
-
-  (get-attrs [layer id] (decode layer id *revision*))
-  
-  (get-edges [layer id]
-    (map-vals (partial decode-data layer id)
-              (subseq db > (str id ":")))))
-
-(if-ns (:require protobuf [cereal.protobuf :as protobuf])
-       (defn- protobuf-make [format]
+(if-ns (:require protobuf.core
+                 [cereal.protobuf :as protobuf])
+       (defn- make-protobuf [format]
          (when (instance? cereal.protobuf.ProtobufFormat format)
            (protobuf/make jiraph.Meta$Node)))
-       (defn- protobuf-make [format]
+       (defn- make-protobuf [format]
          nil))
 
 (if-ns (:require [masai.tokyo-sorted :as tokyo])
@@ -254,11 +214,39 @@
        (defn- make-db [db]
          db))
 
-(defn make [db & [format meta-format]]
-  (let [format (or format (reader-append-format/make))]
-    (MasaiSortedLayer.
-     (make-db db) format
-     (or meta-format
-         (if (instance? cereal.reader.ReaderFormat format)
-           (reader-append-format/make {:in #{} :rev [] :len [] :mrev [] :mlen []})
-           (protobuf-make format))))))
+;; formats should be functions:
+;; - accept as arg: a map containing {revision and node-id}
+;; - return: a gloss codec
+;; plain old codecs will be accepted as well
+(let [default-codec (cereal/revisioned-clojure-codec adjoin)
+      codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
+  (defn make [db & {{:keys [node meta layer-meta]} :formats,
+                    :keys [assoc-mode] :or {assoc-mode :append}}]
+    (let [[node-format meta-format layer-meta-format]
+          (for [format [node meta layer-meta]]
+            (for [[path codec] format]
+              [path (codec-fn codec)]))]
+      (MasaiLayer. (make-db db) nil
+                   (case assoc-mode
+                     :append true
+                     :overwrite false)
+                   node-format, meta-format, layer-meta-format))))
+
+(defn temp-layer
+  "Create a masai layer on a temporary file, deleting the file when the JVM exits.
+   Returns a pair of [file layer]."
+  [& args]
+  (let [file (java.io.File/createTempFile "layer" "db")
+        name (.getAbsolutePath file)]
+    (returning [file (apply make name args)]
+      (.deleteOnExit file))))
+
+(def make-temp (comp second temp-layer))
+
+(defmacro with-temp-layer [[binding & args] & body]
+  `(let [[file# layer#] (temp-layer ~@args)
+         ~binding layer#]
+     (layer/open layer#)
+     (returning ~@body
+       (layer/close layer#)
+       (.delete file#))))
