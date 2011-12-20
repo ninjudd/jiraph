@@ -18,6 +18,13 @@
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
+(defn prefix-of? [haystack needle]
+  (if-let [[n & ns] (seq needle)]
+    (when-let [[h & hs] (seq haystack)]
+      (and (= h (first needle))
+           (recur hs (rest needle))))
+    true))
+
 (defn substring-after [^String delim]
   (fn [^String s]
     (subs s (inc (.lastIndexOf s delim)))))
@@ -81,6 +88,19 @@
     (when-let [bytes (db/fetch (:db layer) revision-key)]
       (bytes->long bytes))))
 
+(defn- read-node [codecs id not-found]
+  (reduce (fn ;; for an empty list (no keys found), reduce calls with no args
+            ([] not-found)
+            ([a b] (adjoin a b)))
+          (for [[path codec] codecs
+                :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
+                      kvs (seq (for [[k v] (db/fetch-seq db start)
+                                     :while (neg? (compare k stop))]
+                                 [(keyfn k) (decode codec [(ByteBuffer/wrap v)])]))]
+                :when kvs]
+            (assoc-levels {} parent
+                          (into {} kvs)))))
+
 (defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
   Meta
   (meta-key [this k]
@@ -96,17 +116,10 @@
 
   Basic
   (get-node [this id not-found]
-    (reduce (fn ;; for an empty list (no keys found), reduce calls with no args
-              ([] not-found)
-              ([a b] (adjoin a b)))
-            (for [[path codec] (codecs-for this id revision)
-                  :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
-                        kvs (seq (for [[k v] (db/fetch-seq db start)
-                                       :while (neg? (compare k stop))]
-                                   [(keyfn k) (decode codec [(ByteBuffer/wrap (doto v (-> seq ?)))])]))]
-                  :when kvs]
-              (assoc-levels {} parent
-                            (into {} kvs)))))
+    (let [node (read-node (codecs-for this id revision) id not-found)]
+      (if (identical? node not-found)
+        not-found
+        (get node id))))
   (assoc-node! [this id attrs]
     #_(letfn [(bytes [data]
               (bufseq->bytes (encode ((format-for this id) {:revision revision :id id})
@@ -118,7 +131,16 @@
     (db/delete! db id))
 
   Optimized
-  (query-fn [this keyseq f] nil)
+  (query-fn [this keyseq f]
+    (let [[id & keys] keyseq]
+      (when keys
+        (let [codecs (for [[path :as entry] (codecs-for this id revision)
+                           :when (prefix-of? path keys)]
+                       entry)]
+          (fn [& args]
+            (apply f (get-in (read-node codecs id nil)
+                             keyseq)
+                   args))))))
   (update-fn [this keyseq f]
     #_
     (when-let [[id & keys] (seq keyseq)]
