@@ -39,16 +39,5 @@
                   [node []]
                   writers)))
 
-(defn read-node [db id codecs]
-  (reduce adjoin
-          (for [[path codec] codecs
-                :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
-                      kvs (seq (for [[k v] (fetch-seq db start)
-                                     :while (neg? (compare k stop))]
-                                 [(keyfn k) (codec [(ByteBuffer/wrap v)])]))]
-                :when kvs]
-            (assoc-levels {} parent
-                          (into {} kvs)))))
-
 (defn parse-bytes [b]
   (read-string (String. (io/bufseq->bytes b))))

@@ -4,8 +4,9 @@
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
-        [useful.utils :only [if-ns adjoin returning]]
-        [useful.seq :only [find-with]]
+        [useful.utils :only [if-ns adjoin returning map-entry]]
+        [useful.seq :only [find-with prefix-of?]]
+        [useful.string :only [substring-after]]
         [useful.fn :only [as-fn]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
@@ -18,16 +19,10 @@
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
-(defn prefix-of? [haystack needle]
-  (if-let [[n & ns] (seq needle)]
-    (when-let [[h & hs] (seq haystack)]
-      (and (= h (first needle))
-           (recur hs (rest needle))))
-    true))
-
-(defn substring-after [^String delim]
-  (fn [^String s]
-    (subs s (inc (.lastIndexOf s delim)))))
+(defn- ignore? [x]
+  (or (nil? x)
+      (and (coll? x)
+           (empty? x))))
 
 (let [char-after (fn [c]
                    (char (inc (int c))))
@@ -53,13 +48,6 @@
                   {:start start-key
                    :stop (str-after start-key)
                    :keyfn (constantly last)})))))))
-
-(defn assoc-levels
-  "Like assoc-in, but an empty keyseq replaces whole map."
-  [m ks v]
-  (if-let [[k & ks] (seq ks)]
-    (assoc m k (assoc-levels (get m k) ks v))
-    v))
 
 (defn- codecs-for [layer node-id revision]
   (for [[path codec-fn] (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
@@ -95,8 +83,10 @@
           (for [[path codec] codecs
                 :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
                       kvs (seq (for [[k v] (db/fetch-seq db start)
-                                     :while (neg? (compare k stop))]
-                                 [(keyfn k) (decode codec [(ByteBuffer/wrap v)])]))]
+                                     :while (neg? (compare k stop))
+                                     :let [node (decode codec [(ByteBuffer/wrap v)])]
+                                     :when (not (ignore? node))]
+                                 (map-entry (keyfn k) node)))]
                 :when kvs]
             (assoc-levels {} parent
                           (into {} kvs)))))
