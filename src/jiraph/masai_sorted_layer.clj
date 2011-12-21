@@ -124,9 +124,8 @@
   (query-fn [this keyseq f]
     (let [[id & keys] keyseq]
       (when keys
-        (let [codecs (for [[path :as entry] (codecs-for this id revision)
-                           :when (prefix-of? path keys)]
-                       entry)]
+        (let [codecs (filter #(prefix-of? (key %) keys)
+                             (codecs-for this id revision))]
           (fn [& args]
             (apply f (get-in (read-node codecs id nil)
                              keyseq)
@@ -237,7 +236,7 @@
     (let [[node-format meta-format layer-meta-format]
           (for [format [node meta layer-meta]]
             (for [[path codec] format]
-              [path (codec-fn codec)]))]
+              (map-entry path (codec-fn codec))))]
       (MasaiLayer. (make-db db) nil
                    (case assoc-mode
                      :append true
