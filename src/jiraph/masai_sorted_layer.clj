@@ -29,18 +29,22 @@
      (loop [pattern pattern, path path]
        (if (empty? pattern)
          (or (not strict?)
-             (seq path))
+             (and (seq path)
+                  (not= [:*] path)))
          (and (seq path)
               (let [[x & xs] pattern
                     [y & ys] path]
                 (and (or (= x y) (= x :*) (= y :*))
                      (recur xs ys))))))))
 
-(defn- strict-prefix?
-  [pattern path])
+(defn along-path? [pattern path]
+  (every? true?
+          (map (fn [x y]
+                 (or (= x y) (= x :*) (= y :*)))
+               pattern, path)))
 
 (defn- subnode-codecs [codecs path]
-  (let [path-to-root (filter #(path-prefix? (first %) path) codecs)
+  (let [path-to-root (filter #(along-path? (first %) path) codecs)
         [below [first-above]] (split-with #(path-prefix? path (first %) true)
                                           path-to-root)]
     (assert first-above (str "Don't know how to write at " path))
