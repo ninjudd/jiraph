@@ -162,6 +162,34 @@
                  args))
         (throw (Exception. "Trying to read at a level where we have no codecs...?")))))
   (update-fn [this keyseq f]
+    (let [[id & keys] keyseq]
+      (if (= f adjoin)
+        () ;; ...TOOD special-case adjoin...
+        (fn [& args]
+          (let [codecs (? (for [[path codec] (codecs-for this id revision),
+                                :when (path-prefix? path keys)
+                                :while (path-prefix? keys path)]
+                            [(fill-pattern path keys) codec]))]
+            (cond (empty? codecs) (throw (Exception. "No codecs to write with"))
+
+                  (and (not (next codecs)) ;; just one codec
+                       (= (-> codecs ;; exact path match with same reduce-fn
+                              (first
+                               ((knit identity (comp :reduce-fn meta)))))
+                          [keys f]))
+                  (let [[[path codec]] codecs]
+                    (do (db/append! db (s/join ":" (cons id path))
+                                    (bufseq->bytes (encode codec args)))
+                        {:old nil :new nil})) ;; no idea what used to be there, or is there now
+
+                  :else (let [old ((layer/query-fn this keyseq identity))
+                              new (apply f old args)]
+                                        ;...
+
+                          (loop [codecs codecs]
+                                        ;...
+                            )))))
+        ))
     #_
     (when-let [[id & keys] (seq keyseq)]
       (let [encoder (format-for this id)]
