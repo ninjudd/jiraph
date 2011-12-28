@@ -5,9 +5,10 @@
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
         [useful.utils :only [if-ns adjoin returning map-entry]]
-        [useful.seq :only [find-with prefix-of?]]
+        [useful.seq :only [find-with]]
         [useful.string :only [substring-after]]
-        [useful.fn :only [as-fn]]
+        [useful.map :only [assoc-levels]]
+        [useful.fn :only [as-fn knit]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
@@ -18,6 +19,35 @@
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
+
+(defn- path-prefix?
+  "This is a lot like prefix-of? in useful, but treats :* as equal to everything and has
+  a \"strict\" mode for requiring strict (not equal-length) prefixes."
+  ([pattern path]
+     (path-prefix? pattern path false))
+  ([pattern path strict?]
+     (loop [pattern pattern, path path]
+       (if (empty? pattern)
+         (or (not strict?)
+             (seq path))
+         (and (seq path)
+              (let [[x & xs] pattern
+                    [y & ys] path]
+                (and (or (= x y) (= x :*) (= y :*))
+                     (recur xs ys))))))))
+
+(defn- strict-prefix?
+  [pattern path])
+
+(defn- subnode-codecs [codecs path]
+  (let [path-to-root (filter #(path-prefix? (first %) path) codecs)
+        [below [first-above]] (split-with #(path-prefix? path (first %) true)
+                                          path-to-root)]
+    (assert first-above (str "Don't know how to write at " path))
+    `(~@below ~first-above)))
+
+(defn- fill-pattern [pattern actual]
+  (map (fn [pat act] act) pattern actual))
 
 (defn- ignore? [x]
   (or (nil? x)
@@ -106,7 +136,7 @@
 
   Basic
   (get-node [this id not-found]
-    (let [node (read-node (codecs-for this id revision) id not-found)]
+    (let [node (read-node (codecs-for this id revision) db id not-found)]
       (if (identical? node not-found)
         not-found
         (get node id))))
