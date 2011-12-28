@@ -153,13 +153,14 @@
   Optimized
   (query-fn [this keyseq f]
     (let [[id & keys] keyseq]
-      (when keys
-        (let [codecs (filter #(prefix-of? (key %) keys)
-                             (codecs-for this id revision))]
-          (fn [& args]
-            (apply f (get-in (read-node codecs id nil)
-                             keyseq)
-                   args))))))
+      (if-let [codecs (->> (codecs-for this id revision)
+                           (filter #(path-prefix? (key %) keys))
+                           (seq))] ;; going to be testing it for truthiness
+        (fn [& args]
+          (apply f (get-in (read-node codecs db id nil)
+                           keyseq)
+                 args))
+        (throw (Exception. "Trying to read at a level where we have no codecs...?")))))
   (update-fn [this keyseq f]
     #_
     (when-let [[id & keys] (seq keyseq)]
