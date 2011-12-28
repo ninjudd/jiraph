@@ -106,8 +106,8 @@
     (when-let [bytes (db/fetch (:db layer) revision-key)]
       (bytes->long bytes))))
 
-(defn- read-node [codecs id not-found]
-  (reduce (fn ;; for an empty list (no keys found), reduce calls with no args
+(defn- read-node [codecs db id not-found]
+  (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
             ([] not-found)
             ([a b] (adjoin a b)))
           (for [[path codec] codecs

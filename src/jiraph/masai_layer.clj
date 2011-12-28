@@ -166,7 +166,9 @@
        (defn- make-db [db]
          db))
 
-;; formats should be functions from revision (and optionally node-id) to codec.
+;; formats should be functions:
+;; - accept as arg: a map containing {revision and node-id}
+;; - return: a gloss codec
 ;; plain old codecs will be accepted as well
 (let [default-codec (cereal/revisioned-clojure-codec adjoin)
       codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
