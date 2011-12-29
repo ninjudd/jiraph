@@ -20,6 +20,19 @@
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
+(defn- no-nil-update
+  ([m ks f & args]
+     (no-nil-update m ks #(apply f % args)))
+  ([m ks f]
+     (if-let [[k & ks] (seq ks)]
+       (let [v (no-nil-update (get m k) ks f)]
+         (if (and (not (nil? v))
+                  (or (not (coll? v))
+                      (seq v)))
+           (assoc m k v)
+           (dissoc m k)))
+       (f m))))
+
 (defn- path-prefix?
   "This is a lot like prefix-of? in useful, but treats :* as equal to everything and has
   a \"strict\" mode for requiring strict (not equal-length) prefixes."
@@ -49,6 +62,15 @@
                                           path-to-root)]
     (assert first-above (str "Don't know how to write at " path))
     `(~@below ~first-above)))
+
+(defn matching-subpaths [node path]
+  (if-let [[k & ks] (seq path)]
+    (for [[k v] (if (= :* k)
+                  node ;; each k/v in the node
+                  (select-keys node [k])) ;; just the one
+          path (matching-subpaths v ks)]
+      (cons k path))
+    '(())))
 
 (defn- fill-pattern [pattern actual]
   (map (fn [pat act] act) pattern actual))
@@ -125,7 +147,7 @@
             (assoc-levels {} parent
                           (into {} kvs)))))
 
-(defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
+(defrecord MasaiSortedLayer [db revision append-only? node-format node-meta-format layer-meta-format]
   Meta
   (meta-key [this k]
     (str "_" k))
@@ -146,65 +168,50 @@
         (get node id))))
   (assoc-node! [this id attrs]
     #_(letfn [(bytes [data]
-              (bufseq->bytes (encode ((format-for this id) {:revision revision :id id})
-                                     data)))]
-      (if append-only?
-        (db/append! db id (bytes (assoc attrs :_reset true)))
-        (db/put!    db id (bytes attrs)))))
+                (bufseq->bytes (encode ((format-for this id) {:revision revision :id id})
+                                       data)))]
+        (if append-only?
+          (db/append! db id (bytes (assoc attrs :_reset true)))
+          (db/put!    db id (bytes attrs)))))
   (dissoc-node! [this id]
     (db/delete! db id))
 
   Optimized
   (query-fn [this keyseq f]
-    (let [[id & keys] keyseq]
-      (if-let [codecs (->> (codecs-for this id revision)
-                           (filter #(path-prefix? (key %) keys))
-                           (seq))] ;; going to be testing it for truthiness
-        (fn [& args]
-          (apply f (get-in (read-node codecs db id nil)
-                           keyseq)
-                 args))
-        (throw (Exception. "Trying to read at a level where we have no codecs...?")))))
+    (let [[id & keys] keyseq
+          codecs (subnode-codecs (codecs-for this id revision) keys)]
+      (assert (seq codecs) "Trying to read at a level where we have no codecs...?")
+      (fn [& args]
+        (apply f (get-in (read-node codecs db id nil)
+                         keyseq)
+               args))))
   (update-fn [this keyseq f]
-    (let [[id & keys] keyseq]
-      (if (= f adjoin)
-        () ;; ...TOOD special-case adjoin...
-        (fn [& args]
-          (let [codecs (? (for [[path codec] (codecs-for this id revision),
-                                :when (path-prefix? path keys)
-                                :while (path-prefix? keys path)]
-                            [(fill-pattern path keys) codec]))]
-            (cond (empty? codecs) (throw (Exception. "No codecs to write with"))
-
-                  (and (not (next codecs)) ;; just one codec
-                       (= (-> codecs ;; exact path match with same reduce-fn
-                              (first
-                               ((knit identity (comp :reduce-fn meta)))))
-                          [keys f]))
-                  (let [[[path codec]] codecs]
-                    (do (db/append! db (s/join ":" (cons id path))
-                                    (bufseq->bytes (encode codec args)))
-                        {:old nil :new nil})) ;; no idea what used to be there, or is there now
-
-                  :else (let [old ((layer/query-fn this keyseq identity))
-                              new (apply f old args)]
-                                        ;...
-
-                          (loop [codecs codecs]
-                                        ;...
-                            )))))
-        ))
-    #_
     (when-let [[id & keys] (seq keyseq)]
-      (let [encoder (format-for this id)]
-        (when (= f (:reduce-fn (meta encoder)))
-          (fn [m]
-            (db/append! db id
-                        (bufseq->bytes (encode (encoder {:revision revision})
-                                               (if keys
-                                                 (assoc-in {} keys m)
-                                                 m))))
-            {:old nil :new m})))))
+      (let [codecs (subnode-codecs (codecs-for this id revision) keys)]
+        (assert (seq codecs) "No codecs to write with")
+        ;; ...TOOD special-case adjoin...
+        (if false
+          ;; TODO: figure out if there's only one codec, with a perfect path match and the
+          ;; right reduce-fn. In that case we can optimize writing it
+          nil,
+          (fn [& args]
+            (let [old (-> (read-node codecs db id nil)
+                          (get id))
+                  new (apply update-in old keys f args)]
+              (loop [codecs codecs, node new]
+                (if-let [[[path codec] & more] (seq codecs)]
+                  (recur more (reduce (fn [node path]
+                                        (let [path (vec path)
+                                              data (get-in node path)
+                                              old-data (get-in old path)]
+                                          ;; TODO if we're overwriting the whole :edges map, be
+                                          ;; sure to delete everything under :edges :* from the db
+                                          (when (not= data old-data)
+                                            (db/put! db (s/join ":" (map name (cons id path)))
+                                                     (bufseq->bytes (encode codec data))))
+                                          (no-nil-update node (pop path) dissoc (peek path))))
+                                      node, (matching-subpaths node path)))
+                  {:old (get-in old keys), :new (get-in new keys)}))))))))
 
   Layer
   (open [layer]
@@ -249,7 +256,7 @@
   WrappedTransactional
   (txn-wrap [this f]
     ;; todo *skip-writes* for past revisions
-    (fn [^MasaiLayer layer]
+    (fn [^MasaiSortedLayer layer]
       (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
                                  (fn [_]
                                    (returning (f layer)
@@ -300,7 +307,7 @@
           (for [format [node meta layer-meta]]
             (for [[path codec] format]
               (map-entry path (codec-fn codec))))]
-      (MasaiLayer. (make-db db) nil
+      (MasaiSortedLayer. (make-db db) nil
                    (case assoc-mode
                      :append true
                      :overwrite false)
