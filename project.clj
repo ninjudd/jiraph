@@ -1,7 +1,7 @@
 (defproject jiraph "0.8.0-alpha1"
   :description "embedded graph db library for clojure"
   :dependencies [[clojure "1.3.0"]
-                 [useful "0.7.5"]
+                 [useful "0.7.6-alpha1"]
                  [masai "0.7.0-alpha5"]
                  [cereal "0.2.0-alpha3"]
                  [retro "0.6.0-beta1"]
