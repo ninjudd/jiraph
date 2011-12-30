@@ -6,16 +6,6 @@
         [masai.db :only [fetch-seq]])
   (:import (java.nio ByteBuffer)))
 
-(defn no-nil-update [m ks f]
-  (if-let [[k & ks] (seq ks)]
-    (let [v (no-nil-update (get m k) ks f)]
-      (if (and (not (nil? v))
-               (or (not (coll? v))
-                   (seq v)))
-        (assoc m k v)
-        (dissoc m k)))
-    (f m)))
-
 ;; TODO still needs work
 (defn matching-subpaths [node path]
   (if-let [[k & ks] (seq path)]
