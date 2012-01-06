@@ -5,7 +5,7 @@
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
         [useful.utils :only [if-ns adjoin returning map-entry]]
-        [useful.seq :only [find-with]]
+        [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
         [useful.map :only [assoc-levels]]
         [useful.fn :only [as-fn knit]]
@@ -13,6 +13,7 @@
         [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
+            [masai.cursor :as cursor]
             [jiraph.graph :as graph]
             [jiraph.codecs.cereal :as cereal]
             [clojure.string :as s])
@@ -99,7 +100,8 @@
               (if multi?
                 {:start (str start ":")
                  :stop (str start after-colon)
-                 :keyfn (substring-after ":")}
+                 :keyfn (substring-after ":")
+                 :multi true}
                 (let [start-key (str start ":" (name last))]
                   {:start start-key
                    :stop (str-after start-key)
@@ -187,7 +189,11 @@
                args))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codecs (subnode-codecs (codecs-for this id revision) keys)]
+      (let [codecs (subnode-codecs (codecs-for this id revision) keys)
+            deletion-ranges (for [[path codec] codecs
+                                  :let [{:keys [start stop multi]} (bounds path)]
+                                  :when (and multi (prefix-of? (butlast path) keys))]
+                              [(str id ":" start) (str id ":" stop)])]
         (assert (seq codecs) "No codecs to write with")
         ;; ...TOOD special-case adjoin...
         (if false
@@ -198,17 +204,21 @@
             (let [old (-> (read-node codecs db id nil)
                           (get id))
                   new (apply update-in old keys f args)]
+              (doseq [[start stop] deletion-ranges] ; delete the wildcard edges that are beneath
+                                                    ; the write position
+                (loop [cur (db/cursor db start)]
+                  (when-let [k (cursor/key cur)]
+                    (when-let [cur (and (neg? (compare (String. k) stop))
+                                        (cursor/delete cur))]
+                      (recur cur)))))
               (loop [codecs codecs, node new]
                 (if-let [[[path codec] & more] (seq codecs)]
                   (recur more (reduce (fn [node path]
                                         (let [path (vec path)
                                               data (get-in node path)
                                               old-data (get-in old path)]
-                                          ;; TODO if we're overwriting the whole :edges map, be
-                                          ;; sure to delete everything under :edges :* from the db
-                                          (when (not= data old-data)
-                                            (db/put! db (s/join ":" (map name (cons id path)))
-                                                     (bufseq->bytes (encode codec data))))
+                                          (db/put! db (s/join ":" (map name (cons id path)))
+                                                   (bufseq->bytes (encode codec data)))
                                           (no-nil-update node (pop path) dissoc (peek path))))
                                       node, (matching-subpaths node path)))
                   {:old (get-in old keys), :new (get-in new keys)}))))))))
