@@ -174,7 +174,7 @@
   (apply max 0 (for [layer (if (empty? layers) (keys *graph*) layers)]
                  (or (get-property layer :rev) 0))))
 
-(defn get-node
+(defn ^{:dynamic true} get-node
   "Fetch a node's data from this layer."
   [layer-name id]
   (when-let [node (layer/get-node (layer layer-name) id)]
@@ -355,13 +355,13 @@
   [layer-name]
   (contains? *graph* layer-name))
 
-(defn get-all-revisions
+(defn ^{:dynamic true} get-all-revisions
   "Return a seq of all revisions that have ever modified this node on this layer, even if the data has been
    subsequently compacted."
   [layer-name id]
   (filter pos? (layer/get-revisions (layer layer-name) id)))
 
-(defn get-revisions
+(defn ^{:dynamic true} get-revisions
   "Return a seq of all revisions with data for this node."
   [layer-name id]
   (reverse
@@ -373,7 +373,7 @@
   [layer-name id]
   (layer/get-incoming (layer layer-name) id))
 
-(defn get-incoming
+(defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node; excludes edges
   marked :deleted."
   [layer-name id]
