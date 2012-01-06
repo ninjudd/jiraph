@@ -2,7 +2,7 @@
   :description "embedded graph db library for clojure"
   :dependencies [[clojure "1.3.0"]
                  [useful "0.7.6-alpha1"]
-                 [masai "0.7.0-alpha5"]
+                 [masai "0.7.0-alpha6"]
                  [cereal "0.2.0-alpha3"]
                  [retro "0.6.0-beta1"]
                  [io "0.1.0-alpha2"]
