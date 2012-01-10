@@ -81,6 +81,9 @@
       (and (coll? x)
            (empty? x))))
 
+(defn- db-name [keyseq]
+  (s/join (map name keyseq)))
+
 (let [char-after (fn [c]
                    (char (inc (int c))))
       after-colon (char-after \:)
@@ -92,7 +95,7 @@
           multi?     (= :* last)
           path       (pop path)
           top-level? (empty? path)
-          start      (s/join ":" (map name path))]
+          start      (db-name path)]
       (if top-level?
         {:start last, :stop (str-after last)
          :keyfn (constantly last), :parent []}
