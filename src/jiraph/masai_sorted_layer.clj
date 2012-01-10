@@ -275,7 +275,7 @@
   (txn-wrap [this f]
     ;; todo *skip-writes* for past revisions
     (fn [^MasaiSortedLayer layer]
-      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
+      (let [db-wrapped (txn-wrap db     ; let db wrap transaction, but call f with layer
                                  (fn [_]
                                    (returning (f layer)
                                      (save-maxrev layer))))]
