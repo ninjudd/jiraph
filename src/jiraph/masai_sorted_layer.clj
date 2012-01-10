@@ -192,19 +192,18 @@
                args))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codecs (? (subnode-codecs (codecs-for this id revision) keys))
+      (let [codecs (subnode-codecs (codecs-for this id revision) keys)
             deletion-ranges (for [[path codec] codecs
                                   :let [{:keys [start stop multi]} (bounds path)]
                                   :when (and multi (prefix-of? (butlast path) keys))]
                               [(str id ":" start) (str id ":" stop)])]
         (assert (seq codecs) "No codecs to write with")
         ;; ...TOOD special-case adjoin...
-        (or (and (? (not (next codecs))) ;; only one codec, see if we can optimize writing it
-                 ;;; TODO the reduce-fn is already gone once we call subnode-codecs
+        (or (and (not (next codecs)) ;; only one codec, see if we can optimize writing it
                  (let [[path codec] (first codecs)]
-                   (and (= f (:reduce-fn (? (-> codec meta)))) ;; performing optimized function
-                        (not (? (path-prefix? keys path true)))  ;; at exactly this level
-                        (let [db-key (? (db-name keyseq))] ;; great, we can optimize it
+                   (and (= f (:reduce-fn (-> codec meta))) ;; performing optimized function
+                        (not (path-prefix? keys path true))  ;; at exactly this level
+                        (let [db-key (db-name keyseq)] ;; great, we can optimize it
                           (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
                             (db/append! db db-key (bufseq->bytes (encode codec arg))))))))
 
