@@ -82,7 +82,7 @@
            (empty? x))))
 
 (defn- db-name [keyseq]
-  (s/join (map name keyseq)))
+  (s/join ":" (map name keyseq)))
 
 (let [char-after (fn [c]
                    (char (inc (int c))))
