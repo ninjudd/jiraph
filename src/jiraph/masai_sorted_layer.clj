@@ -192,39 +192,44 @@
                args))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codecs (subnode-codecs (codecs-for this id revision) keys)
+      (let [codecs (? (subnode-codecs (codecs-for this id revision) keys))
             deletion-ranges (for [[path codec] codecs
                                   :let [{:keys [start stop multi]} (bounds path)]
                                   :when (and multi (prefix-of? (butlast path) keys))]
                               [(str id ":" start) (str id ":" stop)])]
         (assert (seq codecs) "No codecs to write with")
         ;; ...TOOD special-case adjoin...
-        (if false
-          ;; TODO: figure out if there's only one codec, with a perfect path match and the
-          ;; right reduce-fn. In that case we can optimize writing it
-          nil,
-          (fn [& args]
-            (let [old (-> (read-node codecs db id nil)
-                          (get id))
-                  new (apply update-in old keys f args)]
-              (doseq [[start stop] deletion-ranges] ; delete the wildcard edges that are beneath
-                                                    ; the write position
-                (loop [cur (db/cursor db start)]
-                  (when-let [k (cursor/key cur)]
-                    (when-let [cur (and (neg? (compare (String. k) stop))
-                                        (cursor/delete cur))]
-                      (recur cur)))))
-              (loop [codecs codecs, node new]
-                (if-let [[[path codec] & more] (seq codecs)]
-                  (recur more (reduce (fn [node path]
-                                        (let [path (vec path)
-                                              data (get-in node path)
-                                              old-data (get-in old path)]
-                                          (db/put! db (s/join ":" (map name (cons id path)))
-                                                   (bufseq->bytes (encode codec data)))
-                                          (no-nil-update node (pop path) dissoc (peek path))))
-                                      node, (matching-subpaths node path)))
-                  {:old (get-in old keys), :new (get-in new keys)}))))))))
+        (or (and (? (not (next codecs))) ;; only one codec, see if we can optimize writing it
+                 ;;; TODO the reduce-fn is already gone once we call subnode-codecs
+                 (let [[path codec] (first codecs)]
+                   (and (= f (:reduce-fn (? (-> codec meta)))) ;; performing optimized function
+                        (not (? (path-prefix? keys path true)))  ;; at exactly this level
+                        (let [db-key (? (db-name keyseq))] ;; great, we can optimize it
+                          (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
+                            (db/append! db db-key (bufseq->bytes (encode codec arg))))))))
+
+            (fn [& args]
+              (let [old (-> (read-node codecs db id nil)
+                            (get id))
+                    new (apply update-in old keys f args)]
+                (doseq [[start stop] deletion-ranges] ; delete the wildcard edges that are beneath
+                                                      ; the write position
+                  (loop [cur (db/cursor db start)]
+                    (when-let [k (cursor/key cur)]
+                      (when-let [cur (and (neg? (compare (String. k) stop))
+                                          (cursor/delete cur))]
+                        (recur cur)))))
+                (loop [codecs codecs, node new]
+                  (if-let [[[path codec] & more] (seq codecs)]
+                    (recur more (reduce (fn [node path]
+                                          (let [path (vec path)
+                                                data (get-in node path)
+                                                old-data (get-in old path)]
+                                            (db/put! db (db-name (cons id path))
+                                                     (bufseq->bytes (encode codec data)))
+                                            (no-nil-update node (pop path) dissoc (peek path))))
+                                        node, (matching-subpaths node path)))
+                    {:old (get-in old keys), :new (get-in new keys)}))))))))
 
   Layer
   (open [layer]
