@@ -21,9 +21,10 @@
     (-> (fn [{:keys [revision] :as opts}]
           (let [codec (codec-builder opts)
                 frame (fn [pre-encode post-decode]
-                        (gloss/compile-frame codec
-                                             (comp list pre-encode)
-                                             (comp combine post-decode)))]
+                        (-> (gloss/compile-frame codec
+                                                 (comp list pre-encode)
+                                                 (comp combine post-decode))
+                            (vary-meta assoc :reduce-fn reduce-fn)))]
             (if revision
               (frame #(assoc % :_rev revision)
                      (fn [vals]
