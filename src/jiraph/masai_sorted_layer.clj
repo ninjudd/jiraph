@@ -202,7 +202,7 @@
         (or (and (not (next codecs)) ;; only one codec, see if we can optimize writing it
                  (let [[path codec] (first codecs)]
                    (and (= f (:reduce-fn (-> codec meta))) ;; performing optimized function
-                        (not (path-prefix? keys path true))  ;; at exactly this level
+                        (= (count keys) (count path)) ;; at exactly this level
                         (let [db-key (db-name keyseq)] ;; great, we can optimize it
                           (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
                             (db/append! db db-key (bufseq->bytes (encode codec arg))))))))
