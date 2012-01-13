@@ -283,7 +283,8 @@
   (when id
     (assert (types-valid? layer id attrs)))
   (assert (edges-valid? layer attrs))
-  (assert (layer/node-valid? layer attrs)))
+  (layer/verify-node layer attrs)
+  nil)
 
 (defn ^{:dynamic true} get-all-revisions
   "Return a seq of all revisions that have ever modified this node on this layer, even if the data has been

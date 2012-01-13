@@ -23,8 +23,8 @@
 (defprotocol Schema
   (fields [layer] [layer subfields]
     "A list of canonical fields stored in this layer. Can be empty.")
-  (node-valid? [layer attrs]
-    "Check if the given node is valid according to the layer schema."))
+  (verify-node [layer attrs]
+    "Verify that the given node is valid according to the layer schema."))
 
 (defprotocol Meta
   (meta-key [layer id]
@@ -180,3 +180,8 @@
 
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
+
+(defn node-valid? [layer attrs]
+  (try (verify-node layer attrs)
+       true
+       (catch AssertionError e nil)))

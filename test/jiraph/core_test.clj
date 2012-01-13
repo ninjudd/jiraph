@@ -265,7 +265,7 @@
       (testing "invalid fields"
         (is (not (node-valid? :a "foo-1" {:foo "bar"})))
         (is (not (node-valid? :a "bar-1" {:bar 123})))
-        (is (thrown-with-msg? AssertionError #"node-valid"
+        (is (thrown-with-msg? AssertionError #"cannot be cast"
               (verify-node :a "foo-1" {:baz "aaa"}))))
       (testing "valid nodes"
         (is (node-valid? :a "foo-1" {:edge {:id "baz-1"} :foo 12 :bar "abc"}))
