@@ -116,6 +116,24 @@
                                          :else :node-format))]
     [path (codec-fn {:revision revision, :id node-id})]))
 
+(defn- delete-ranges!
+  "Given a database and a sequence of [start, end) intervals, delete "
+  [layer deletion-ranges]
+  (let [db (:db layer)
+        delete-fn (if (:append-only? layer)
+                    (fn [codec]
+                      (let [deleted (bufseq->bytes (encode codec {:_reset true}))]
+                        (fn [cursor]
+                          (cursor/append cursor deleted))))
+                    (constantly cursor/delete))]
+    (doseq [{:keys [start stop codec]} deletion-ranges]
+      (let [delete (delete-fn codec)]
+        (loop [cur (db/cursor db start)]
+          (when-let [k (cursor/key cur)]
+            (when-let [cur (and (neg? (compare (String. k) stop))
+                                (delete cur))]
+              (recur cur))))))))
+
 ;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
 (defn- main-node-id [meta-id]
   {:pre [(= "_" (first meta-id))]}
@@ -196,7 +214,9 @@
             deletion-ranges (for [[path codec] codecs
                                   :let [{:keys [start stop multi]} (bounds path)]
                                   :when (and multi (prefix-of? (butlast path) keys))]
-                              [(str id ":" start) (str id ":" stop)])]
+                              {:start (str id ":" start)
+                               :stop  (str id ":" stop)
+                               :codec codec})]
         (assert (seq codecs) "No codecs to write with")
         ;; ...TOOD special-case adjoin...
         (or (and (not (next codecs)) ;; only one codec, see if we can optimize writing it
@@ -211,13 +231,7 @@
               (let [old (-> (read-node codecs db id nil)
                             (get id))
                     new (apply update-in old keys f args)]
-                (doseq [[start stop] deletion-ranges] ; delete the wildcard edges that are beneath
-                                                      ; the write position
-                  (loop [cur (db/cursor db start)]
-                    (when-let [k (cursor/key cur)]
-                      (when-let [cur (and (neg? (compare (String. k) stop))
-                                          (cursor/delete cur))]
-                        (recur cur)))))
+                (delete-ranges! this deletion-ranges)
                 (loop [codecs codecs, node new]
                   (if-let [[[path codec] & more] (seq codecs)]
                     (recur more (reduce (fn [node path]
