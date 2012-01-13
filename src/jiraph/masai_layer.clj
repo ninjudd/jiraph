@@ -45,10 +45,10 @@
   (fields [layer subfields]
     (f/fields format subfields))
 
-  (node-valid? [layer attrs]
+  (verify-node [layer attrs]
     (try (f/encode format (make-node attrs))
-         true
-         (catch Exception e)))
+         (catch Exception e
+           (throw (AssertionError. (str "invalid node attribute: " (.getMessage e)))))))
 
   (get-property  [layer key]
     (if-let [bytes ^bytes (db/get db (property-key key))]

@@ -322,7 +322,8 @@
     (when id
       (assert (types-valid? layer-name id attrs)))
     (assert (edges-valid? layer-name attrs))
-    (assert (layer/node-valid? (layer layer-name) attrs))))
+    (layer/verify-node (layer layer-name) attrs)
+    nil))
 
 (defn layers
   "Return the names of all layers in the current graph."

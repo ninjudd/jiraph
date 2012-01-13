@@ -18,7 +18,7 @@
   (node-ids         [layer]            "Return a lazy sequence of all node ids in this layer.")
   (fields           [layer]
                     [layer subfields]  "A list of canonical fields stored in this layer. Can be empty.")
-  (node-valid?      [layer attrs]      "Check if the given node is valid according to the layer schema.")
+  (verify-node      [layer attrs]      "Verify that the given node is valid according to the layer schema.")
   (get-property     [layer key]        "Fetch a layer-wide property.")
   (set-property!    [layer key val]    "Store a layer-wide property.")
   (get-node         [layer id]         "Fetch a node.")
@@ -39,3 +39,8 @@
 (defprotocol Assoc
   "Jiraph assoc protocol"
   (assoc-node! [layer id attrs] "Associate attrs with a node."))
+
+(defn node-valid? [layer attrs]
+  (try (verify-node layer attrs)
+       true
+       (catch AssertionError e)))
