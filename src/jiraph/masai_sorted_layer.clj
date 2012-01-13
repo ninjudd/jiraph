@@ -119,20 +119,17 @@
 (defn- delete-ranges!
   "Given a database and a sequence of [start, end) intervals, delete "
   [layer deletion-ranges]
-  (let [db (:db layer)
-        delete-fn (if (:append-only? layer)
-                    (fn [codec]
-                      (let [deleted (bufseq->bytes (encode codec {:_reset true}))]
-                        (fn [cursor]
-                          (cursor/append cursor deleted))))
-                    (constantly cursor/delete))]
-    (doseq [{:keys [start stop codec]} deletion-ranges]
-      (let [delete (delete-fn codec)]
-        (loop [cur (db/cursor db start)]
-          (when-let [k (cursor/key cur)]
-            (when-let [cur (and (neg? (compare (String. k) stop))
-                                (delete cur))]
-              (recur cur))))))))
+  (doseq [{:keys [start stop codec]} deletion-ranges]
+    (let [delete (if (:append-only? layer)
+                   (let [deleted (bufseq->bytes (encode codec {:_reset true}))]
+                     (fn [cursor]
+                       (cursor/append cursor deleted)))
+                   cursor/delete)]
+      (loop [cur (db/cursor (:db layer) start)]
+        (when-let [k (cursor/key cur)]
+          (when-let [cur (and (neg? (compare (String. k) stop))
+                              (delete cur))]
+            (recur cur)))))))
 
 ;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
 (defn- main-node-id [meta-id]
