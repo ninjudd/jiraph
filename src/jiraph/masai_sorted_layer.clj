@@ -7,7 +7,7 @@
         [useful.utils :only [if-ns adjoin returning map-entry let-later]]
         [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
-        [useful.map :only [assoc-levels]]
+        [useful.map :only [assoc-levels keyed]]
         [useful.fn :only [as-fn knit]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
@@ -211,9 +211,7 @@
             deletion-ranges (for [[path codec] codecs
                                   :let [{:keys [start stop multi]} (bounds (cons id path))]
                                   :when (and multi (prefix-of? (butlast path) keys))]
-                              {:start (str id ":" start)
-                               :stop  (str id ":" stop)
-                               :codec codec})]
+                              (keyed [start stop codec]))]
         (assert (seq codecs) "No codecs to write with")
         ;; ...TOOD special-case adjoin...
         (or (and (not (next codecs)) ;; only one codec, see if we can optimize writing it
