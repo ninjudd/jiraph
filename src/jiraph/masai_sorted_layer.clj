@@ -209,7 +209,7 @@
     (when-let [[id & keys] (seq keyseq)]
       (let [codecs (subnode-codecs (codecs-for this id revision) keys)
             deletion-ranges (for [[path codec] codecs
-                                  :let [{:keys [start stop multi]} (bounds path)]
+                                  :let [{:keys [start stop multi]} (bounds (cons id path))]
                                   :when (and multi (prefix-of? (butlast path) keys))]
                               {:start (str id ":" start)
                                :stop  (str id ":" stop)
