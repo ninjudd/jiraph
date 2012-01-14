@@ -223,21 +223,30 @@
                             (db/append! db db-key (bufseq->bytes (encode codec arg))))))))
 
             (fn [& args]
-              (let [old (-> (read-node codecs db id nil)
-                            (get id))
-                    new (apply update-in old keys f args)]
+              (let [old (read-node codecs db id nil)
+                    new (apply update-in old keyseq f args)]
                 (delete-ranges! this deletion-ranges)
                 (loop [codecs codecs, node new]
                   (if-let [[[path codec] & more] (seq codecs)]
-                    (recur more (reduce (fn [node path]
-                                          (let [path (vec path)
-                                                data (get-in node path)
-                                                old-data (get-in old path)]
-                                            (db/put! db (db-name (cons id path))
-                                                     (bufseq->bytes (encode codec data)))
-                                            (no-nil-update node (pop path) dissoc (peek path))))
-                                        node, (matching-subpaths node path)))
-                    {:old (get-in old keys), :new (get-in new keys)}))))))))
+                    (let [write! (if append-only?
+                                   (fn [key data]
+                                     (->> (assoc data :_reset true)
+                                          (encode codec)
+                                          (bufseq->bytes)
+                                          (db/append! db key)))
+                                   (fn [key data]
+                                     (->> data
+                                          (encode codec)
+                                          (bufseq->bytes)
+                                          (db/put! db key))))]
+                      (recur more (reduce (fn [node path]
+                                            (let [path (vec (cons id path))
+                                                  data (get-in node path)
+                                                  old-data (get-in old path)]
+                                              (write! (db-name path) data)
+                                              (no-nil-update node (pop path) dissoc (peek path))))
+                                          node, (matching-subpaths node path))))
+                    {:old (get-in old keyseq), :new (get-in new keyseq)}))))))))
 
   Layer
   (open [layer]
