@@ -7,7 +7,7 @@
                  [retro "0.6.0-beta1"]
                  [io "0.1.0-alpha2"]
                  [ego "0.1.7"]]
-  :dev-dependencies [[protobuf "0.6.0-beta1"]
+  :dev-dependencies [[protobuf "0.6.0-beta2"]
                      [tokyocabinet "1.24.2" :ext true]
                      [unk "0.9.3"]]
   :checksum-deps true ;; Tired of accidentally running with old deps

@@ -265,8 +265,8 @@
       (testing "invalid fields"
         (is (not (node-valid? :a "foo-1" {:foo "bar"})))
         (is (not (node-valid? :a "bar-1" {:bar 123})))
-        (is (thrown-with-msg? AssertionError #"cannot be cast"
-              (verify-node :a "foo-1" {:baz "aaa"}))))
+        (is (thrown-with-msg? AssertionError #"error setting boolean field Edge.deleted to 1"
+              (verify-node :a "foo-1" {:edge {:deleted 1}}))))
       (testing "valid nodes"
         (is (node-valid? :a "foo-1" {:edge {:id "baz-1"} :foo 12 :bar "abc"}))
         (is (node-valid? :a "bar-1" {:edge {:id "baz-1"} :baz 1119}))

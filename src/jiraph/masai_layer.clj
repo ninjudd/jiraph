@@ -105,7 +105,7 @@
   ;; (verify-node [layer attrs]
   ;;   (try (f/encode format (make-node attrs))
   ;;        (catch Exception e
-  ;;          (throw (AssertionError. (str "invalid node attribute: " (.getMessage e)))))))
+  ;;          (throw (AssertionError. (.getMessage e))))))
 
   ChangeLog
   (get-revisions [this id]
