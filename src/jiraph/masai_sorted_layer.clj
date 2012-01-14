@@ -340,8 +340,10 @@
                     :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format meta-format layer-meta-format]
           (for [format [node meta layer-meta]]
-            (for [[path codec] format]
-              (map-entry path (codec-fn codec))))]
+            (if (seq format)
+              (for [[path codec] format]
+                (map-entry path (codec-fn codec)))
+              [[[] (codec-fn nil)]]))]
       (MasaiSortedLayer. (make-db db) nil
                    (case assoc-mode
                      :append true
