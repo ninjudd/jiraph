@@ -6,7 +6,7 @@
                  [cereal "0.1.11"]
                  [retro "0.5.4"]
                  [ego "0.1.7"]]
-  :dev-dependencies [[protobuf "0.5.0"]
+  :dev-dependencies [[protobuf "0.5.1"]
                      [tokyocabinet "1.24.1" :ext true]
                      [unk "0.9.3"]]
   :cake-plugins [[cake-protobuf "0.5.0"]])

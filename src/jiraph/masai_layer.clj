@@ -48,7 +48,7 @@
   (verify-node [layer attrs]
     (try (f/encode format (make-node attrs))
          (catch Exception e
-           (throw (AssertionError. (str "invalid node attribute: " (.getMessage e)))))))
+           (throw (AssertionError. (.getMessage e))))))
 
   (get-property  [layer key]
     (if-let [bytes ^bytes (db/get db (property-key key))]
