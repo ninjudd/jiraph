@@ -134,7 +134,9 @@
                    (let-later [^:delay deleted (bufseq->bytes (encode (codec-fn {:reset true})
                                                                       nil))]
                      (fn [cursor]
-                       (cursor/append cursor deleted)))
+                       (-> cursor
+                           (cursor/append deleted)
+                           (cursor/next))))
                    cursor/delete)]
       (loop [cur (db/cursor (:db layer) start)]
         (when-let [k (cursor/key cur)]
