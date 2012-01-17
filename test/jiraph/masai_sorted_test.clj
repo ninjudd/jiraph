@@ -8,10 +8,10 @@
 (deftest stuff-works
   ;; these paths are all writing with the default codec (cereal's revisioned clojure-reader)
   (masai/with-temp-layer [layer :formats {:node [[[:edges :*]]
-                                                 [[:name]]
+                                                 [[:names]] ;; TODO support indexing non-maps
                                                  [[]]]}]
     (let [init-node {:edges {"profile-10" {:rel :child}}
-                     :age 24, :name "Clancy"}]
+                     :age 24, :names {:first "Clancy"}}]
       (is (update-in-node! layer ["profile-1"] adjoin init-node))
       (is (= init-node (get-node layer "profile-1")))
       (is (update-in-node! layer ["profile-1" :edges] assoc "profile-21" {:bond :strong}))
