@@ -220,7 +220,7 @@
                args))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codec-fns (? (subnode-codecs (codec-fns this id revision) (? keys)))
+      (let [codec-fns (subnode-codecs (codec-fns this id revision) keys)
             deletion-ranges (for [[path codec-fn] codec-fns
                                   :let [{:keys [start stop multi]} (bounds (cons id path))]
                                   :when (and multi (prefix-of? (butlast path) keys))]
@@ -229,9 +229,9 @@
         ;; ...TOOD special-case adjoin...
         (or (and (not (next codec-fns)) ;; only one codec, see if we can optimize writing it
                  (let [[path codec-fn] (first codec-fns)]
-                   (and (? (= f (:reduce-fn (-> codec-fn meta)))) ;; performing optimized function
-                        (? (= (count keys) (count path)))         ;; at exactly this level
-                        (let [db-key (db-name keyseq)             ;; great, we can optimize it
+                   (and (= f (:reduce-fn (-> codec-fn meta))) ;; performing optimized function
+                        (= (count keys) (count path)) ;; at exactly this level
+                        (let [db-key (db-name keyseq) ;; great, we can optimize it
                               codec (codec-fn {})]
                           (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
                             (db/append! db db-key (bufseq->bytes (encode codec arg))))))))
