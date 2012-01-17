@@ -180,6 +180,56 @@
             (assoc-levels {} parent
                           (into {} kvs)))))
 
+(defn- adjoin-writer [layer path-codecs keyseq]
+  nil ;; TODO write this
+  )
+
+(defn- optimized-writer [layer path-codecs keyseq f]
+  (when-not (next path-codecs) ;; can only optimize a single codec
+    (let [[path codec-fn] (first path-codecs)]
+      (when (= f (:reduce-fn (-> codec-fn meta))) ;; performing optimized function
+        (let [[id & keys] keyseq]
+          (when (= (count keys) (count path)) ;; at exactly this level
+            (let [db (:db layer)
+                  db-key (db-name keyseq) ;; great, we can optimize it
+                  codec (codec-fn {})]
+              (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
+                (db/append! db db-key (bufseq->bytes (encode codec arg)))))))))))
+
+(defn- simple-writer [layer path-codecs keyseq f]
+  (let [{:keys [db append-only?]} layer
+        [id & keys] keyseq
+        codecs (realize-codecs path-codecs
+                               (when append-only? {:reset true}))
+        db-write (if append-only?, db/append! db/put!)
+        deletion-ranges (for [[path codec-fn] path-codecs
+                              :let [{:keys [start stop multi]} (bounds (cons id path))]
+                              :when (and multi (prefix-of? (butlast path) keys))]
+                          (keyed [start stop codec-fn]))]
+    (fn [& args]
+      (let [old (read-node codecs db id nil)
+            new (apply update-in old keyseq f args)]
+        (delete-ranges! layer deletion-ranges)
+        (loop [codecs codecs, node (get new id)]
+          (if-let [[[path codec] & more] (seq codecs)]
+            (let [write! (fn [key data]
+                           (->> data
+                                (encode codec)
+                                (bufseq->bytes)
+                                (db-write db key)))]
+              (recur more (reduce (fn [node path]
+                                    (let [path (vec path)
+                                          data (get-in node path)
+                                          old-data (get-in old path)]
+                                      (when (not= data old-data)
+                                        (write! (db-name (cons id path))
+                                                data))
+                                      (when (seq path)
+                                        (no-nil-update node (pop path) dissoc (peek path)))))
+                                  node (matching-subpaths node path))))
+            {:old (get-in old keyseq), :new (get-in new keyseq)}))))))
+
+
 (defrecord MasaiSortedLayer [db revision append-only? node-format node-meta-format layer-meta-format]
   Meta
   (meta-key [this k]
@@ -220,46 +270,14 @@
                args))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codec-fns (subnode-codecs (codec-fns this id revision) keys)
-            deletion-ranges (for [[path codec-fn] codec-fns
-                                  :let [{:keys [start stop multi]} (bounds (cons id path))]
-                                  :when (and multi (prefix-of? (butlast path) keys))]
-                              (keyed [start stop codec-fn]))]
-        (assert (seq codec-fns) "No codecs to write with")
-        ;; ...TOOD special-case adjoin...
-        (or (and (not (next codec-fns)) ;; only one codec, see if we can optimize writing it
-                 (let [[path codec-fn] (first codec-fns)]
-                   (and (= f (:reduce-fn (-> codec-fn meta))) ;; performing optimized function
-                        (= (count keys) (count path)) ;; at exactly this level
-                        (let [db-key (db-name keyseq) ;; great, we can optimize it
-                              codec (codec-fn {})]
-                          (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
-                            (db/append! db db-key (bufseq->bytes (encode codec arg))))))))
-            (let [codecs (realize-codecs codec-fns
-                                         (when append-only? {:reset true}))
-                  db-write (if append-only?, db/append! db/put!)]
-              (fn [& args]
-                (let [old (read-node codecs db id nil)
-                      new (apply update-in old keyseq f args)]
-                  (delete-ranges! this deletion-ranges)
-                  (loop [codecs codecs, node (get new id)]
-                    (if-let [[[path codec] & more] (seq codecs)]
-                      (let [write! (fn [key data]
-                                     (->> data
-                                          (encode codec)
-                                          (bufseq->bytes)
-                                          (db-write db key)))]
-                        (recur more (reduce (fn [node path]
-                                              (let [path (vec path)
-                                                    data (get-in node path)
-                                                    old-data (get-in old path)]
-                                                (when (not= data old-data)
-                                                  (write! (db-name (cons id path))
-                                                          data))
-                                                (when (seq path)
-                                                  (no-nil-update node (pop path) dissoc (peek path)))))
-                                            node (matching-subpaths node path))))
-                      {:old (get-in old keyseq), :new (get-in new keyseq)})))))))))
+      (let [path-codecs (subnode-codecs (codec-fns this id revision) keys)]
+        (assert (seq path-codecs) "No codecs to write with")
+        (or (and (= f adjoin)
+                 (adjoin-writer this path-codecs keyseq))
+            (optimized-writer   this path-codecs keyseq f)
+            (simple-writer      this path-codecs keyseq f)
+
+))))
 
   Layer
   (open [layer]
