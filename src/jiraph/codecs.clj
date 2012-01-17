@@ -18,11 +18,14 @@
               (let [node (reduce reducer items)]
                 (with-meta (dissoc node :_rev :_reset)
                   {:revision (:_rev node)}))))]
-    (-> (fn [{:keys [revision] :as opts}]
+    (-> (fn [{:keys [revision reset] :as opts}]
           (let [codec (codec-builder opts)
+                maybe-reset (if reset
+                              (fn [data] (assoc data :_reset true))
+                              identity)
                 frame (fn [pre-encode post-decode]
                         (-> (gloss/compile-frame codec
-                                                 (comp list pre-encode)
+                                                 (comp list pre-encode maybe-reset)
                                                  (comp combine post-decode))
                             (vary-meta assoc :reduce-fn reduce-fn)))]
             (if revision
