@@ -242,7 +242,7 @@
                 (let [old (read-node codecs db id nil)
                       new (apply update-in old keyseq f args)]
                   (delete-ranges! this deletion-ranges)
-                  (loop [codecs codecs, node new]
+                  (loop [codecs codecs, node (get new id)]
                     (if-let [[[path codec] & more] (seq codecs)]
                       (let [write! (fn [key data]
                                      (->> data
@@ -250,12 +250,15 @@
                                           (bufseq->bytes)
                                           (db-write db key)))]
                         (recur more (reduce (fn [node path]
-                                              (let [path (vec (cons id path))
+                                              (let [path (vec path)
                                                     data (get-in node path)
                                                     old-data (get-in old path)]
-                                                (write! (? (db-name path)) (? data))
-                                                (no-nil-update node (pop path) dissoc (peek path))))
-                                            node (? (matching-subpaths (? node) (? path))))))
+                                                (when (not= data old-data)
+                                                  (write! (db-name (cons id path))
+                                                          data))
+                                                (when (seq path)
+                                                  (no-nil-update node (pop path) dissoc (peek path)))))
+                                            node (matching-subpaths node path))))
                       {:old (get-in old keyseq), :new (get-in new keyseq)})))))))))
 
   Layer
