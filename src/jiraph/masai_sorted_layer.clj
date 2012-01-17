@@ -110,18 +110,29 @@
                    :stop (str-after start-key)
                    :keyfn (constantly last)})))))))
 
+(defn- codec-fns [layer node-id revision]
+  (let [locked {:id node-id, :revision revision}]
+    (for [[path codec-fn] (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
+                                           (meta-key? layer node-id) :node-meta-format
+                                           :else :node-format))]
+      [path (-> (fn [opts]
+                  (codec-fn (merge opts locked)))
+                (with-meta (meta codec-fn)))])))
+
+(defn- realize-codecs [codec-fns opts]
+  (for [[path codec-fn] codec-fns]
+    [path (codec-fn opts)]))
+
 (defn- codecs-for [layer node-id revision]
-  (for [[path codec-fn] (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
-                                         (meta-key? layer node-id) :node-meta-format
-                                         :else :node-format))]
-    [path (codec-fn {:revision revision, :id node-id})]))
+  (realize-codecs (codec-fns layer node-id revision) {}))
 
 (defn- delete-ranges!
   "Given a database and a sequence of [start, end) intervals, delete "
   [layer deletion-ranges]
-  (doseq [{:keys [start stop codec]} deletion-ranges]
+  (doseq [{:keys [start stop codec-fn]} deletion-ranges]
     (let [delete (if (:append-only? layer)
-                   (let-later [^:delay deleted (bufseq->bytes (encode codec {:_reset true}))]
+                   (let-later [^:delay deleted (bufseq->bytes (encode (codec-fn {:reset true})
+                                                                      nil))]
                      (fn [cursor]
                        (cursor/append cursor deleted)))
                    cursor/delete)]
@@ -207,46 +218,43 @@
                args))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codecs (subnode-codecs (codecs-for this id revision) keys)
-            deletion-ranges (for [[path codec] codecs
+      (let [codec-fns (? (subnode-codecs (codec-fns this id revision) (? keys)))
+            deletion-ranges (for [[path codec-fn] codec-fns
                                   :let [{:keys [start stop multi]} (bounds (cons id path))]
                                   :when (and multi (prefix-of? (butlast path) keys))]
-                              (keyed [start stop codec]))]
-        (assert (seq codecs) "No codecs to write with")
+                              (keyed [start stop codec-fn]))]
+        (assert (seq codec-fns) "No codecs to write with")
         ;; ...TOOD special-case adjoin...
-        (or (and (not (next codecs)) ;; only one codec, see if we can optimize writing it
-                 (let [[path codec] (first codecs)]
-                   (and (= f (:reduce-fn (-> codec meta))) ;; performing optimized function
-                        (= (count keys) (count path)) ;; at exactly this level
-                        (let [db-key (db-name keyseq)] ;; great, we can optimize it
+        (or (and (not (next codec-fns)) ;; only one codec, see if we can optimize writing it
+                 (let [[path codec-fn] (first codec-fns)]
+                   (and (? (= f (:reduce-fn (-> codec-fn meta)))) ;; performing optimized function
+                        (? (= (count keys) (count path)))         ;; at exactly this level
+                        (let [db-key (db-name keyseq)             ;; great, we can optimize it
+                              codec (codec-fn {})]
                           (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
                             (db/append! db db-key (bufseq->bytes (encode codec arg))))))))
-
-            (fn [& args]
-              (let [old (read-node codecs db id nil)
-                    new (apply update-in old keyseq f args)]
-                (delete-ranges! this deletion-ranges)
-                (loop [codecs codecs, node new]
-                  (if-let [[[path codec] & more] (seq codecs)]
-                    (let [write! (if append-only?
-                                   (fn [key data]
-                                     (->> (assoc data :_reset true)
-                                          (encode codec)
-                                          (bufseq->bytes)
-                                          (db/append! db key)))
-                                   (fn [key data]
+            (let [codecs (realize-codecs codec-fns
+                                         (when append-only? {:reset true}))
+                  db-write (if append-only?, db/append! db/put!)]
+              (fn [& args]
+                (let [old (read-node codecs db id nil)
+                      new (apply update-in old keyseq f args)]
+                  (delete-ranges! this deletion-ranges)
+                  (loop [codecs codecs, node new]
+                    (if-let [[[path codec] & more] (seq codecs)]
+                      (let [write! (fn [key data]
                                      (->> data
                                           (encode codec)
                                           (bufseq->bytes)
-                                          (db/put! db key))))]
-                      (recur more (reduce (fn [node path]
-                                            (let [path (vec (cons id path))
-                                                  data (get-in node path)
-                                                  old-data (get-in old path)]
-                                              (write! (db-name path) data)
-                                              (no-nil-update node (pop path) dissoc (peek path))))
-                                          node, (matching-subpaths node path))))
-                    {:old (get-in old keyseq), :new (get-in new keyseq)}))))))))
+                                          (db-write db key)))]
+                        (recur more (reduce (fn [node path]
+                                              (let [path (vec (cons id path))
+                                                    data (get-in node path)
+                                                    old-data (get-in old path)]
+                                                (write! (? (db-name path)) (? data))
+                                                (no-nil-update node (pop path) dissoc (peek path))))
+                                            node (? (matching-subpaths (? node) (? path))))))
+                      {:old (get-in old keyseq), :new (get-in new keyseq)})))))))))
 
   Layer
   (open [layer]
