@@ -180,9 +180,10 @@
             (assoc-levels {} parent
                           (into {} kvs)))))
 
-(defn- adjoin-writer [layer path-codecs keyseq]
-  nil ;; TODO write this
-  )
+(defn- adjoin-writer [layer path-codecs keyseq f]
+  (when (= f adjoin)
+    nil ;; TODO write this
+    ))
 
 (defn- optimized-writer [layer path-codecs keyseq f]
   (when-not (next path-codecs) ;; can only optimize a single codec
@@ -272,12 +273,8 @@
     (when-let [[id & keys] (seq keyseq)]
       (let [path-codecs (subnode-codecs (codec-fns this id revision) keys)]
         (assert (seq path-codecs) "No codecs to write with")
-        (or (and (= f adjoin)
-                 (adjoin-writer this path-codecs keyseq))
-            (optimized-writer   this path-codecs keyseq f)
-            (simple-writer      this path-codecs keyseq f)
-
-))))
+        (some #(% this path-codecs keyseq f)
+              [adjoin-writer, optimized-writer, simple-writer]))))
 
   Layer
   (open [layer]
