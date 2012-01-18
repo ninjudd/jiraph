@@ -210,25 +210,25 @@
     (fn [& args]
       (let [old (read-node codecs db id nil)
             new (apply update-in old keyseq f args)]
-        (delete-ranges! layer deletion-ranges)
-        (reduce (fn [node [path codec]]
-                  (let [write! (fn [key data]
-                           (->> data
-                                (encode codec)
-                                (bufseq->bytes)
-                                (db-write db key)))]
-                    (reduce (fn [node path]
-                              (let [path (vec path)
-                                    data (get-in node path)
-                                    old-data (get-in old path)]
-                                (when (not= data old-data)
-                                  (write! (db-name (cons id path))
-                                          data))
-                                (when (seq path)
-                                  (no-nil-update node (pop path) dissoc (peek path)))))
-                            node (matching-subpaths node path))))
-                (get new id), codecs)
-        {:old (get-in old keyseq), :new (get-in new keyseq)}))))
+        (returning {:old (get-in old keyseq), :new (get-in new keyseq)}
+          (delete-ranges! layer deletion-ranges)
+          (reduce (fn [node [path codec]]
+                    (let [write! (fn [key data]
+                                   (->> data
+                                        (encode codec)
+                                        (bufseq->bytes)
+                                        (db-write db key)))]
+                      (reduce (fn [node path]
+                                (let [path (vec path)
+                                      data (get-in node path)
+                                      old-data (get-in old path)]
+                                  (when (not= data old-data)
+                                    (write! (db-name (cons id path))
+                                            data))
+                                  (when (seq path)
+                                    (no-nil-update node (pop path) dissoc (peek path)))))
+                              node (matching-subpaths node path))))
+                  (get new id), codecs))))))
 
 
 (defrecord MasaiSortedLayer [db revision append-only? node-format node-meta-format layer-meta-format]
