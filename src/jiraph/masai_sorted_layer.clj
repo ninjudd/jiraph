@@ -180,10 +180,29 @@
             (assoc-levels {} parent
                           (into {} kvs)))))
 
-(defn- adjoin-writer [layer path-codecs keyseq f]
-  (when (= f adjoin)
-    nil ;; TODO write this
-    ))
+(defmulti specialized-writer
+  "If your update function has special semantics that allow it to be distributed over multiple
+   paths more efficiently than reading the whole node, applying the function, and then writing to
+   each codec, you can implement a method for specialized-writer. For example, useful.utils/adjoin
+   can be split up by matching up the paths in the adjoin-arg and in the path-codecs.
+
+   path-codecs is a sequence of [path, codec-fn] pairs, which are computed for your convenience:
+   if you preferred, you could recalculate them from layer and keyseq.
+   You should return a function of one argument, which writes to the layer the result of
+   (update-in layer keyseq f arg). See the contract for jiraph.layer/update-fn - you are
+   effectively implementing an update-fn for a particular function rather than a layer.
+
+   Note that it is acceptable to return nil instead of a function, if you find the keyseq or
+   path-codecs mean you cannot do any optimization."
+  (fn [layer path-codecs keyseq f]
+    f))
+
+(defmethod specialized-writer :default [& args]
+  nil)
+
+(defmethod specialized-writer adjoin [layer path-codecs keyseq _]
+  nil ;; TODO implement this
+  )
 
 (defn- optimized-writer [layer path-codecs keyseq f]
   (when-not (next path-codecs) ;; can only optimize a single codec
@@ -275,7 +294,7 @@
       (let [path-codecs (subnode-codecs (codec-fns this id revision) keys)]
         (assert (seq path-codecs) "No codecs to write with")
         (some #(% this path-codecs keyseq f)
-              [adjoin-writer, optimized-writer, simple-writer]))))
+              [specialized-writer, optimized-writer, simple-writer]))))
 
   Layer
   (open [layer]
