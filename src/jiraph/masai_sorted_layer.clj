@@ -190,7 +190,9 @@
                   db-key (db-name keyseq) ;; great, we can optimize it
                   codec (codec-fn {})]
               (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
-                (db/append! db db-key (bufseq->bytes (encode codec arg)))))))))))
+                (db/append! db db-key (bufseq->bytes (encode codec arg)))
+                {:old nil, :new nil} ;; we didn't read the old data, so we don't know the new data
+                ))))))))
 
 (defn- write-paths! [write-fn codecs id node]
   (reduce (fn [node [path codec]]
