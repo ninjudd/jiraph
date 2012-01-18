@@ -197,12 +197,29 @@
               (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
                 (db/append! db db-key (bufseq->bytes (encode codec arg)))))))))))
 
+(defn- write-paths! [write-fn codecs id node]
+  (reduce (fn [node [path codec]]
+            (let [write! (fn [key data]
+                           (->> data
+                                (encode codec)
+                                (bufseq->bytes)
+                                (write-fn key)))]
+              (reduce (fn [node path]
+                        (let [path (vec path)
+                              data (get-in node path)]
+                          (write! (db-name (cons id path)) data)
+                          (when (seq path)
+                            (no-nil-update node (pop path) dissoc (peek path)))))
+                      node (matching-subpaths node path))))
+          (get node id), codecs))
+
 (defn- simple-writer [layer path-codecs keyseq f]
   (let [{:keys [db append-only?]} layer
         [id & keys] keyseq
         codecs (realize-codecs path-codecs
                                (when append-only? {:reset true}))
-        db-write (if append-only?, db/append! db/put!)
+        write-mode (if append-only?, db/append! db/put!)
+        writer (partial write-mode db)
         deletion-ranges (for [[path codec-fn] path-codecs
                               :let [{:keys [start stop multi]} (bounds (cons id path))]
                               :when (and multi (prefix-of? (butlast path) keys))]
@@ -212,23 +229,7 @@
             new (apply update-in old keyseq f args)]
         (returning {:old (get-in old keyseq), :new (get-in new keyseq)}
           (delete-ranges! layer deletion-ranges)
-          (reduce (fn [node [path codec]]
-                    (let [write! (fn [key data]
-                                   (->> data
-                                        (encode codec)
-                                        (bufseq->bytes)
-                                        (db-write db key)))]
-                      (reduce (fn [node path]
-                                (let [path (vec path)
-                                      data (get-in node path)
-                                      old-data (get-in old path)]
-                                  (when (not= data old-data)
-                                    (write! (db-name (cons id path))
-                                            data))
-                                  (when (seq path)
-                                    (no-nil-update node (pop path) dissoc (peek path)))))
-                              node (matching-subpaths node path))))
-                  (get new id), codecs))))))
+          (write-paths! writer codecs id new))))))
 
 
 (defrecord MasaiSortedLayer [db revision append-only? node-format node-meta-format layer-meta-format]
