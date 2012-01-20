@@ -78,15 +78,25 @@
     `(~@below ~first-above)))
 
 (defn matching-subpaths
-  "Look through a node for all actual paths that match a path pattern."
-  [node path]
-  (if-let [[k & ks] (seq path)]
-    (for [[k v] (if (= :* k)
-                  node ;; each k/v in the node
-                  (select-keys node [k])) ;; just the one
-          path (matching-subpaths v ks)]
-      (cons k path))
-    '(())))
+  "Look through a node for all actual paths that match a path pattern. If include-empty? is truthy,
+   return path even if there is no data at that path (but still iterate over * pattern entries)."
+  [node path include-empty?]
+  (if include-empty?
+    (let [path (vec path)
+          [head last] ((juxt pop peek) path)]
+      (if (= last :*)
+        (for [entry (get-in node head)]
+          (conj head (key entry)))
+        [path]))
+    ((fn matching* [node path]
+       (if-let [[k & ks] (seq path)]
+         (for [[k v] (if (= :* k)
+                       node ;; each k/v in the node
+                       (select-keys node [k])) ;; just the one
+               path (matching* v ks)]
+           (cons k path))
+         '(())))
+     node path)))
 
 (defn- db-name
   "Convert a key sequence to a database keyname. Currently done by just joining them all together
@@ -199,7 +209,11 @@
             (assoc-levels {} parent
                           (into {} kvs)))))
 
-(defn- optimized-writer [layer path-codecs keyseq f]
+(defn- optimized-writer
+  "Return a writer iff the keyseq corresponds exactly to one path in path-codecs, and the
+   corresponding codec has f as its reduce-fn (that is, we can apply the change to f by merely
+   appending something to a single codec)."
+  [layer path-codecs keyseq f]
   (when-not (next path-codecs) ;; can only optimize a single codec
     (let [[path codec-fn] (first path-codecs)]
       (when (= f (:reduce-fn (-> codec-fn meta))) ;; performing optimized function
@@ -213,7 +227,7 @@
                 {:old nil, :new nil} ;; we didn't read the old data, so we don't know the new data
                 ))))))))
 
-(defn- write-paths! [write-fn codecs id node]
+(defn- write-paths! [write-fn codecs id node include-deletions?]
   (reduce (fn [node [path codec]]
             (let [write! (fn [key data]
                            (->> data
@@ -226,7 +240,7 @@
                           (write! (db-name (cons id path)) data)
                           (when (seq path)
                             (no-nil-update node (pop path) dissoc (peek path)))))
-                      node (matching-subpaths node path))))
+                      node (matching-subpaths node path include-deletions?))))
           (get node id), codecs))
 
 (defn- simple-writer [layer path-codecs keyseq f]
@@ -245,7 +259,7 @@
             new (apply update-in old keyseq f args)]
         (returning {:old (get-in old keyseq), :new (get-in new keyseq)}
           (delete-ranges! layer deletion-ranges)
-          (write-paths! writer codecs id new))))))
+          (write-paths! writer codecs id new true))))))
 
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
@@ -278,7 +292,8 @@
       (fn [arg]
         (returning {:old nil, :new arg}
           (write-paths! writer codecs id
-                        (assoc-in {} keyseq arg)))))))
+                        (assoc-in {} keyseq arg)
+                        false)))))) ;; don't include deletions
 
 
 ;;; TODO pull the three formats into a single field?
