@@ -88,9 +88,6 @@
       (cons k path))
     '(())))
 
-(defn- fill-pattern [pattern actual]
-  (map (fn [pat act] act) pattern actual))
-
 (defn- db-name
   "Convert a key sequence to a database keyname. Currently done by just joining them all together
    with : characters into a string."
