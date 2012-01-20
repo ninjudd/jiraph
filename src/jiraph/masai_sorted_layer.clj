@@ -21,17 +21,22 @@
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
+(defn empty-coll?
+  "Is x a collection and also empty?"
+  [x]
+  (or (nil? x)
+      (and (coll? x)
+           (empty? x))))
+
 (defn- no-nil-update
   ([m ks f & args]
      (no-nil-update m ks #(apply f % args)))
   ([m ks f]
      (if-let [[k & ks] (seq ks)]
        (let [v (no-nil-update (get m k) ks f)]
-         (if (and (not (nil? v))
-                  (or (not (coll? v))
-                      (seq v)))
-           (assoc m k v)
-           (dissoc m k)))
+         (if (empty-coll? v)
+           (dissoc m k)
+           (assoc m k v)))
        (f m))))
 
 (defn- path-prefix?
@@ -75,11 +80,6 @@
 
 (defn- fill-pattern [pattern actual]
   (map (fn [pat act] act) pattern actual))
-
-(defn- ignore? [x]
-  (or (nil? x)
-      (and (coll? x)
-           (empty? x))))
 
 (defn- db-name [keyseq]
   (s/join ":" (map name keyseq)))
@@ -174,7 +174,7 @@
                       kvs (seq (for [[k v] (db/fetch-seq db start)
                                      :while (neg? (compare k stop))
                                      :let [node (decode codec [(ByteBuffer/wrap v)])]
-                                     :when (not (ignore? node))]
+                                     :when (not (empty-coll? node))]
                                  (map-entry (keyfn k) node)))]
                 :when kvs]
             (assoc-levels {} parent
