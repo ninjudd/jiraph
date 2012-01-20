@@ -29,6 +29,8 @@
            (empty? x))))
 
 (defn- no-nil-update
+  "Update-in, but any value that would have become nil (or empty) is dissoc'ed entirely,
+   recursively up to the root."
   ([m ks f & args]
      (no-nil-update m ks #(apply f % args)))
   ([m ks f]
@@ -56,20 +58,28 @@
                 (and (or (= x y) (= x :*) (= y :*))
                      (recur xs ys))))))))
 
-(defn along-path? [pattern path]
+(defn along-path?
+  "Is either of these a path-prefix of the other?"
+  [pattern path]
   (every? true?
           (map (fn [x y]
                  (or (= x y) (= x :*) (= y :*)))
                pattern, path)))
 
-(defn- subnode-codecs [codecs path]
+(defn- subnode-codecs
+  "This is used to find, given a path through a node and a sequence of [path,codec] pairs,
+   all the codecs that will actually be needed to write at that path. Basically, this means all
+   codecs whose path is below the write-path, and one codec which is at or above it."
+  [codecs path]
   (let [path-to-root (filter #(along-path? (first %) path) codecs)
         [below [first-above]] (split-with #(path-prefix? path (first %) true)
                                           path-to-root)]
     (assert first-above (str "Don't know how to write at " path))
     `(~@below ~first-above)))
 
-(defn matching-subpaths [node path]
+(defn matching-subpaths
+  "Look through a node for all actual paths that match a path pattern."
+  [node path]
   (if-let [[k & ks] (seq path)]
     (for [[k v] (if (= :* k)
                   node ;; each k/v in the node
@@ -81,7 +91,10 @@
 (defn- fill-pattern [pattern actual]
   (map (fn [pat act] act) pattern actual))
 
-(defn- db-name [keyseq]
+(defn- db-name
+  "Convert a key sequence to a database keyname. Currently done by just joining them all together
+   with : characters into a string."
+  [keyseq]
   (s/join ":" (map name keyseq)))
 
 (let [char-after (fn [c]
@@ -110,7 +123,9 @@
                    :stop (str-after start-key)
                    :keyfn (constantly last)})))))))
 
-(defn- codec-fns [layer node-id revision]
+(defn- codec-fns
+  "Look up the codec functions to use based on node id and revision."
+  [layer node-id revision]
   (let [locked {:id node-id, :revision revision}]
     (for [[path codec-fn] (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
                                            (meta-key? layer node-id) :node-meta-format
@@ -119,15 +134,22 @@
                   (codec-fn (merge opts locked)))
                 (with-meta (meta codec-fn)))])))
 
-(defn- realize-codecs [codec-fns opts]
-  (for [[path codec-fn] codec-fns]
+(defn- realize-codecs
+  "Realize a series of [path, codec-fn] pairs into [path, codec] by calling each codec-fn with
+   the supplied argument opts."
+  [path-codecs opts]
+  (for [[path codec-fn] path-codecs]
     [path (codec-fn opts)]))
 
-(defn- codecs-for [layer node-id revision]
+(defn- codecs-for
+  "Shorthand for combining codec-fns and realize-codecs."
+  [layer node-id revision]
   (realize-codecs (codec-fns layer node-id revision) {}))
 
 (defn- delete-ranges!
-  "Given a database and a sequence of [start, end) intervals, delete "
+  "Given a layer and a sequence of [start, end) intervals, delete every key in range. If the
+   layer is in append-only mode, then a codec-fn must be included with each interval to enable
+   us to encode a reset."
   [layer deletion-ranges]
   (doseq [{:keys [start stop codec-fn]} deletion-ranges]
     (let [delete (if (:append-only? layer)
@@ -262,6 +284,7 @@
                         (assoc-in {} keyseq arg)))))))
 
 
+;;; TODO pull the three formats into a single field?
 (defrecord MasaiSortedLayer [db revision append-only? node-format node-meta-format layer-meta-format]
   Meta
   (meta-key [this k]
