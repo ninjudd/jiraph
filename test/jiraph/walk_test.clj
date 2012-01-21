@@ -4,13 +4,16 @@
         [jiraph.walk :only [defwalk path paths *parallel-follow* intersection]]
         [useful.utils :only [adjoin]]
         [jiraph.walk.predicates :only [at-limit]])
-  (:require [jiraph.stm-layer :as stm])
+  (:require [jiraph.stm-layer :as stm]
+            [jiraph.masai-layer :as masai]
+            [jiraph.masai-sorted-layer :as sorted])
   (:import [jiraph Test$Node]))
 
 (defn test-graph []
-  {:foo (stm/make)
-   :bar (stm/make)
-   :baz (stm/make)
+  {:foo (masai/make-temp)
+   :bar (masai/make-temp)
+   :baz (sorted/make-temp :formats {:node [[[:edges :*]]
+                                           [[]]]})
    :stm (stm/make)})
 
 (defwalk full-walk
@@ -24,12 +27,12 @@
       (with-graph (test-graph)
         (is (= ["1"] (:ids (full-walk "1"))))
 
-        (assoc-node! :foo "1" {:edges {"2" {:a "foo"} "3" {:a "bar"}}})
-        (assoc-node! :bar "2" {:edges {"3" {:a "foo"} "4" {:a "bar"}}})
-        (assoc-node! :baz "2" {:edges {"5" {:a "foo"} "6" {:a "bar"}}})
-        (assoc-node! :baz "4" {:edges {"7" {:a "foo"} "8" {:a "bar"}}})
-        (assoc-node! :baz "8" {:edges {"8" {:a "foo"} "9" {:a "bar"}}})
-        (assoc-node! :stm "9" {:edges {"2" {}}})
+        (update-node! :foo "1" adjoin {:edges {"2" {:a "foo"} "3" {:a "bar"}}})
+        (update-node! :bar "2" adjoin {:edges {"3" {:a "foo"} "4" {:a "bar"}}})
+        (update-node! :baz "2" adjoin {:edges {"5" {:a "foo"} "6" {:a "bar"}}})
+        (update-node! :baz "4" adjoin {:edges {"7" {:a "foo"} "8" {:a "bar"}}})
+        (update-node! :baz "8" adjoin {:edges {"8" {:a "foo"} "9" {:a "bar"}}})
+        (update-node! :stm "9" adjoin {:edges {"2" {}}})
 
         (let [walk (full-walk "1")]
           (is (= 9 (:result-count walk)))
