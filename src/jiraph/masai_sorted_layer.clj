@@ -319,12 +319,8 @@
         not-found
         (get node id))))
   (assoc-node! [this id attrs]
-    #_(letfn [(bytes [data]
-                (bufseq->bytes (encode ((format-for this id) {:revision revision :id id})
-                                       data)))]
-        (if append-only?
-          (db/append! db id (bytes (assoc attrs :_reset true)))
-          (db/put!    db id (bytes attrs)))))
+    ((layer/update-fn this [id] (constantly attrs)))
+    true)
   (dissoc-node! [this id]
     (db/delete! db id))
 
