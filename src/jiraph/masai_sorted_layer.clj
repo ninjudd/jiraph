@@ -82,12 +82,14 @@
    return path even if there is no data at that path (but still iterate over * pattern entries)."
   [node path include-empty?]
   (if include-empty?
-    (let [path (vec path)
-          [head last] ((juxt pop peek) path)]
-      (if (= last :*)
-        (for [entry (get-in node head)]
-          (conj head (key entry)))
-        [path]))
+    (if (seq path)
+      (let [path (vec path)
+            [head last] ((juxt pop peek) path)]
+        (if (= last :*)
+          (for [entry (get-in node head)]
+            (conj head (key entry)))
+          [path]))
+      '(()))
     ((fn matching* [node path]
        (if-let [[k & ks] (seq path)]
          (for [[k v] (if (= :* k)
