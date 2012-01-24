@@ -4,17 +4,18 @@
         [retro.core :as retro :only [dotxn]])
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
-            [jiraph.masai-layer :as masai]))
+            [jiraph.masai-layer :as masai]
+            [jiraph.masai-sorted-layer :as sorted]))
 
 (def all [:tr :tp :stm :trs])
 
-(letfn [(masai []
-          (masai/make-temp))]
+(let [masai  masai/make-temp
+      sorted #(sorted/make-temp :formats {:node [[[:edges :*]], [[]]]})]
   (defn make-graph []
-    {:tr  (masai)
+    {:tr  (sorted)
      :trs (masai)
      :tp  (masai)
-     :stm (masai)}))
+     :stm (sorted)}))
 
 (deftest node-info
   (with-graph (make-graph)
