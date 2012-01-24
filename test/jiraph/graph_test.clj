@@ -3,7 +3,8 @@
         [retro.core :as retro :only [dotxn at-revision]])
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
-            [jiraph.masai-layer :as masai]))
+            [jiraph.masai-layer :as masai]
+            [jiraph.masai-sorted-layer :as sorted]))
 
 (defn test-layer [master]
   (testing (str (class master))
@@ -100,6 +101,7 @@
 
 (deftest layer-impls
   (doseq [layer [;(stm/make)
+                 (sorted/make-temp :formats {:node [[[:edges :*]], [[]]]})
                  (masai/make-temp)]] ;; add more layers as they're implemented
     (layer/open layer)
     (try
