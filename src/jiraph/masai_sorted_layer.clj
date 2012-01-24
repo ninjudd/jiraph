@@ -8,7 +8,7 @@
         [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
         [useful.map :only [assoc-levels keyed]]
-        [useful.fn :only [as-fn knit]]
+        [useful.fn :only [as-fn knit any to-fix]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
@@ -367,15 +367,19 @@
 
   ChangeLog
   (get-revisions [this id]
-    #_
-    (let [format (format-for this id)
-          rev-codec-builder (-> format meta :revisions)
-          rev-codec (rev-codec-builder {})]
-      (when-let [data (db/fetch db id)]
-        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
-          (if-not revision
-            revs
-            (take-while #(<= % revision) revs))))))
+    (let [path-codecs (codec-fns this id revision)
+          revision-codecs (for [[path codec-fn] path-codecs
+                                :let [codec (-> codec-fn meta :revisions)]
+                                :when codec]
+                            [path (codec {})])
+          revs (->> (node-chunks revision-codecs db id)
+                    (tree-seq (any map? sequential?) (to-fix map? vals,
+                                                             sequential? seq))
+                    (filter number?)
+                    (into (sorted-set)))]
+      (if revision
+        (subseq revs <= revision)
+        revs)))
 
   ;; TODO this is stubbed, will need to work eventually
   (get-changed-ids [layer rev]
