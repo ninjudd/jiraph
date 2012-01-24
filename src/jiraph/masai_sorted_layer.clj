@@ -196,20 +196,23 @@
     (when-let [bytes (db/fetch (:db layer) revision-key)]
       (bytes->long bytes))))
 
+(defn- node-chunks [codecs db id]
+  (for [[path codec] codecs
+        :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
+              kvs (seq (for [[k v] (db/fetch-seq db start)
+                             :while (neg? (compare k stop))
+                             :let [node (decode codec [(ByteBuffer/wrap v)])]
+                             :when (not (empty-coll? node))]
+                         (map-entry (keyfn k) node)))]
+        :when kvs]
+    (assoc-levels {} parent
+                  (into {} kvs))))
+
 (defn- read-node [codecs db id not-found]
   (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
             ([] not-found)
             ([a b] (adjoin a b)))
-          (for [[path codec] codecs
-                :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
-                      kvs (seq (for [[k v] (db/fetch-seq db start)
-                                     :while (neg? (compare k stop))
-                                     :let [node (decode codec [(ByteBuffer/wrap v)])]
-                                     :when (not (empty-coll? node))]
-                                 (map-entry (keyfn k) node)))]
-                :when kvs]
-            (assoc-levels {} parent
-                          (into {} kvs)))))
+          (node-chunks codecs db id)))
 
 (defn- optimized-writer
   "Return a writer iff the keyseq corresponds exactly to one path in path-codecs, and the
