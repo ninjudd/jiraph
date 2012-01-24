@@ -163,7 +163,7 @@
   (doseq [{:keys [start stop codec-fn]} deletion-ranges]
     (let [delete (if (:append-only? layer)
                    (let-later [^:delay deleted (bufseq->bytes (encode (codec-fn {:reset true})
-                                                                      nil))]
+                                                                      {}))]
                      (fn [cursor]
                        (-> cursor
                            (cursor/append deleted)
