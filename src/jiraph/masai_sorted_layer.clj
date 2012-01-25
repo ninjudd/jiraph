@@ -1,6 +1,6 @@
 (ns jiraph.masai-sorted-layer
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences
-                             node-id-seq meta-key meta-key?] :as layer]
+                             Schema node-id-seq meta-key meta-key?] :as layer]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
@@ -20,6 +20,9 @@
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
+
+(defn copy-meta [dest src]
+  (with-meta dest (meta src)))
 
 (defn empty-coll?
   "Is x a collection and also empty?"
@@ -135,13 +138,15 @@
 (defn- codec-fns
   "Look up the codec functions to use based on node id and revision."
   [layer node-id revision]
-  (let [locked {:id node-id, :revision revision}]
-    (for [[path codec-fn] (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
-                                           (meta-key? layer node-id) :node-meta-format
-                                           :else :node-format))]
-      [path (-> (fn [opts]
-                  (codec-fn (merge opts locked)))
-                (with-meta (meta codec-fn)))])))
+  (let [locked {:id node-id, :revision revision}
+        orig-paths (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
+                                    (meta-key? layer node-id) :node-meta-format
+                                    :else :node-format))]
+    (-> (for [[path codec-fn] orig-paths]
+          [path (-> (fn [opts]
+                      (codec-fn (merge opts locked)))
+                    (copy-meta codec-fn))])
+        (copy-meta orig-paths))))
 
 (defn- realize-codecs
   "Realize a series of [path, codec-fn] pairs into [path, codec] by calling each codec-fn with
@@ -355,15 +360,17 @@
   (truncate! [layer]
     (db/truncate! db))
 
-  ;; Schema
-  ;; (fields [layer]
-  ;;   (f/fields format))
-  ;; (fields [layer subfields]
-  ;;   (f/fields format subfields))
-  ;; (node-valid? [layer attrs]
-  ;;   (try (f/encode format (make-node attrs))
-  ;;        true
-  ;;        (catch Exception e)))
+  Schema
+  (fields [this id]
+    (:schema (meta (codec-fns this id revision))))
+  (fields [this id subfields]
+    (-> (layer/fields this id)
+        (select-keys (conj subfields :any))))
+  (verify-node [this id attrs]
+    true
+    #_(try (f/encode format (make-node attrs))
+           true
+           (catch Exception e)))
 
   ChangeLog
   (get-revisions [this id]
@@ -435,19 +442,27 @@
 ;; plain old codecs will be accepted as well
 (let [default-codec (cereal/revisioned-clojure-codec adjoin)
       codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
-  (defn make [db & {{:keys [node meta layer-meta]} :formats,
+  (defn make [db & {{:keys [node meta layer-meta]
+                     :or {node (-> [[[:edges :*]]
+                                    [[]]]
+                                   (with-meta {:schema {:edges {:* :any}
+                                                        :* :any}}))}}
+                    :formats,
+
                     :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format meta-format layer-meta-format]
           (for [format [node meta layer-meta]]
             (if (seq format)
-              (for [[path codec] format]
-                (map-entry path (codec-fn codec)))
-              [[[] (codec-fn nil)]]))]
+              (-> (for [[path f] format]
+                    (map-entry path (codec-fn f)))
+                  (copy-meta format))
+              (-> [[[] (codec-fn nil)]]
+                  (with-meta {:schema {:* :any}}))))]
       (MasaiSortedLayer. (make-db db) nil
-                   (case assoc-mode
-                     :append true
-                     :overwrite false)
-                   node-format, meta-format, layer-meta-format))))
+                         (case assoc-mode
+                           :append true
+                           :overwrite false)
+                         node-format, meta-format, layer-meta-format))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.
