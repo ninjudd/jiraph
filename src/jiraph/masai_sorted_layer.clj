@@ -367,10 +367,11 @@
     (-> (layer/fields this id)
         (select-keys (conj subfields :any))))
   (verify-node [this id attrs]
-    true
-    #_(try (f/encode format (make-node attrs))
-           true
-           (catch Exception e)))
+    (try
+      (do (write-paths! (constantly nil), (codecs-for this id revision),
+                        id, attrs, false)
+          true)
+      (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
