@@ -21,9 +21,9 @@
     "A seq of all nodes in this layer"))
 
 (defprotocol Schema
-  (fields [layer] [layer subfields]
-    "A list of canonical fields stored in this layer. Can be empty.")
-  (verify-node [layer attrs]
+  (fields [layer id] [layer id subfields]
+    "A list of canonipcal fields stored in this layer. Can be empty.")
+  (verify-node [layer id attrs]
     "Verify that the given node is valid according to the layer schema."))
 
 (defprotocol Meta
@@ -181,7 +181,7 @@
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
 
-(defn node-valid? [layer attrs]
-  (try (verify-node layer attrs)
+(defn node-valid? [layer id attrs]
+  (try (verify-node layer id attrs)
        true
        (catch AssertionError e nil)))

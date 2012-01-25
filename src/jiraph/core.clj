@@ -154,12 +154,12 @@
   ([type]
      (apply merge-with conj
             (for [layer        (layers type)
-                  [field meta] (layer/fields layer)]
+                  [field meta] (layer/fields layer type)]
               {field {layer meta}})))
   ([type subfield]
      (apply merge-with conj
             (for [layer        (keys (get (schema type) subfield))
-                  [field meta] (layer/fields layer [subfield])]
+                  [field meta] (layer/fields layer type [subfield])]
               {field {layer meta}}))))
 
 (alter-var-root #'schema #(with-meta (memoize-deref [#'*graph*] %) (meta %)))

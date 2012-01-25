@@ -253,10 +253,10 @@
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
-  ([layer]
-     (layer/fields layer))
-  ([layer subfields]
-     (layer/fields layer subfields)))
+  ([layer id]
+     (layer/fields layer id))
+  ([layer id subfields]
+     (layer/fields layer id subfields)))
 
 (defn edges-valid? [layer edges]
   (or (not (layer/single-edge? layer))
@@ -283,7 +283,7 @@
   (when id
     (assert (types-valid? layer id attrs)))
   (assert (edges-valid? layer attrs))
-  (layer/verify-node layer attrs)
+  (layer/verify-node layer id attrs)
   nil)
 
 (defn ^{:dynamic true} get-all-revisions
