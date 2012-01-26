@@ -368,6 +368,7 @@
         (select-keys (conj subfields :any))))
   (verify-node [this id attrs]
     (try
+      ;; do a fake write (does no I/O), to see if an exception would occur
       (do (write-paths! (constantly nil), (codecs-for this id revision),
                         id, attrs, false)
           true)
