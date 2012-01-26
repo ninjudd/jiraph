@@ -4,11 +4,12 @@
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
-        [useful.utils :only [if-ns adjoin returning map-entry let-later]]
+        [useful.utils :only [if-ns adjoin returning map-entry let-later empty-coll? copy-meta]]
         [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
         [useful.map :only [assoc-levels keyed]]
         [useful.fn :only [as-fn knit any to-fix]]
+        [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
@@ -17,19 +18,7 @@
             [jiraph.graph :as graph]
             [jiraph.codecs.cereal :as cereal]
             [clojure.string :as s])
-  (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
-            DataOutputStream DataInputStream]
-           [java.nio ByteBuffer]))
-
-(defn copy-meta [dest src]
-  (with-meta dest (meta src)))
-
-(defn empty-coll?
-  "Is x a collection and also empty?"
-  [x]
-  (or (nil? x)
-      (and (coll? x)
-           (empty? x))))
+  (:import [java.nio ByteBuffer]))
 
 (defn- no-nil-update
   "Update-in, but any value that would have become nil (or empty) is dissoc'ed entirely,
@@ -184,14 +173,6 @@
 (defn- main-node-id [meta-id]
   {:pre [(= "_" (first meta-id))]}
   (subs meta-id 1))
-
-(defn- bytes->long [bytes]
-  (-> bytes (ByteArrayInputStream.) (DataInputStream.) (.readLong)))
-
-(defn- long->bytes [long]
-  (-> (ByteArrayOutputStream. 8)
-      (doto (-> (DataOutputStream.) (.writeLong long)))
-      (.toByteArray)))
 
 (let [revision-key "__revision"]
   (defn- save-maxrev [layer]
