@@ -34,7 +34,11 @@
 
 (defprotocol Incoming
   (get-incoming [layer id]
-    "Return the ids of all nodes that have an incoming edge to this one.")
+    "Return the ids of all nodes that have an incoming edge to this one.
+     The return type may be either a set, or an \"existence hash\", where the value for each key
+     is a boolean, indicating whether an incoming edge comes from the key to this node. This can
+     be useful for allowing a client to detect that an edge once existed but has since been
+     removed.")
   (add-incoming! [layer id from-id]
     "Add an incoming edge record on id for from-id.")
   (drop-incoming! [layer id from-id]

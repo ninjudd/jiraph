@@ -85,7 +85,7 @@
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   fields node-valid? verify-node
   get-all-revisions get-revisions
-  get-incoming)
+  get-incoming get-incoming-map)
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution
 ;; or any indirection, because they can't meaningfully work with layer names but

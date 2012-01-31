@@ -329,7 +329,22 @@
 (defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer id]
-  (into-set #{} (layer/get-incoming layer id)))
+  (let [incoming (layer/get-incoming layer id)]
+    (if (set? incoming)
+      incoming
+      (set (for [[k v] incoming
+                 :when v]
+             k)))))
+
+(defn ^{:dynamic true} get-incoming-map
+  "Return a map of incoming edges, where the value for each key indicates whether an edge is
+   incoming from that node."
+  [layer id]
+  (let [incoming (layer/get-incoming layer id)]
+    (if (map? incoming)
+      incoming
+      (into {} (for [node incoming]
+                 [node true])))))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."
