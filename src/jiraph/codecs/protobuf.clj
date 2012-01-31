@@ -1,6 +1,6 @@
 (ns jiraph.codecs.protobuf
   (:use [jiraph.codecs :only [revisioned-codec]]
-        [useful.map :only [adjoin]])
+        [useful.utils :only [adjoin]])
   (:require [protobuf.codec :as protobuf]))
 
 ;; NB doesn't currently work if you do a full/optimized read with _reset keys.
