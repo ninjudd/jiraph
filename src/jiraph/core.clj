@@ -3,7 +3,7 @@
             [jiraph.layer :as layer]
             [clojure.string :as s]
             [retro.core :as retro])
-  (:use     [useful.utils :only [returning memoize-deref map-entry]]
+  (:use     [useful.utils :only [returning memoize-deref map-entry adjoin]]
             [useful.map :only [update]]
             [useful.macro :only [macro-do]])
   (:import java.io.IOException))
@@ -86,6 +86,11 @@
   fields node-valid? verify-node
   get-all-revisions get-revisions
   get-incoming get-incoming-map)
+
+(defn append-node!
+  "Deprecated: a shortcut for update-in-node! with useful.utils/adjoin."
+  [layer-name attrs]
+  (graph/update-in-node! (layer layer-name) adjoin attrs))
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution
 ;; or any indirection, because they can't meaningfully work with layer names but
