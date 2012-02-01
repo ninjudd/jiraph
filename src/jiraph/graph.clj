@@ -11,8 +11,9 @@
             [retro.core :as retro]))
 
 (def ^{:dynamic true} *skip-writes* false)
+(def ^{:dynamic true, :doc "All layers that are currently in read-only mode. You should probably not modify this directly; prefer using with-readonly instead."}
+  *read-only* #{})
 
-(def ^{:private true :dynamic true} *read-only* #{})
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
 (def ^{:private true}               write-count (atom 0))
