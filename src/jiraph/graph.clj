@@ -33,7 +33,7 @@
   (*read-only* layer))
 
 (defmacro with-readonly [layers & body]
-  `(binding [*read-only* (into *read-only* layers)]
+  `(binding [*read-only* (into *read-only* ~layers)]
      ~@body))
 
 (defn- refuse-readonly [layers]
