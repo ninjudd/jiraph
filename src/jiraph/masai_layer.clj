@@ -1,8 +1,9 @@
 (ns jiraph.masai-layer
-  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
                              node-id-seq meta-key meta-key?] :as layer]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
+        useful.debug
         [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn]]
@@ -97,23 +98,23 @@
   (truncate! [layer]
     (db/truncate! db))
 
-  ;; Schema
-  ;; (fields [layer]
-  ;;   (f/fields format))
-  ;; (fields [layer subfields]
-  ;;   (f/fields format subfields))
-  ;; (verify-node [layer attrs]
-  ;;   (try (f/encode format (make-node attrs))
-  ;;        (catch Exception e
-  ;;          (throw (AssertionError. (.getMessage e))))))
+  Schema
+  (fields [this id]
+    (:schema (meta (format-for this id))))
+  (fields [this id subfields]
+    (-> (layer/fields this id)
+        (select-keys subfields)))
+  (verify-node [this id attrs]
+    (try
+      ;; do a fake write (does no I/O), to see if an exception would occur
+      (dorun (bufseq->bytes (encode (format-for this id) attrs)))
+      (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
-    (let [format (format-for this id)
-          rev-codec-builder (-> format meta :revisions)
-          rev-codec (rev-codec-builder {})]
-      (when-let [data (db/fetch db id)]
-        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
+    (when-let [rev-codec-builder (?! (-> (format-for this id) meta :revisions))]
+      (when-let [data (?! (db/fetch db id))]
+        (let [revs (decode (?! (rev-codec-builder {})) [(ByteBuffer/wrap data)])]
           (if-not revision
             revs
             (take-while #(<= % revision) revs))))))
