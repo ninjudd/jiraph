@@ -252,12 +252,19 @@
       [layer keys value]
       (retro/enqueue layer #(assoc-in-node! % keys value))))
 
+(defn schema
+  [layer id-or-type]
+  (let [id (fix id-or-type
+                keyword? #(str (name %) "-1"))]
+    (layer/schema layer id)))
+
 (defn fields
   "Return a map of fields to their metadata for the given layer."
-  ([layer id]
-     (layer/fields layer id))
+  ([layer id-or-type]
+     (keys (:fields (schema layer id-or-type))))
   ([layer id subfields]
-     (layer/fields layer id subfields)))
+     nil ;; TODO find out what subfields is supposed to mean
+     ))
 
 (defn edges-valid? [layer edges]
   (or (not (layer/single-edge? layer))

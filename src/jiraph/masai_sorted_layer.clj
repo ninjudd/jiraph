@@ -342,11 +342,8 @@
     (db/truncate! db))
 
   Schema
-  (fields [this id]
+  (schema [this id]
     (:schema (meta (codec-fns this id revision))))
-  (fields [this id subfields]
-    (-> (layer/fields this id)
-        (select-keys (conj subfields :any))))
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
@@ -428,9 +425,7 @@
   (defn make [db & {{:keys [node meta layer-meta]
                      :or {node (-> [[[:edges :*]]
                                     [[]]]
-                                   (with-meta {:schema {:edges {:* :any}
-                                                        :* :any}}))}}
-                    :formats,
+                                   (with-meta layer/edges-schema))}} :formats,
 
                     :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format meta-format layer-meta-format]
@@ -440,7 +435,7 @@
                     (map-entry path (codec-fn f)))
                   (copy-meta format))
               (-> [[[] (codec-fn nil)]]
-                  (with-meta {:schema {:* :any}}))))]
+                  (vary-meta merge {:schema {:type :map, :fields {:* :any}}}))))]
       (MasaiSortedLayer. (make-db db) nil
                          (case assoc-mode
                            :append true

@@ -21,8 +21,15 @@
     "A seq of all nodes in this layer"))
 
 (defprotocol Schema
-  (fields [layer id] [layer id subfields]
-    "A list of canonipcal fields stored in this layer. Can be empty.")
+  (schema [layer id]
+    "A map describing the structure of a node with the given id on this layer. Return value will
+     be a nested hash. Each hash will contain at least a :type key, describing the data at that
+     level (with :any meaning \"it could be anything\"). Additional keys may be present:
+     - For maps, a :fields key descibes the schema for all fields the map may contain - each key
+       in the :fields map is a fieldname and its value is the schema for that value. A field with
+       the special name :* means any key may be present, in addition to those specifically listed.
+     - For other composite types such as sets and lists, an :item-type key describes the schema
+       for the items contained within the composite (which should all be the same type).")
   (verify-node [layer id attrs]
     "Verify that the given node is valid according to the layer schema."))
 
@@ -150,6 +157,12 @@
       (doseq [id (node-id-seq layer)]
         (dissoc-node! layer id)))))
 
+(def ^{:doc "A default schema describing a map which contains edges and possibly other keys."}
+  edges-schema {:schema {:type :map
+                         :fields {:edges {:type :map
+                                          :fields {:* :any}}
+                                  :* :any}}})
+
 ;; Don't need any special closures here
 (extend-type Object
   Preferences
@@ -162,9 +175,8 @@
 
   Schema
   ;; default behavior: no fields, all nodes valid
-  (fields
-    ([layer] nil)
-    ([layer subfields] nil))
+  (schema
+    ([layer id] edges-schema))
 
   ;; TODO add a whats-wrong-with-this-node function
   (node-valid? [layer attrs] true)

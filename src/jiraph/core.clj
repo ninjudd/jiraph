@@ -83,7 +83,7 @@
                 args#))))
   node-id-seq get-node find-node query-in-node get-in-node get-edges get-edge
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
-  fields node-valid? verify-node
+  fields schema node-valid? verify-node
   get-all-revisions get-revisions
   get-incoming get-incoming-map)
 
@@ -152,22 +152,6 @@
   [& layers]
   (apply max 0 (for [layer (vals (as-layer-map layers))]
                  (graph/get-in-node layer [:meta :rev] 0))))
-
-(defn schema
-  "Return a map of fields for a given type to the metadata for each layer. If a subfield is
-  provided, then the schema returned is for the nested type within that subfield."
-  ([type]
-     (apply merge-with conj
-            (for [layer        (layers type)
-                  [field meta] (layer/fields layer type)]
-              {field {layer meta}})))
-  ([type subfield]
-     (apply merge-with conj
-            (for [layer        (keys (get (schema type) subfield))
-                  [field meta] (layer/fields layer type [subfield])]
-              {field {layer meta}}))))
-
-(alter-var-root #'schema #(with-meta (memoize-deref [#'*graph*] %) (meta %)))
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"

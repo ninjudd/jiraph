@@ -99,11 +99,8 @@
     (db/truncate! db))
 
   Schema
-  (fields [this id]
+  (schema [this id]
     (:schema (meta (format-for this id))))
-  (fields [this id subfields]
-    (-> (layer/fields this id)
-        (select-keys subfields)))
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
@@ -173,7 +170,9 @@
 ;; plain old codecs will be accepted as well
 (let [default-codec (cereal/revisioned-clojure-codec adjoin)
       codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
-  (defn make [db & {{:keys [node meta layer-meta]} :formats,
+  (defn make [db & {{:keys [node meta layer-meta]
+                     :or {node (-> (codec-fn default-codec)
+                                   (vary-meta merge layer/edges-schema))}} :formats,
                     :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format meta-format layer-meta-format]
           (map codec-fn [node meta layer-meta])]
