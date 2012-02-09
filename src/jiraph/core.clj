@@ -84,9 +84,19 @@
                 args#))))
   node-id-seq get-node find-node query-in-node get-in-node get-edges get-edge
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
-  fields schema node-valid? verify-node
+  fields node-valid? verify-node
   get-all-revisions get-revisions
   get-incoming get-incoming-map)
+
+(defn schema
+  "Get the schema for a node-type across all layers."
+  [type]
+  (apply merge-with conj
+         (for [[layer-name layer] (layer-entries)
+               :let [schema (graph/schema layer type)]
+               :when (= :map (:type schema))
+               [field-name type-info] (:fields schema)]
+           {field-name {layer-name type-info}})))
 
 (defn append-node!
   "Deprecated: a shortcut for update-in-node! with useful.utils/adjoin."
