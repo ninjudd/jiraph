@@ -22,21 +22,22 @@
                        *revision*)
     (throw (IOException. (format "attempt to use a layer without an open graph")))))
 
-(letfn [(layer-entries
-          ([] *graph*)
-          ([type] (for [[name layer :as e] *graph*
-                        :let [meta (meta layer)]
-                        :when (and (contains? (:types meta) type)
-                                   (not (:hidden meta)))]
-                    (map-entry name (retro/at-revision layer *revision*)))))]
-  (defn layer-names
-    "Return the names of all layers in the current graph."
-    ([]     (keys *graph*))
-    ([type] (map key (layer-entries type))))
-  (defn layers
-    "Return all layers in the current graph."
-    ([]     (map val (layer-entries)))
-    ([type] (map val (layer-entries type)))))
+(defn layer-entries
+  ([] *graph*)
+  ([type] (for [[name layer :as e] *graph*
+                :let [meta (meta layer)]
+                :when (and (contains? (:types meta) type)
+                           (not (:hidden meta)))]
+            (map-entry name (retro/at-revision layer *revision*)))))
+
+(defn layer-names
+  "Return the names of all layers in the current graph."
+  ([]     (keys *graph*))
+  ([type] (map key (layer-entries type))))
+(defn layers
+  "Return all layers in the current graph."
+  ([]     (map val (layer-entries)))
+  ([type] (map val (layer-entries type))))
 
 (defn as-layer-map
   "Create a map of {layer-name, layer} pairs from the input. A keyword yields a
