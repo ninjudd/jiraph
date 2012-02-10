@@ -421,13 +421,15 @@
 ;; - return: a gloss codec
 ;; plain old codecs will be accepted as well
 (let [default-codec (cereal/revisioned-clojure-codec adjoin)
-      codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
+      codec-fn      (fn [codec]
+                      (let [codec (or codec default-codec)]
+                        (-> (as-fn codec) (copy-meta codec))))]
   (defn make [db & {{:keys [node meta layer-meta]
                      :or {node (-> [[[:edges :*]]
                                     [[]]]
                                    (with-meta layer/edges-schema))}} :formats,
 
-                    :keys [assoc-mode] :or {assoc-mode :append}}]
+                     :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format meta-format layer-meta-format]
           (for [format [node meta layer-meta]]
             (if (seq format)

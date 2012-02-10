@@ -4,7 +4,7 @@
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
-        [useful.utils :only [if-ns adjoin returning]]
+        [useful.utils :only [if-ns adjoin returning copy-meta]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn]]
         [useful.datatypes :only [assoc-record]]
@@ -169,7 +169,9 @@
 ;; - return: a gloss codec
 ;; plain old codecs will be accepted as well
 (let [default-codec (cereal/revisioned-clojure-codec adjoin)
-      codec-fn      (fn [codec] (as-fn (or codec default-codec)))]
+      codec-fn      (fn [codec]
+                      (let [codec (or codec default-codec)]
+                        (-> (as-fn codec) (copy-meta codec))))]
   (defn make [db & {{:keys [node meta layer-meta]
                      :or {node (-> (codec-fn default-codec)
                                    (vary-meta merge layer/edges-schema))}} :formats,
