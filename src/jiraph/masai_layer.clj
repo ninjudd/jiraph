@@ -80,7 +80,7 @@
         (when (= f (:reduce-fn (meta encoder)))
           (fn [m]
             (db/append! db id
-                        (bufseq->bytes (encode (encoder {:revision revision})
+                        (bufseq->bytes (encode (encoder {:revision revision :id id})
                                                (if keys
                                                  (assoc-in {} keys m)
                                                  m))))
@@ -100,7 +100,7 @@
 
   Schema
   (schema [this id]
-    (:schema (meta (format-for this id))))
+    (:schema (meta ((format-for this id) {:id id :revision revision}))))
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
