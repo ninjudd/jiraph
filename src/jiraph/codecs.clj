@@ -1,7 +1,8 @@
 (ns jiraph.codecs
   (:use [gloss.core.protocols :only [Reader Writer read-bytes write-bytes sizeof]])
   (:require [gloss.io   :as io]
-            [gloss.core :as gloss]))
+            [gloss.core :as gloss]
+            [ego.core   :as ego]))
 
 (defn encode [codec val opts] ; (opts -> Codec) -> Deserialized -> opts -> [Byte]
   (io/encode (codec opts) val))
@@ -39,3 +40,10 @@
                                  (gloss/compile-frame (codec-builder opts)
                                                       nil ;; never write with this codec
                                                       (partial map :_rev)))}))))
+
+(defn wrap-typing [codec-fn types]
+  (fn [{:keys [id] :as opts}]
+    (let [codec (codec-fn opts)]
+      (if (types (ego/type-key id))
+        codec
+        (vary-meta codec dissoc :schema)))))
