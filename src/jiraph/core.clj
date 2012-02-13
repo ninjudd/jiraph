@@ -88,15 +88,22 @@
   get-all-revisions get-revisions
   get-incoming get-incoming-map)
 
-(defn schema
-  "Get the schema for a node-type across all layers."
+(defn schema-by-layer
+  "Get the schema for a node-type across all layers, indexed by layer."
   [type]
-  (apply merge-with conj
-         (for [[layer-name layer] (layer-entries)
+  (into {}
+        (for [[layer-name layer] (layer-entries)
                :let [schema (graph/schema layer type)]
-               :when (= :map (:type schema))
-               [field-name type-info] (:fields schema)]
-           {field-name {layer-name type-info}})))
+               :when (= :map (:type schema))]
+          [layer-name (:fields schema)])))
+
+(defn schema-by-attr
+  "Get the schema for a node-type across all layers, indexed by attribute name."
+  [type]
+  (apply merge-with conj {}
+         (for [[layer-name attrs] (schema-by-layer type)
+               [attr type] attrs]
+           {attr {layer-name type}})))
 
 (defn append-node!
   "Deprecated: a shortcut for update-in-node! with useful.utils/adjoin."
