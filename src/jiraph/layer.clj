@@ -174,9 +174,11 @@
     (:single-edge layer))
 
   Schema
-  ;; default behavior: no fields, all nodes valid
-  (schema
-    ([layer id] edges-schema))
+  ;; default behavior: no schema, all nodes valid
+  (schema [layer id]
+    edges-schema)
+  (verify-node [layer id attrs]
+    true)
 
   ;; TODO add a whats-wrong-with-this-node function
   (node-valid? [layer attrs] true)
@@ -193,6 +195,11 @@
   ;; can't optimize anything
   (query-fn  [layer keyseq f] nil)
   (update-fn [layer keyseq f] nil))
+
+(extend-type nil
+  Schema
+  (schema [layer id] nil)
+  (verify-node [layer id attrs] true))
 
 (defn default-impl [protocol]
   (get-in protocol [:impls Object]))
