@@ -11,13 +11,13 @@
      (protobuf-codec proto adjoin))
   ([proto reduce-fn]
      (let [proto-codec (protobuf/protobuf-codec proto :repeated true)
-           revisioned (revisioned-codec proto-codec reduce-fn)]
+           codec-builder (constantly proto-codec)
+           revisioned (revisioned-codec codec-builder reduce-fn)]
        (-> (if (= adjoin reduce-fn)
              (let [full (protobuf/protobuf-codec proto)]
-               (fn [{:keys [revision]}]
+               (fn [{:keys [revision] :as opts}]
                  (if (nil? revision)
                    full
-                   (revisioned revision))))
-             (fn [{:keys [revision]}]
-               (revisioned revision)))
+                   (revisioned opts))))
+             revisioned)
            (copy-meta proto-codec)))))
