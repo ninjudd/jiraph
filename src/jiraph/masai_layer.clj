@@ -44,6 +44,10 @@
       (bytes->long bytes))))
 
 (defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
+  Object
+  (toString [this]
+    (pr-str this))
+
   Meta
   (meta-key [this k]
     (str "_" k))
