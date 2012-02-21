@@ -3,7 +3,7 @@
             [jiraph.layer :as layer]
             [clojure.string :as s]
             [retro.core :as retro])
-  (:use     [useful.utils :only [returning memoize-deref map-entry adjoin]]
+  (:use     [useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
             [useful.map :only [update into-map]]
             [useful.macro :only [macro-do]])
   (:import java.io.IOException))
@@ -167,6 +167,26 @@
   [layer & forms]
   `(graph/with-transaction (layer ~layer)
      ~@forms))
+
+(defmacro with-transactions
+  "Open a transaction on each listed layer, or all layers if none are specified.
+   Note that the transactions are not all atomic - one may commit and others abort -
+   so this should be used mainly for improving performance by reducing number of commits."
+  [layers & forms]
+  (let [layers (condp invoke layers
+                 keyword? `[~layers]
+                 empty? `(layer-names)
+                 [~@layers])]
+    ;; with-transaction always returns a layer object, so we have to use side effects to pass
+    ;; back a different return value
+    `(let [ret# (atom nil)]
+       ((reduce (fn [f# layer-name#]
+                  (fn []
+                    (with-transaction layer-name#
+                      (f#))))
+                #(reset! ret# (do ~@forms))
+                ~layers))
+       @ret#)))
 
 (defn current-revision
   "The maximum revision on all specified layers, or all layers if none are specified."
