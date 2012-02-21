@@ -36,7 +36,7 @@
   ([type] (map key (layer-entries type))))
 (defn layers
   "Return all layers in the current graph."
-  ([]     (map val (layer-entries)))
+  ([]     (vals *graph*))
   ([type] (map val (layer-entries type))))
 
 (defn as-layer-map
@@ -89,26 +89,29 @@
   get-incoming get-incoming-map)
 
 (defn schema-by-layer
-  "Get the schema for a node-type across all layers, indexed by layer."
-  [type]
-  (into {}
-        (for [[layer-name layer] (layer-entries)
-               :let [schema (graph/schema layer type)]
-               :when (= :map (:type schema))]
-          [layer-name (:fields schema)])))
+  "Get the schema for a node-type across all layers, indexed by layer.
+
+   Optionally you may pass in a graph to use instead of *graph*, to allow
+   things like filtering which layers are included in the schema."
+  ([type] (schema-by-layer type *graph*))
+  ([type graph]
+     (into {}
+           (for [[layer-name layer] graph
+                 :let [schema (graph/schema layer type)]
+                 :when (= :map (:type schema))]
+             [layer-name (:fields schema)]))))
 
 (defn schema-by-attr
-  "Get the schema for a node-type across all layers, indexed by attribute name."
-  [type]
-  (apply merge-with conj {}
-         (for [[layer-name attrs] (schema-by-layer type)
-               [attr type] attrs]
-           {attr {layer-name type}})))
+  "Get the schema for a node-type across all layers, indexed by attribute name.
 
-(defn append-node!
-  "Deprecated: a shortcut for update-in-node! with useful.utils/adjoin."
-  [layer-name & attrs]
-  (graph/update-in-node! (layer layer-name) adjoin (into-map attrs)))
+   Optionally you may pass in a graph to use instead of *graph*, to allow
+   things like filtering which layers are included in the schema."
+  ([type] (schema-by-attr type *graph*))
+  ([type graph]
+     (apply merge-with conj {}
+            (for [[layer-name attrs] (schema-by-layer type graph)
+                  [attr type] attrs]
+              {attr {layer-name type}}))))
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution
 ;; or any indirection, because they can't meaningfully work with layer names but
