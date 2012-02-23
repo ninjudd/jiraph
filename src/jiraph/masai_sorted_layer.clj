@@ -131,7 +131,7 @@
         orig-paths (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
                                     (meta-key? layer node-id) :node-meta-format
                                     :else :node-format))]
-    (-> (for [[path codec-fn] orig-paths]
+    (-> (for [[path codec-fn] (orig-paths locked)]
           [path (-> (fn [opts]
                       (codec-fn (merge opts locked)))
                     (copy-meta codec-fn))])
