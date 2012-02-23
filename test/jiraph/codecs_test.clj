@@ -15,5 +15,5 @@
                               [2 {:foo 4 :bar 2 :baz 8 :bap [1 2 3]}]
                               [3 {:foo 3 :bar 2 :baz 8 :bap [1 2 3 10 11 12]}]]]
           (let [node (decode codec data {:revision rev})]
-            (is (= (-> node meta :revision) rev))
+            (is (= (-> node meta :revisions last) rev))
             (is (= node expect))))))))

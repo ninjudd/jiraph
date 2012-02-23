@@ -6,7 +6,7 @@
         useful.debug
         [useful.utils :only [if-ns adjoin returning copy-meta]]
         [useful.seq :only [find-with]]
-        [useful.fn :only [as-fn]]
+        [useful.fn :only [as-fn fix]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
@@ -69,11 +69,12 @@
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
-              (let [codec ((format-for this id) {:revision revision :id id})]
+              (let [codec ((format-for this id) (-> {:revision revision :id id}
+                                                    (fix append-only?
+                                                         #(assoc % :codec_reset true))))]
                 (bufseq->bytes (encode codec data))))]
-      (if append-only?
-        (db/append! db id (bytes (assoc attrs :_reset true)))
-        (db/put!    db id (bytes attrs)))))
+      ((if append-only? db/append! db/put!)
+       db id (bytes attrs))))
   (dissoc-node! [this id]
     (db/delete! db id))
 

@@ -4,11 +4,11 @@
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
-        [useful.utils :only [if-ns adjoin returning map-entry let-later empty-coll? copy-meta]]
+        [useful.utils :only [invoke if-ns adjoin returning map-entry let-later empty-coll? copy-meta]]
         [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
         [useful.map :only [assoc-levels keyed]]
-        [useful.fn :only [as-fn knit any to-fix]]
+        [useful.fn :only [as-fn knit any fix to-fix !]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
@@ -156,7 +156,7 @@
   [layer deletion-ranges]
   (doseq [{:keys [start stop codec-fn]} deletion-ranges]
     (let [delete (if (:append-only? layer)
-                   (let-later [^:delay deleted (bufseq->bytes (encode (codec-fn {:reset true})
+                   (let-later [^:delay deleted (bufseq->bytes (encode (codec-fn {:codec_reset true})
                                                                       {}))]
                      (fn [cursor]
                        (-> cursor
@@ -238,7 +238,7 @@
   (let [{:keys [db append-only?]} layer
         [id & keys] keyseq
         codecs (realize-codecs path-codecs
-                               (when append-only? {:reset true}))
+                               (when append-only? {:codec_reset true}))
         write-mode (if append-only?, db/append! db/put!)
         writer (partial write-mode db)
         deletion-ranges (for [[path codec-fn] path-codecs
@@ -416,6 +416,16 @@
        (defn- make-db [db]
          db))
 
+(defn wrap-default-codecs [f default]
+  (fn [opts]
+    (when-let [codec-paths (f opts)]
+      (-> (for [[path codec-fn] codec-paths]
+            [path (condp invoke codec-fn
+                    nil? default
+                    (! fn?) (constantly codec-fn)
+                    codec-fn)])
+          (copy-meta codec-paths)))))
+
 ;; formats should be functions:
 ;; - accept as arg: a map containing {revision and node-id}
 ;; - return: a gloss codec
@@ -424,20 +434,17 @@
       codec-fn      (fn [codec]
                       (let [codec (or codec default-codec)]
                         (-> (as-fn codec) (copy-meta codec))))]
-  (defn make [db & {{:keys [node meta layer-meta]
-                     :or {node (-> [[[:edges :*]]
-                                    [[]]]
-                                   (with-meta layer/edges-schema))}} :formats,
-
-                     :keys [assoc-mode] :or {assoc-mode :append}}]
+  (defn make [db & {{:keys [node meta layer-meta]} :formats,
+                    :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format meta-format layer-meta-format]
           (for [format [node meta layer-meta]]
-            (if (seq format)
-              (-> (for [[path f] format]
-                    (map-entry path (codec-fn f)))
-                  (copy-meta format))
-              (-> [[[] (codec-fn nil)]]
-                  (vary-meta merge {:schema {:type :map, :fields {:* :any}}}))))]
+            (-> format
+                (fix nil? (constantly (-> [[[:edges :*]]
+                                           [[]]]
+                                          (with-meta layer/edges-schema))))
+                (fix (! fn?) constantly)
+                (copy-meta format)
+                (wrap-default-codecs (as-fn default-codec))))]
       (MasaiSortedLayer. (make-db db) nil
                          (case assoc-mode
                            :append true
