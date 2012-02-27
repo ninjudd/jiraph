@@ -1,11 +1,19 @@
 (ns jiraph.codecs
-  (:use [gloss.core.protocols :only [Reader Writer read-bytes write-bytes sizeof]])
+  (:use [gloss.core.protocols :only [Reader Writer read-bytes write-bytes sizeof]]
+        [useful.experimental :only [lift-meta]])
   (:require [gloss.io   :as io]
             [gloss.core :as gloss]
             [ego.core   :as ego]))
 
 (def reset-key :codec_reset)
 (def revision-key :revisions)
+(def len-key :proto_length)
+
+(defn tidy-up [node]
+  (binding [*print-meta* true]
+    (-> node
+        (dissoc reset-key len-key)
+        (lift-meta revision-key))))
 
 (defn encode [codec val opts] ; (opts -> Codec) -> Deserialized -> opts -> [Byte]
   (io/encode (codec opts) val))
@@ -19,9 +27,7 @@
             (if (reset-key x), (dissoc x reset-key) (reduce-fn acc x)))
           (combine [items]
             (when (seq items)
-              (let [node (or (reduce reducer items) {})]
-                (with-meta (dissoc node reset-key revision-key)
-                  (select-keys node [revision-key])))))]
+              (tidy-up (or (reduce reducer items) {}))))]
     (-> (fn [{reset reset-key, :keys [revision] :as opts}]
           (let [codec (codec-builder opts)
                 maybe-reset (if reset
@@ -35,6 +41,7 @@
             (if revision
               (frame #(assoc % revision-key [revision])
                      (fn [vals]
+                       ;; this is run BEFORE tidy-up, so revision is not in the meta but in the node
                        (take-while #(<= (first (revision-key %)) revision)
                                    vals)))
               (frame identity identity))))
@@ -42,7 +49,7 @@
                     :revisions (fn [opts]
                                  (gloss/compile-frame (codec-builder opts)
                                                       nil ;; never write with this codec
-                                                      (comp revision-key last)))}))))
+                                                      (comp revision-key meta last)))}))))
 
 (defn wrap-typing [codec-fn types]
   (fn [{:keys [id] :as opts}]

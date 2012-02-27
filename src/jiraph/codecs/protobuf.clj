@@ -1,6 +1,7 @@
 (ns jiraph.codecs.protobuf
-  (:use [jiraph.codecs :only [revisioned-codec]]
-        [useful.utils :only [adjoin copy-meta]])
+  (:use [jiraph.codecs :only [revisioned-codec tidy-up]]
+        [useful.utils :only [adjoin copy-meta]]
+        [useful.experimental :only [lift-meta]])
   (:require [protobuf.codec :as protobuf]))
 
 ;; NB doesn't currently work if you do a full/optimized read with _reset keys.
@@ -14,7 +15,8 @@
            codec-builder (constantly proto-codec)
            revisioned (revisioned-codec codec-builder reduce-fn)]
        (-> (if (= adjoin reduce-fn)
-             (let [full (protobuf/protobuf-codec proto)]
+             (let [full (gloss/compile-frame (protobuf/protobuf-codec proto)
+                                             identity, tidy-up)]
                (fn [{:keys [revision] :as opts}]
                  (if (nil? revision)
                    full
