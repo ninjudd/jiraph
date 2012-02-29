@@ -2,7 +2,8 @@
   (:use [jiraph.codecs :only [revisioned-codec tidy-up]]
         [useful.utils :only [adjoin copy-meta]]
         [useful.experimental :only [lift-meta]])
-  (:require [protobuf.codec :as protobuf]))
+  (:require [protobuf.codec :as protobuf]
+            [gloss.core :as gloss]))
 
 ;; NB doesn't currently work if you do a full/optimized read with _reset keys.
 ;; plan is to fall back to non-optimized reads in that case, but support an
