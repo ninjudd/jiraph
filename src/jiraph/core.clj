@@ -85,8 +85,7 @@
   node-id-seq get-node find-node query-in-node get-in-node get-edges get-edge
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   fields node-valid? verify-node
-  get-all-revisions get-revisions
-  get-incoming get-incoming-map)
+  get-revisions get-incoming get-incoming-map)
 
 (defn schema-by-layer
   "Get the schema for a node-type across all layers, indexed by layer.

@@ -148,9 +148,8 @@
         (at-revision 99
           (is (not (get-node layer-name "3")))))
 
-      (testing "revisions and all-revisions returns an empty list for nodes without revisions"
-        (is (empty? (get-revisions layer-name "1")))
-        (is (empty? (get-all-revisions layer-name "1"))))
+      (testing "revisions returns an empty list for nodes without revisions"
+        (is (empty? (get-revisions layer-name "1"))))
 
       (testing "max-revision"
         (at-revision 102

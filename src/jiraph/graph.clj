@@ -294,18 +294,10 @@
   (layer/verify-node layer id attrs)
   nil)
 
-(defn ^{:dynamic true} get-all-revisions
-  "Return a seq of all revisions that have ever modified this node on this layer, even if the data has been
-   subsequently compacted."
-  [layer id]
-  (filter pos? (layer/get-revisions layer id)))
-
 (defn ^{:dynamic true} get-revisions
   "Return a seq of all revisions with data for this node."
   [layer id]
-  (reverse
-   (take-while pos? (reverse (layer/get-revisions layer id)))))
-
+  (layer/get-revisions layer id))
 
 (extend-type Object
   layer/Meta
@@ -369,8 +361,7 @@
       (binding [*use-outer-cache* true
                 get-node          (memoize-deref [write-count] get-node)
                 get-incoming      (memoize-deref [write-count] get-incoming)
-                get-revisions     (memoize-deref [write-count] get-revisions)
-                get-all-revisions (memoize-deref [write-count] get-all-revisions)]
+                get-revisions     (memoize-deref [write-count] get-revisions)]
         (f)))))
 
 (defmacro with-caching
