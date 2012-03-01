@@ -16,11 +16,13 @@
            codec-builder (constantly proto-codec)
            revisioned (revisioned-codec codec-builder reduce-fn)]
        (-> (if (= adjoin reduce-fn)
-             (let [full (gloss/compile-frame (protobuf/protobuf-codec proto)
-                                             identity, tidy-up)]
+             (let [full-codec (protobuf/protobuf-codec proto)
+                   tidy-full (-> (gloss/compile-frame full-codec
+                                                      identity, tidy-up)
+                                 (copy-meta full-codec))]
                (fn [{:keys [revision] :as opts}]
                  (if (nil? revision)
-                   full
+                   tidy-full
                    (revisioned opts))))
              revisioned)
            (copy-meta proto-codec)))))

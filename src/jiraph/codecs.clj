@@ -1,6 +1,7 @@
 (ns jiraph.codecs
   (:use [gloss.core.protocols :only [Reader Writer read-bytes write-bytes sizeof]]
-        [useful.experimental :only [lift-meta]])
+        [useful.experimental :only [lift-meta]]
+        [useful.utils :only [copy-meta]])
   (:require [gloss.io   :as io]
             [gloss.core :as gloss]
             [ego.core   :as ego]))
@@ -39,6 +40,7 @@
                             (-> (gloss/compile-frame codec
                                                      (comp list pre-encode maybe-reset)
                                                      (comp combine post-decode))
+                                (copy-meta codec)
                                 (vary-meta assoc :reduce-fn reduce-fn)))]
                 (if revision
                   (frame #(assoc % revision-key [revision])
