@@ -59,6 +59,5 @@
 (defn wrap-typing [codec-fn types]
   (fn [{:keys [id] :as opts}]
     (let [codec (codec-fn opts)]
-      (if (types (ego/type-key id))
-        codec
-        (vary-meta codec dissoc :schema)))))
+      (when (types (ego/type-key id))
+        codec))))
