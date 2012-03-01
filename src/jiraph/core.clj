@@ -98,7 +98,7 @@
      (into {}
            (for [[layer-name layer] graph
                  :let [schema (graph/schema layer type)]
-                 :when (= :map (:type schema))]
+                 :when (seq schema)]
              [layer-name (:fields schema)]))))
 
 (defn schema-by-attr
