@@ -1,11 +1,11 @@
 (ns jiraph.core
+  (:use     [useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
+            [useful.map :only [update into-map]]
+            [useful.macro :only [macro-do]])
   (:require [jiraph.graph :as graph]
             [jiraph.layer :as layer]
             [clojure.string :as s]
             [retro.core :as retro])
-  (:use     [useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
-            [useful.map :only [update into-map]]
-            [useful.macro :only [macro-do]])
   (:import java.io.IOException))
 
 (def ^{:dynamic true} *graph*           nil)
