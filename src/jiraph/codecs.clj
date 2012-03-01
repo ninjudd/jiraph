@@ -10,10 +10,9 @@
 (def len-key :proto_length)
 
 (defn tidy-up [node]
-  (binding [*print-meta* true]
-    (-> node
-        (dissoc reset-key len-key)
-        (lift-meta revision-key))))
+  (-> node
+      (dissoc reset-key len-key)
+      (lift-meta revision-key)))
 
 (defn encode [codec val opts] ; (opts -> Codec) -> Deserialized -> opts -> [Byte]
   (io/encode (codec opts) val))
