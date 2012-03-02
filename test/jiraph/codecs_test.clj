@@ -1,6 +1,9 @@
 (ns jiraph.codecs-test
   (:use clojure.test jiraph.codecs jiraph.codecs.cereal
+        retro.core
         [useful.utils :only [adjoin]])
+  (:require [jiraph.masai-layer :as masai]
+            [jiraph.graph :as graph])
   (:import (java.nio ByteBuffer)))
 
 (deftest revisioned-codecs
@@ -17,3 +20,29 @@
           (let [node (decode codec data {:revision rev})]
             (is (= (-> node meta :revisions last) rev))
             (is (= node expect))))))))
+
+(deftest typed-layers
+  (let [base (revisioned-clojure-codec adjoin)
+        wrapped (wrap-typing base {:profile :union})
+        id "person-1"]
+    (masai/with-temp-layer [base-layer :formats {:node base}]
+      (let [l (at-revision base-layer 1)]
+        (dotxn l
+          (-> l
+              (graph/assoc-node id {:foo :blah})))
+        (is (= {:foo :blah}
+               (graph/get-node l id)))
+        (is (= [1] (graph/get-revisions l id)))))
+    (masai/with-temp-layer [wrapped-layer :formats {:node wrapped}]
+      (let [l (at-revision wrapped-layer 1)]
+        (is (thrown? Exception ;; due to no codec for writing "person"s
+                     (dotxn l
+                       (-> l
+                           (graph/assoc-node id {:foo :blah})))))
+        (let [id "profile-1"]
+          (dotxn l
+            (-> l
+                (graph/assoc-node id {:foo :blah})))
+          (is (= {:foo :blah}
+                 (graph/get-node l id)))
+          (is (= [1] (graph/get-revisions l id))))))))

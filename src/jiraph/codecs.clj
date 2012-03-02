@@ -57,7 +57,8 @@
                                                         (comp revision-key meta)))})))))
 
 (defn wrap-typing [codec-fn types]
-  (fn [{:keys [id] :as opts}]
-    (let [codec (codec-fn opts)]
-      (when (types (ego/type-key id))
-        codec))))
+  (-> (fn [{:keys [id] :as opts}]
+        (let [codec (codec-fn opts)]
+          (when (types (ego/type-key id))
+            codec)))
+      (copy-meta codec-fn)))
