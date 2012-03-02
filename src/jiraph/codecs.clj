@@ -21,6 +21,12 @@
 (defn decode [codec data opts]
   (io/decode (codec opts) data))
 
+(defn revisions-only [codec-fn]
+  (fn [opts] ;; read revisions just by discarding the rest
+    (gloss/compile-frame (codec-fn opts)
+                         nil ;; never write with this codec
+                         (comp revision-key meta))))
+
 (defn revisioned-codec [codec-builder reduce-fn] ;; Codec -> (a -> a) -> (opts -> Codec) ;; TODO fix
   ;; TODO take in a map of reduce-fn and (optionally) init-val
   (letfn [(reducer [acc x]
@@ -51,10 +57,7 @@
                   (frame identity identity))))]
       (-> node-codec
           (with-meta {:reduce-fn reduce-fn
-                      :revisions (fn [opts] ;; read revisions just by discarding the rest
-                                   (gloss/compile-frame (node-codec opts)
-                                                        nil ;; never write with this codec
-                                                        (comp revision-key meta)))})))))
+                      :revisions (revisions-only node-codec)})))))
 
 (defn wrap-typing [codec-fn types]
   (-> (fn [{:keys [id] :as opts}]
