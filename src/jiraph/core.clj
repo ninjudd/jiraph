@@ -24,10 +24,8 @@
 
 (defn layer-entries
   ([] *graph*)
-  ([type] (for [[name layer :as e] *graph*
-                :let [meta (meta layer)]
-                :when (and (contains? (:types meta) type)
-                           (not (:hidden meta)))]
+  ([type] (for [[name layer] *graph*
+                :when (seq (graph/schema layer type))]
             (map-entry name (retro/at-revision layer *revision*)))))
 
 (defn layer-names
