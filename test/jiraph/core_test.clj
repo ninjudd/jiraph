@@ -205,6 +205,27 @@
         (at-revision 201
           (is (= "one" (get-in-node layer-name ["13" :edges "11" :a]))))))))
 
+(deftest test-current-revision
+  (with-graph (make-graph)
+    (is (zero? (current-revision)))
+    (with-each-layer all
+      (truncate! layer-name)
+
+      (is (zero? (current-revision layer-name)))
+
+      (testing "assoc-node"
+        (at-revision 100 (assoc-node! layer-name "1" {:edges {"2" {:data "whatever"}}}))
+        (is (= 100 (current-revision layer-name)))))
+
+    (is (= 100 (current-revision)))
+
+    (with-each-layer all
+      (testing "update-in-node"
+        (at-revision 200 (update-in-node! layer-name ["1" :memories] (constantly 3)))
+        (is (= 200 (current-revision layer-name)))))
+
+    (is (= 200 (current-revision)))))
+
 (comment
   (deftest compact-node
     (with-graph (make-graph)

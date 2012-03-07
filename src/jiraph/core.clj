@@ -173,7 +173,7 @@
   (let [layers (condp invoke layers
                  keyword? `[~layers]
                  empty? `(layer-names)
-                 [~@layers])]
+                 (vec layers))]
     ;; with-transaction always returns a layer object, so we have to use side effects to pass
     ;; back a different return value
     `(let [ret# (atom nil)]
@@ -188,8 +188,8 @@
 (defn current-revision
   "The maximum revision on all specified layers, or all layers if none are specified."
   [& layers]
-  (apply max 0 (for [layer (vals (as-layer-map layers))]
-                 (graph/get-in-node layer [:meta :rev] 0))))
+  (apply max 0 (map retro/max-revision
+                    (vals (as-layer-map layers)))))
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"

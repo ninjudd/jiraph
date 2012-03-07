@@ -40,8 +40,9 @@
     (when-let [rev (:revision layer)]
       (db/put! (:db layer) revision-key (long->bytes rev))))
   (defn- read-maxrev [layer]
-    (when-let [bytes (db/fetch (:db layer) revision-key)]
-      (bytes->long bytes))))
+    (if-let [bytes (db/fetch (:db layer) revision-key)]
+      (bytes->long bytes)
+      0)))
 
 (defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
   Object

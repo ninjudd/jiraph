@@ -179,8 +179,9 @@
     (when-let [rev (:revision layer)]
       (db/put! (:db layer) revision-key (long->bytes rev))))
   (defn- read-maxrev [layer]
-    (when-let [bytes (db/fetch (:db layer) revision-key)]
-      (bytes->long bytes))))
+    (if-let [bytes (db/fetch (:db layer) revision-key)]
+      (bytes->long bytes)
+      0)))
 
 (defn- node-chunks [codecs db id]
   (for [[path codec] codecs

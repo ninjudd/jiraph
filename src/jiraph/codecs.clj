@@ -59,9 +59,12 @@
           (with-meta {:reduce-fn reduce-fn
                       :revisions (revisions-only node-codec)})))))
 
+(def ^{:dynamic true, :doc "When bound to false, codecs created by wrap-typing will ignore types."}
+  *honor-layer-types* true)
+
 (defn wrap-typing [codec-fn types]
   (-> (fn [{:keys [id] :as opts}]
-        (let [codec (codec-fn opts)]
-          (when (types (ego/type-key id))
-            codec)))
+        (when (or (not *honor-layer-types*)
+                  (get types (ego/type-key id)))
+          (codec-fn opts)))
       (copy-meta codec-fn)))
