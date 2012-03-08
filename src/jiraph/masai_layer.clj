@@ -3,7 +3,6 @@
                              node-id-seq meta-key meta-key?] :as layer]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
-        useful.debug
         [useful.utils :only [if-ns adjoin returning copy-meta]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix]]
@@ -116,9 +115,9 @@
 
   ChangeLog
   (get-revisions [this id]
-    (when-let [rev-codec-builder (?! (-> (format-for this id) meta :revisions))]
-      (when-let [data (?! (db/fetch db id))]
-        (let [revs (decode (?! (rev-codec-builder {})) [(ByteBuffer/wrap data)])]
+    (when-let [rev-codec-builder (-> (format-for this id) meta :revisions)]
+      (when-let [data (db/fetch db id)]
+        (let [revs (decode (rev-codec-builder {}) [(ByteBuffer/wrap data)])]
           (if-not revision
             revs
             (take-while #(<= % revision) revs))))))
