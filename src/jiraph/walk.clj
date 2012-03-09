@@ -13,7 +13,7 @@
   *parallel-follow* false)
 
 (defrecord Step      [id distance from-id layer source edge alt-ids data])
-(defrecord Walk      [focus-id steps id-set ids result-count to-follow max-rev terminated? traversal])
+(defrecord Walk      [focus-id steps id-set ids result-count to-follow terminated? traversal])
 (defrecord Traversal [traverse? skip? add? follow? count? follow-layers init-step update-step extract-edges terminate?])
 
 (record-accessors Step Walk)
