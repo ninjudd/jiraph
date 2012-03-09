@@ -118,9 +118,10 @@
     (when-let [rev-codec-builder (-> (format-for this id) meta :revisions)]
       (when-let [data (db/fetch db id)]
         (let [revs (decode (rev-codec-builder {}) [(ByteBuffer/wrap data)])]
-          (if-not revision
-            revs
-            (take-while #(<= % revision) revs))))))
+          (distinct
+           (if-not revision
+             revs
+             (take-while #(<= % revision) revs)))))))
 
   ;; TODO this is stubbed, will need to work eventually
   (get-changed-ids [layer rev]
