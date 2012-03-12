@@ -153,8 +153,7 @@
 
       (testing "revisions are empty when read before they were created"
         (at-revision 1
-          (is (empty? (get-revisions layer-name "3")))
-          (is (empty? (get-all-revisions layer-name "3")))))
+          (is (empty? (get-revisions layer-name "3")))))
 
       (testing "max-revision"
         (at-revision 102
