@@ -1,6 +1,6 @@
 .cake
 autodoc
-build
+target
 lib
 classes
 *.jar
