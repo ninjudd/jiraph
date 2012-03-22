@@ -17,9 +17,14 @@
      :tp  (masai)
      :stm (sorted)}))
 
+(defmacro test-each-layer [layer & forms]
+  `(with-each-layer ~layer
+     (testing ~'layer-name
+       ~@forms)))
+
 (deftest node-info
   (with-graph (make-graph)
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
       (testing "node-ids"
         (assoc-node! layer-name "1" {:foo 0})
@@ -27,7 +32,7 @@
 
 (deftest update-test
   (with-graph (make-graph)
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
       (testing "update-node! supports artitrary functions"
         (let [node1 {:foo 2 :bar "three" :baz [1 2 3]}
@@ -52,7 +57,7 @@
 ;; TODO add a way to test that a node isn't gotten multiple times unless writes happen
 (deftest caching
   (with-graph (make-graph)
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
       (testing "with-caching"
         (with-caching true
@@ -75,7 +80,7 @@
 
 (deftest transactions
   (with-graph (make-graph)
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
       (let [node {:foo 7 :bar "seven"}]
         (with-transaction layer-name
@@ -97,7 +102,7 @@
 
 (deftest properties
   (with-graph (make-graph)
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
       (testing "layer-wide properties"
         (let [keys [:meta :foo]
@@ -111,7 +116,7 @@
 
 (deftest incoming
   (with-graph (make-graph)
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
       (testing "keeps track of incoming edges"
         (is (empty? (get-incoming layer-name "1")))
@@ -129,7 +134,7 @@
 
 (deftest non-transactional-revisions
   (with-graph (make-graph)
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
 
       (testing "append-node! supports viewing old revisions"
@@ -169,7 +174,7 @@
 
 (deftest revisioned-incoming
   (with-graph (make-graph)
-    (with-each-layer [:stm]
+    (test-each-layer [:stm]
       (truncate! layer-name)
       (at-revision 100 (is (empty? (get-incoming layer-name "11"))))
       (at-revision 100
@@ -207,7 +212,7 @@
 (deftest test-current-revision
   (with-graph (make-graph)
     (is (zero? (current-revision)))
-    (with-each-layer all
+    (test-each-layer all
       (truncate! layer-name)
 
       (is (zero? (current-revision layer-name)))
@@ -218,7 +223,7 @@
 
     (is (= 100 (current-revision)))
 
-    (with-each-layer all
+    (test-each-layer all
       (testing "update-in-node"
         (at-revision 200 (update-in-node! layer-name ["1" :memories] (constantly 3)))
         (is (= 200 (current-revision layer-name)))))
@@ -228,7 +233,7 @@
 (comment
   (deftest compact-node
     (with-graph (make-graph)
-      (with-each-layer [:tp :tr]
+      (test-each-layer [:tp :tr]
         (truncate! layer-name)
         (testing "compact-node! removes revisions but leaves all-revisions"
           (let [old {:bar "cat" :baz [5 8] :rev 101}
@@ -245,7 +250,7 @@
     (with-graph
       (into {} (for [[k v] (make-graph)]
                  [k (with-meta v {:types {:foo #{:bar} :bar #{:bar}}})]))
-      (with-each-layer all
+      (test-each-layer all
         (truncate! layer-name)
         (testing "adheres to the schema"
           (is (add-node! layer-name "bar-1" {:a "b"}))
@@ -352,7 +357,7 @@
   (deftest single-edge ;; TODO need to update layers to enforce single-edgedness
     (with-graph
       (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
-      (with-each-layer all
+      (test-each-layer all
         (truncate! layer-name)
         (testing "add-node! and update-node! work with single-edge"
           (is (empty? (get-incoming layer-name "1")))
@@ -370,5 +375,4 @@
           (is (append-node! layer-name "B" {:edge {:id "A"}}))
           (is (= #{"B"} (get-incoming layer-name "A")))
           (is (append-edge! layer-name "C" "A" {}))
-          (is (= #{"B" "C"} (get-incoming layer-name "A")))))))
-  )
+          (is (= #{"B" "C"} (get-incoming layer-name "A"))))))))
