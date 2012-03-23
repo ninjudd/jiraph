@@ -1,10 +1,13 @@
 (ns jiraph.codecs-test
-  (:use clojure.test jiraph.codecs jiraph.codecs.cereal
-        retro.core
+  (:use clojure.test jiraph.codecs jiraph.codecs.cereal retro.core
         [useful.utils :only [adjoin]])
   (:require [jiraph.masai-layer :as masai]
-            [jiraph.graph :as graph])
-  (:import (java.nio ByteBuffer)))
+            [jiraph.layer :as layer]
+            [jiraph.graph :as graph]
+            [masai.tokyo :as tokyo]
+            [jiraph.codecs.protobuf :as proto])
+  (:import (java.nio ByteBuffer)
+           (jiraph Test$Foo)))
 
 (deftest revisioned-codecs
   (doseq [impl [revisioned-clojure-codec revisioned-java-codec] ; (a -> a) -> (opts -> Codec)
@@ -46,3 +49,30 @@
           (is (= {:foo :blah}
                  (graph/get-node l id)))
           (is (= [1] (graph/get-revisions l id))))))))
+
+(deftest protobuf-sets
+  (let [master (masai/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
+                           :formats {:node (proto/protobuf-codec Test$Foo)})
+        rev (vec (for [r (range 5)]
+                   (at-revision master r)))
+        before {:bar 5, :tag-set #{"a" "b"}}
+        change {:bar 7, :tag-set {"c" true "b" false}}
+        after  {:bar 7, :tag-set #{"a" "c"}}]
+
+    (layer/open master)
+    (layer/truncate! master)
+
+    (is (= after (adjoin before change)))
+
+    (dotxn (rev 1)
+      (-> (rev 1)
+          (graph/assoc-node "1" before)))
+    (is (= before
+           (graph/get-node (rev 1) "1")))
+
+    (dotxn (rev 2)
+      (-> (rev 2) (graph/update-node "1" (comp identity adjoin) change)))
+    (is (= after
+           (graph/get-node (rev 2) "1")))
+
+    (layer/close master)))
