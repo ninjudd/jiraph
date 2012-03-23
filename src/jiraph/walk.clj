@@ -58,10 +58,13 @@
    In, addition if you wish to cache walk results, use the option :cache true."
   [name & defaults]
   `(let [defaults# (into-map default-traversal ~@defaults)]
-     (defn ~name {:defaults defaults#} [focus-id# & opts#]
-       (let [opts#  (into-map defaults# opts#)
-             cache# (:cache opts#)]
-         ((if cache# cached-walk walk) focus-id# (dissoc opts# :cache))))))
+     (def ~name
+       (with-meta
+         (fn [focus-id# & opts#]
+           (let [opts#  (into-map defaults# opts#)
+                 cache# (:cache opts#)]
+             ((if cache# cached-walk walk) focus-id# (dissoc opts# :cache))))
+         {:defaults defaults#}))))
 
 (defn- walked?
   "Has this step already been traversed?"
