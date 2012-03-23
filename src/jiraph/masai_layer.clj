@@ -82,11 +82,12 @@
   (query-fn [this keyseq f] nil)
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [encoder (format-for this id)]
+      (let [encoder-fn (format-for this id)
+            encoder (encoder-fn {:revision revision :id id})]
         (when (= f (:reduce-fn (meta encoder)))
           (fn [m]
             (db/append! db id
-                        (bufseq->bytes (encode (encoder {:revision revision :id id})
+                        (bufseq->bytes (encode encoder
                                                (if keys
                                                  (assoc-in {} keys m)
                                                  m))))
