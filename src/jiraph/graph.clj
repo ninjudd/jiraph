@@ -185,7 +185,7 @@
             ;; maximally-optimized; the layer can do this exact thing well
             (let [{:keys [old new]} (apply update! args)]
               (update-meta! keys old new))
-            (if-let [update! (and (seq keys) ;; don't look for assoc-in of empty keys
+            (if-let [update! (and keys ;; don't look for assoc-in of empty keys
                                   (updater (butlast keys) assoc))]
               ;; they can replace this sub-node efficiently, at least
               (let [old (get-in-node layer keys)
