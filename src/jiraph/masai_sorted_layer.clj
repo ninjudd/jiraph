@@ -164,7 +164,7 @@
                            (cursor/next))))
                    cursor/delete)]
       (loop [cur (db/cursor (:db layer) start)]
-        (when-let [k (cursor/key cur)]
+        (when-let [k ^bytes (cursor/key cur)]
           (when-let [cur (and (neg? (compare (String. k) stop))
                               (delete cur))]
             (recur cur)))))))
