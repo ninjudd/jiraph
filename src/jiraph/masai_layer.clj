@@ -37,13 +37,27 @@
 (let [revision-key "__revision"]
   (defn- save-maxrev [layer]
     (when-let [rev (:revision layer)]
-      (db/put! (:db layer) revision-key (long->bytes rev))))
+      (db/put! (:db layer) revision-key (long->bytes rev))
+      (swap! (:max-written-revision layer)
+             (fn [cached-max]
+               (max rev (or cached-max 0))))))
   (defn- read-maxrev [layer]
-    (if-let [bytes (db/fetch (:db layer) revision-key)]
-      (bytes->long bytes)
-      0)))
+    (swap! (:max-written-revision layer)
+           (fn [cached-max]
+             (or cached-max
+                 (if-let [bytes (db/fetch (:db layer) revision-key)]
+                   (bytes->long bytes)
+                   0))))))
 
-(defrecord MasaiLayer [db revision append-only? node-format node-meta-format layer-meta-format]
+(defn revision-to-read [layer]
+  (let [revision (:revision layer)]
+    (and revision
+         (let [max-written (read-maxrev layer)]
+           (when (< revision max-written)
+             revision)))))
+
+(defrecord MasaiLayer [db revision max-written-revision append-only?
+                       node-format node-meta-format layer-meta-format]
   Object
   (toString [this]
     (pr-str this))
@@ -63,7 +77,7 @@
   Basic
   (get-node [this id not-found]
     (if-let [data (db/fetch db id)]
-      (let [codec ((format-for this id) {:revision revision :id id})]
+      (let [codec ((format-for this id) {:revision (revision-to-read this) :id id})]
         (decode codec
                 [(ByteBuffer/wrap data)]))
       not-found))
@@ -186,7 +200,7 @@
                     :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format meta-format layer-meta-format]
           (map codec-fn [node meta layer-meta])]
-      (MasaiLayer. (make-db db) nil
+      (MasaiLayer. (make-db db) nil (atom nil)
                    (case assoc-mode
                      :append true
                      :overwrite false)
