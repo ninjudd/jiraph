@@ -5,6 +5,7 @@
             [jiraph.layer :as layer]
             [jiraph.graph :as graph]
             [masai.tokyo :as tokyo]
+            [ego.core :as ego]
             [jiraph.codecs.protobuf :as proto])
   (:import (java.nio ByteBuffer)
            (jiraph Test$Foo)))
@@ -26,7 +27,7 @@
 
 (deftest typed-layers
   (let [base (revisioned-clojure-codec adjoin)
-        wrapped (wrap-typing base {:profile :union})
+        wrapped (wrap-typing base (comp #{:profile} ego/type-key))
         id "person-1"]
     (masai/with-temp-layer [base-layer :formats {:node base}]
       (let [l (at-revision base-layer 1)]

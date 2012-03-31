@@ -62,9 +62,9 @@
 (def ^{:dynamic true, :doc "When bound to false, codecs created by wrap-typing will ignore types."}
   *honor-layer-types* true)
 
-(defn wrap-typing [codec-fn types]
+(defn wrap-typing [codec-fn accept-id?]
   (-> (fn [{:keys [id] :as opts}]
         (when (or (not *honor-layer-types*)
-                  (get types (ego/type-key id)))
+                  (accept-id? id))
           (codec-fn opts)))
       (copy-meta codec-fn)))
