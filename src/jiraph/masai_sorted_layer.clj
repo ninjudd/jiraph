@@ -378,9 +378,9 @@
                                                              sequential? seq))
                     (filter number?)
                     (into (sorted-set)))]
-      (if revision
-        (subseq revs <= revision)
-        revs)))
+      (seq (if revision
+             (subseq revs <= revision)
+             revs))))
 
   ;; TODO this is stubbed, will need to work eventually
   (get-changed-ids [layer rev]
