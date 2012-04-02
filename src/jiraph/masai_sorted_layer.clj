@@ -177,11 +177,24 @@
 (let [revision-key "__revision"]
   (defn- save-maxrev [layer]
     (when-let [rev (:revision layer)]
-      (db/put! (:db layer) revision-key (long->bytes rev))))
+      (db/put! (:db layer) revision-key (long->bytes rev))
+      (swap! (:max-written-revision layer)
+             (fn [cached-max]
+               (max rev (or cached-max 0))))))
   (defn- read-maxrev [layer]
-    (if-let [bytes (db/fetch (:db layer) revision-key)]
-      (bytes->long bytes)
-      0)))
+    (swap! (:max-written-revision layer)
+           (fn [cached-max]
+             (or cached-max
+                 (if-let [bytes (db/fetch (:db layer) revision-key)]
+                   (bytes->long bytes)
+                   0))))))
+
+(defn revision-to-read [layer]
+  (let [revision (:revision layer)]
+    (and revision
+         (let [max-written (read-maxrev layer)]
+           (when (< revision max-written)
+             revision)))))
 
 (defn- node-chunks [codecs db id]
   (for [[path codec] codecs
@@ -289,7 +302,7 @@
 
 
 ;;; TODO pull the three formats into a single field?
-(defrecord MasaiSortedLayer [db revision append-only? node-format node-meta-format layer-meta-format]
+(defrecord MasaiSortedLayer [db revision max-written-revision append-only? node-format node-meta-format layer-meta-format]
   Meta
   (meta-key [this k]
     (str "_" k))
@@ -304,7 +317,7 @@
 
   Basic
   (get-node [this id not-found]
-    (let [node (read-node (codecs-for this id revision) db id not-found)]
+    (let [node (read-node (codecs-for this id (revision-to-read this)) db id not-found)]
       (if (identical? node not-found)
         not-found
         (get node id))))
@@ -317,7 +330,7 @@
   Optimized
   (query-fn [this keyseq f]
     (let [[id & keys] keyseq
-          codecs (subnode-codecs (codecs-for this id revision) keys)]
+          codecs (subnode-codecs (codecs-for this id (revision-to-read this)) keys)]
       (assert (seq codecs) "Trying to read at a level where we have no codecs...?")
       (fn [& args]
         (apply f (get-in (read-node codecs db id nil)
@@ -355,7 +368,7 @@
 
   ChangeLog
   (get-revisions [this id]
-    (let [path-codecs (codec-fns this id revision)
+    (let [path-codecs (codec-fns this id (revision-to-read this))
           revision-codecs (for [[path codec-fn] path-codecs
                                 :let [codec (-> codec-fn meta :revisions)]
                                 :when codec]
@@ -446,7 +459,7 @@
                 (fix (! fn?) constantly)
                 (copy-meta format)
                 (wrap-default-codecs (as-fn default-codec))))]
-      (MasaiSortedLayer. (make-db db) nil
+      (MasaiSortedLayer. (make-db db) nil (atom nil)
                          (case assoc-mode
                            :append true
                            :overwrite false)
