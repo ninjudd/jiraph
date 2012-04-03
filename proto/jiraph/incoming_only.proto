@@ -4,11 +4,9 @@ option java_package = "jiraph";
 option java_outer_classname = "Meta";
 
 message Node {
-  repeated int64 rev  = 1;
-  repeated int32 len  = 2;
-  repeated int64 mrev = 3; // meta rev
-  repeated int32 mlen = 4; // meta len
-  repeated Edge  in   = 5 [(set) = true];
+  repeated Edge  in   = 1 [(set) = true];
+  optional fixed32 proto_length   = 14;
+  repeated int64 revisions      = 15;
 }
 
 message Edge {
