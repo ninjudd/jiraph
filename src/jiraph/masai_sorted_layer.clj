@@ -64,10 +64,9 @@
    codecs whose path is below the write-path, and one codec which is at or above it."
   [codecs path]
   (let [path-to-root (filter #(along-path? (first %) path) codecs)
-        [below [first-above]] (split-with #(path-prefix? path (first %) true)
+        [below above] (split-with #(path-prefix? path (first %) true)
                                           path-to-root)]
-    (assert first-above (str "Don't know how to write at " path))
-    `(~@below ~first-above)))
+    (concat below (take 1 above))))
 
 (defn matching-subpaths
   "Look through a node for all actual paths that match a path pattern. If include-empty? is truthy,
@@ -331,11 +330,14 @@
   (query-fn [this keyseq f]
     (let [[id & keys] keyseq
           codecs (subnode-codecs (codecs-for this id (revision-to-read this)) keys)]
-      (assert (seq codecs) "Trying to read at a level where we have no codecs...?")
-      (fn [& args]
-        (apply f (get-in (read-node codecs db id nil)
-                         keyseq)
-               args))))
+      (if (seq codecs)
+        (fn [& args]
+          (apply f (get-in (read-node codecs db id nil)
+                           keyseq)
+                 args))
+        ;; if no codecs apply, every read will be nil
+        ;; TODO i'm not sure why this case is getting hit, though - wrap-typing with wrong type?
+        (fn [& args] (apply f nil args)))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
       (let [path-codecs (subnode-codecs (codec-fns this id revision) keys)]
