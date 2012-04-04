@@ -158,7 +158,10 @@
   (when (layer/manage-incoming? layer)
     (doseq [[edge-id {:keys [deleted]}]
             (apply changed-edges ;; TODO does this to-fix work? could it just be an if?
-                   (map (comp :edges (to-fix keys (partial assoc-in {} keys)))
+                   (map (comp :edges #(and %
+                                           (if keys
+                                             (assoc-in {} keys %)
+                                             %)))
                         [old new]))]
       ((if deleted layer/drop-incoming! layer/add-incoming!)
        layer edge-id id))))
