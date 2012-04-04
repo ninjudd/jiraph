@@ -6,7 +6,9 @@
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
         [jiraph.wrapper :only [*read-wrappers* *write-wrappers*]]
-        [useful.experimental :only [wrap-multiple]])
+        [useful.experimental :only [wrap-multiple]]
+        (ordered [set :only [ordered-set]]
+                 [map :only [ordered-map]]))
   (:require [jiraph.layer :as layer]
             [retro.core :as retro]))
 
@@ -332,9 +334,10 @@
   (let [incoming (layer/get-incoming layer id)]
     (if (set? incoming)
       incoming
-      (set (for [[k v] incoming
-                 :when v]
-             k)))))
+      (into (ordered-set)
+            (for [[k v] incoming
+                  :when v]
+              k)))))
 
 (defn ^{:dynamic true} get-incoming-map
   "Return a map of incoming edges, where the value for each key indicates whether an edge is
@@ -343,7 +346,8 @@
   (let [incoming (layer/get-incoming layer id)]
     (if (map? incoming)
       incoming
-      (into {} (for [node incoming]
+      (into (ordered-map)
+            (for [node incoming]
                  [node true])))))
 
 (defn wrap-bindings
