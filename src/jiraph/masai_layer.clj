@@ -170,14 +170,6 @@
   (single-edge? [this] ;; TODO accept option to (make)
     false))
 
-(if-ns (:require protobuf.core
-                 [cereal.protobuf :as protobuf])
-       (defn- make-protobuf [format]
-         (when (instance? cereal.protobuf.ProtobufFormat format)
-           (protobuf/make jiraph.Meta$Node)))
-       (defn- make-protobuf [format]
-         nil))
-
 (if-ns (:require [masai.tokyo :as tokyo])
        (defn- make-db [db]
          (if (string? db)
