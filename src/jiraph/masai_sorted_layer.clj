@@ -127,10 +127,11 @@
   "Look up the codec functions to use based on node id and revision."
   [layer node-id revision]
   (let [locked {:id node-id, :revision revision}
-        orig-paths (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
+        orig-path-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
                                     (meta-key? layer node-id) :node-meta-format
-                                    :else :node-format))]
-    (-> (for [[path codec-fn] (orig-paths locked)]
+                                    :else :node-format))
+        orig-paths (orig-path-fn locked)]
+    (-> (for [[path codec-fn] orig-paths]
           [path (-> (fn [opts]
                       (codec-fn (merge opts locked)))
                     (copy-meta codec-fn))])
