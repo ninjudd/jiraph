@@ -7,7 +7,7 @@
         [useful.utils :only [invoke if-ns adjoin returning map-entry let-later empty-coll? copy-meta]]
         [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
-        [useful.map :only [assoc-levels keyed]]
+        [useful.map :only [assoc-levels map-vals keyed]]
         [useful.fn :only [as-fn knit any fix to-fix !]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
@@ -232,7 +232,18 @@
                 {:old nil, :new nil} ;; we didn't read the old data, so we don't know the new data
                 ))))))))
 
-(defn- write-paths! [write-fn codecs id node include-deletions?]
+(letfn [(fix-incoming [val-fn node layer]
+          (into {}
+                (for [[id attrs] node]
+                  [id (if (and id (meta-key? layer id) ;; is there anything under the :incoming key?
+                               (seq (:incoming attrs)))
+                        (update-in attrs [:incoming] map-vals val-fn)
+                        attrs)])))]
+  (def ^:private mapify-incoming    (partial fix-incoming (complement :deleted)))
+  (def ^:private structify-incoming (partial fix-incoming (fn [exists]
+                                                            {:deleted (not exists)}))))
+
+(defn- write-paths! [layer write-fn codecs id node include-deletions?]
   (reduce (fn [node [path codec]]
             (let [write! (fn [key data]
                            (->> data
@@ -246,7 +257,10 @@
                           (when (seq path)
                             (no-nil-update node (pop path) dissoc (peek path)))))
                       node (matching-subpaths node path include-deletions?))))
-          (get node id), codecs))
+          (-> node
+              (structify-incoming layer)
+              (get id))
+          codecs))
 
 (defn- simple-writer [layer path-codecs keyseq f]
   (let [{:keys [db append-only?]} layer
@@ -264,7 +278,7 @@
             new (apply update-in old keyseq f args)]
         (returning {:old (get-in old keyseq), :new (get-in new keyseq)}
           (delete-ranges! layer deletion-ranges)
-          (write-paths! writer codecs id new true))))))
+          (write-paths! layer writer codecs id new true))))))
 
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
@@ -296,7 +310,7 @@
           writer (partial db/append! db)]
       (fn [arg]
         (returning {:old nil, :new arg}
-          (write-paths! writer codecs id
+          (write-paths! layer writer codecs id
                         (assoc-in {} keyseq arg)
                         false)))))) ;; don't include deletions
 
@@ -333,9 +347,15 @@
           codecs (subnode-codecs (codecs-for this id (revision-to-read this)) keys)]
       (if (seq codecs)
         (fn [& args]
-          (apply f (get-in (read-node codecs db id nil)
-                           keyseq)
-                 args))
+          ;; incoming protobufs store their incoming edges with each key pointing to a map like:
+          ;; {:deleted bool, :revisions [...], :codec_length ...}.
+          ;; we need to coerce it into a map with one entry for each key, whose value is a
+          ;; boolean indicating existence (so inverting the meaning of :deleted, and "lifting" it
+          ;; outside of the map).
+          (let [node (-> (read-node codecs db id nil)
+                         (mapify-incoming this))]
+            (apply f (get-in node keyseq)
+                   args)))
         ;; if no codecs apply, every read will be nil
         ;; TODO i'm not sure why this case is getting hit, though - wrap-typing with wrong type?
         (fn [& args] (apply f nil args)))))
@@ -364,7 +384,7 @@
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (do (write-paths! (constantly nil), (codecs-for this id revision),
+      (do (write-paths! this (constantly nil), (codecs-for this id revision),
                         id, attrs, false)
           true)
       (catch Exception _ false)))
