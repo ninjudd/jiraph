@@ -1,19 +1,25 @@
 (ns jiraph.codecs
   (:use [gloss.core.protocols :only [Reader Writer read-bytes write-bytes sizeof]]
         [useful.experimental :only [lift-meta]]
+        [useful.map :only [update]]
         [useful.utils :only [copy-meta]])
-  (:require [gloss.io   :as io]
+  (:require [gloss.io :as io]
             [gloss.core :as gloss]
-            [ego.core   :as ego]))
+            [ego.core :as ego]
+            [schematic.core :as schema]))
 
 (def reset-key :codec_reset)
 (def revision-key :revisions)
 (def len-key :proto_length)
 
-(defn tidy-up [node]
+(defn tidy-node [node]
   (-> node
       (dissoc reset-key len-key)
       (lift-meta revision-key)))
+
+(defn tidy-schema [codec]
+  (vary-meta codec update :schema
+             schema/dissoc-fields revision-key))
 
 (defn encode [codec val opts] ; (opts -> Codec) -> Deserialized -> opts -> [Byte]
   (io/encode (codec opts) val))
@@ -36,7 +42,7 @@
                        (dissoc x reset-key)))
           (combine [items]
             (when (seq items)
-              (tidy-up (or (reduce reducer items) {}))))]
+              (tidy-node (or (reduce reducer items) {}))))]
     (letfn [(node-codec [{reset reset-key, :keys [revision] :as opts}]
               (let [codec (codec-builder opts)
                     maybe-reset (if reset
@@ -47,11 +53,11 @@
                                                      (comp list pre-encode maybe-reset)
                                                      (comp combine post-decode))
                                 (copy-meta codec)
-                                (vary-meta assoc :reduce-fn reduce-fn)))]
+                                (tidy-schema)))]
                 (if revision
                   (frame #(assoc % revision-key [revision])
                          (fn [vals]
-                           ;; run BEFORE tidy-up, so revision is not in the meta but in the node
+                           ;; run BEFORE tidy-node, so revision is not in the meta but in the node
                            (take-while #(<= (first (revision-key %)) revision)
                                        vals)))
                   (frame identity identity))))]

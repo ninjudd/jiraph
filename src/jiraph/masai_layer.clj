@@ -98,7 +98,7 @@
     (when-let [[id & keys] (seq keyseq)]
       (let [encoder-fn (format-for this id)
             encoder (encoder-fn {:revision revision :id id})]
-        (when (= f (:reduce-fn (meta encoder)))
+        (when (= f (:reduce-fn (meta encoder-fn)))
           (fn [m]
             (db/append! db id
                         (bufseq->bytes (encode encoder

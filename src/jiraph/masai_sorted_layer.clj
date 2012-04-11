@@ -221,7 +221,7 @@
   [layer path-codecs keyseq f]
   (when-not (next path-codecs) ;; can only optimize a single codec
     (let [[path codec-fn] (first path-codecs)]
-      (when (= f (:reduce-fn (-> codec-fn meta))) ;; performing optimized function
+      (when (= f (:reduce-fn (meta codec-fn))) ;; performing optimized function
         (let [[id & keys] keyseq]
           (when (= (count keys) (count path)) ;; at exactly this level
             (let [db (:db layer)
