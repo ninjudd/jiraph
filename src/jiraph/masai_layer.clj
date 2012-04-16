@@ -117,7 +117,9 @@
   (optimize! [layer]
     (db/optimize! db))
   (truncate! [layer]
-    (db/truncate! db))
+    (db/truncate! db)
+    (swap! (:max-written-revision layer)
+           (constantly nil)))
 
   Schema
   (schema [this id]

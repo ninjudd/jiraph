@@ -228,7 +228,14 @@
         (at-revision 200 (update-in-node! layer-name ["1" :memories] (constantly 3)))
         (is (= 200 (current-revision layer-name)))))
 
-    (is (= 200 (current-revision)))))
+    (is (= 200 (current-revision)))
+
+    (test-each-layer all
+      (truncate! layer-name)
+
+      (is (zero? (current-revision layer-name))))
+
+    (is (zero? (current-revision)))))
 
 (comment
   (deftest compact-node
