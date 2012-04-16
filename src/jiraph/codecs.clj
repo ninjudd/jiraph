@@ -2,9 +2,9 @@
   (:use [gloss.core.protocols :only [Reader Writer read-bytes write-bytes sizeof]]
         [useful.experimental :only [lift-meta]]
         [useful.map :only [update]]
-        [useful.utils :only [copy-meta]])
+        [useful.utils :only [copy-meta]]
+        [gloss.core :only [compile-frame]])
   (:require [gloss.io :as io]
-            [gloss.core :as gloss]
             [ego.core :as ego]
             [schematic.core :as schema]))
 
@@ -17,23 +17,32 @@
       (dissoc reset-key len-key)
       (lift-meta revision-key)))
 
-(defn tidy-schema [codec]
-  (vary-meta codec update :schema
-             schema/dissoc-fields revision-key))
-
 (defn encode [codec val opts] ; (opts -> Codec) -> Deserialized -> opts -> [Byte]
   (io/encode (codec opts) val))
 
 (defn decode [codec data opts]
   (io/decode (codec opts) data))
 
-(defn revisions-only [codec-fn]
-  (fn [opts] ;; read revisions just by discarding the rest
-    (gloss/compile-frame (codec-fn opts)
-                         nil ;; never write with this codec
-                         (comp revision-key meta))))
+(defn revisions-codec [codec]
+  ;; read revisions just by discarding the rest
+  (compile-frame codec
+                 nil ;; never write with this codec
+                 (comp revision-key meta)))
 
-(defn revisioned-codec [codec-builder reduce-fn] ;; Codec -> (a -> a) -> (opts -> Codec) ;; TODO fix
+(defn resetting-codec [codec]
+  (compile-frame codec
+                 (fn [data] (assoc data reset-key true))
+                 identity))
+
+(defn codec-meta [codec base-codec reduce-fn]
+  (with-meta codec
+    {:reduce-fn reduce-fn
+     :revisions (revisions-codec codec)
+     :reset     (resetting-codec codec)
+     :schema    (-> (:schema (meta base-codec))
+                    (schema/dissoc-fields revision-key))}))
+
+(defn revisioned-codec [codec-fn reduce-fn] ;; Codec -> (a -> a) -> (opts -> Codec) ;; TODO fix
   ;; TODO take in a map of reduce-fn and (optionally) init-val
   (letfn [(reducer [acc x]
             (reduce-fn (if (reset-key x)
@@ -43,27 +52,20 @@
           (combine [items]
             (when (seq items)
               (tidy-node (or (reduce reducer items) {}))))]
-    (letfn [(node-codec [{reset reset-key, :keys [revision] :as opts}]
-              (let [codec (codec-builder opts)
-                    maybe-reset (if reset
-                                  (fn [data] (assoc data reset-key true))
-                                  identity)
-                    frame (fn [pre-encode post-decode]
-                            (-> (gloss/compile-frame codec
-                                                     (comp list pre-encode maybe-reset)
-                                                     (comp combine post-decode))
-                                (copy-meta codec)
-                                (tidy-schema)))]
-                (if revision
-                  (frame #(assoc % revision-key [revision])
-                         (fn [vals]
-                           ;; run BEFORE tidy-node, so revision is not in the meta but in the node
-                           (take-while #(<= (first (revision-key %)) revision)
-                                       vals)))
-                  (frame identity identity))))]
-      (-> node-codec
-          (with-meta {:reduce-fn reduce-fn
-                      :revisions (revisions-only node-codec)})))))
+    (fn [{:keys [revision] :as opts}]
+      (let [frame (fn [pre-encode post-decode]
+                    (let [codec (codec-fn opts)]
+                      (-> codec
+                          (compile-frame (comp list pre-encode)
+                                         (comp combine post-decode))
+                          (codec-meta codec reduce-fn))))]
+        (if revision
+          (frame #(assoc % revision-key [revision])
+                 (fn [vals]
+                   ;; run BEFORE tidy-node, so revision is not in the meta but in the node
+                   (take-while #(<= (first (revision-key %)) revision)
+                               vals)))
+          (frame identity identity))))))
 
 (def ^{:dynamic true, :doc "When bound to false, codecs created by wrap-typing will ignore types."}
   *honor-layer-types* true)

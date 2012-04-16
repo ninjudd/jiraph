@@ -393,9 +393,9 @@
   (get-revisions [this id]
     (let [path-codecs (codec-fns this id (revision-to-read this))
           revision-codecs (for [[path codec-fn] path-codecs
-                                :let [codec (-> codec-fn meta :revisions)]
+                                :let [codec (:revisions (meta (codec-fn {:id id})))]
                                 :when codec]
-                            [path (codec {})])
+                            [path codec])
           revs (->> (node-chunks revision-codecs db id)
                     (tree-seq (any map? sequential?) (to-fix map? vals,
                                                              sequential? seq))

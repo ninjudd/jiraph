@@ -1,5 +1,5 @@
 (ns jiraph.codecs.protobuf
-  (:use [jiraph.codecs :only [revisioned-codec tidy-node tidy-schema revisions-only]]
+  (:use [jiraph.codecs :only [revisioned-codec tidy-node codec-meta]]
         [useful.utils :only [adjoin copy-meta]]
         [useful.experimental :only [lift-meta]])
   (:require [protobuf.codec :as protobuf]
@@ -13,18 +13,13 @@
      (protobuf-codec proto adjoin))
   ([proto reduce-fn]
      (let [proto-codec (protobuf/protobuf-codec proto :repeated true)
-           codec-builder (constantly proto-codec)
-           revisioned (revisioned-codec codec-builder reduce-fn)]
+           revisioned  (revisioned-codec (constantly proto-codec) reduce-fn)]
        (if (= adjoin reduce-fn)
-         (let [full-codec (protobuf/protobuf-codec proto)
-               tidy-full (-> (gloss/compile-frame full-codec identity tidy-node)
-                             (copy-meta full-codec)
-                             (tidy-schema))
-               codec-fn (fn [{:keys [revision] :as opts}]
-                          (if (nil? revision)
-                            tidy-full
-                            (revisioned opts)))]
-           (with-meta codec-fn
-             {:revisions (revisions-only codec-fn)
-              :reduce-fn adjoin}))
+         (let [codec (protobuf/protobuf-codec proto)
+               full  (-> (gloss/compile-frame codec identity tidy-node)
+                         (codec-meta codec adjoin))]
+           (fn [{:keys [revision] :as opts}]
+             (if (nil? revision)
+               full
+               (revisioned opts))))
          revisioned))))

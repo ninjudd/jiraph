@@ -3,7 +3,7 @@
                              node-id-seq meta-key meta-key?] :as layer]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
-        [useful.utils :only [if-ns adjoin returning copy-meta]]
+        [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix]]
         [useful.datatypes :only [assoc-record]]
@@ -96,16 +96,16 @@
   (query-fn [this keyseq f] nil)
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [encoder-fn (format-for this id)
-            encoder (encoder-fn {:revision revision :id id})]
-        (when (= f (:reduce-fn (meta encoder-fn)))
-          (fn [m]
-            (db/append! db id
-                        (bufseq->bytes (encode encoder
-                                               (if keys
-                                                 (assoc-in {} keys m)
-                                                 m))))
-            {:old nil :new m})))))
+      (let [encoder ((format-for this id) {:revision revision :id id})]
+        (when (= f (:reduce-fn (meta encoder)))
+          (fn [attrs]
+            (->> (if keys
+                   (assoc-in {} keys attrs)
+                   attrs)
+                 (encode encoder)
+                 (bufseq->bytes)
+                 (db/append! db id))
+            {:old nil :new attrs})))))
 
   Layer
   (open [layer]
@@ -130,9 +130,9 @@
 
   ChangeLog
   (get-revisions [this id]
-    (when-let [rev-codec-builder (-> (format-for this id) meta :revisions)]
+    (when-let [rev-codec (:revisions (meta ((format-for this id) {:id id})))]
       (when-let [data (db/fetch db id)]
-        (let [revs (decode (rev-codec-builder {}) [(ByteBuffer/wrap data)])]
+        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
           (distinct
            (if-not revision
              revs
@@ -185,7 +185,7 @@
 (let [default-codec (cereal/revisioned-clojure-codec adjoin)
       codec-fn      (fn [codec]
                       (let [codec (or codec default-codec)]
-                        (-> (as-fn codec) (copy-meta codec))))]
+                        (-> (as-fn codec))))]
   (defn make [db & {{:keys [node meta layer-meta]
                      :or {node (-> (codec-fn default-codec)
                                    (vary-meta merge layer/edges-schema))}} :formats,
