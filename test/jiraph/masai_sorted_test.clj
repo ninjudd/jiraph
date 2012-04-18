@@ -24,9 +24,12 @@
   ;; these paths are all writing with the default codec:
   ;; cereal's revisioned clojure-reader codec
   (let [= =*] ;; jiraph treats {} and nil equivalently; test must account for this
-    (masai/with-temp-layer [layer :formats {:node [[[:edges :*]]
-                                                   [[:names]] ;; TODO support indexing non-maps
-                                                   [[]]]}]
+    (masai/with-temp-layer [layer
+                            :formats {:node (-> (constantly [[[:edges :*]]
+                                                             [[:names]] ;; TODO support indexing non-maps
+                                                             [[]]])
+                                                (masai/wrap-default-codecs)
+                                                (masai/wrap-revisioned))}]
       (let [id "profile-1"
             init-node {:edges {"profile-10" {:rel :child}}
                        :age 24, :names {:first "Clancy"}}

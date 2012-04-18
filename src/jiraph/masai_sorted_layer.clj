@@ -449,11 +449,14 @@
        (defn- make-db [db]
          db))
 
-(defn wrap-default-codecs [f default]
+(def default-codec (with-meta (cereal/clojure-codec :repeated true)
+                     {:reduce-fn adjoin}))
+
+(defn wrap-default-codecs [layout-fn]
   (fn [opts]
-    (when-let [codec-paths (f opts)]
-      (for [[path codec] codec-paths]
-        [path (or codec default)]))))
+    (when-let [layout (layout-fn opts)]
+      (for [[path codec] layout]
+        [path (or codec default-codec)]))))
 
 (defn wrap-revisioned [layout-fn]
   (fn [opts]
@@ -463,30 +466,20 @@
                                         (:reduce-fn (meta codec)))
                opts)]))))
 
-;; formats should be functions:
-;; - accept as arg: a map containing {revision and node-id}
-;; - return: a gloss codec
-;; plain old codecs will be accepted as well
-(let [default-codec (with-meta (cereal/clojure-codec :repeated true)
-                      {:reduce-fn adjoin})]
-  (defn make [db & {{:keys [node meta layer-meta]} :formats,
-                    :keys [assoc-mode] :or {assoc-mode :append}}]
-    (let [[node-format meta-format layer-meta-format]
-          (for [format [node meta layer-meta]]
-            (-> format
-                (fix nil? (constantly (-> [[[:edges :*]]
-                                           [[]]]
-                                          (with-meta layer/edges-schema))))
-                (fix (! fn?) constantly)
-                (copy-meta format)
-                (wrap-default-codecs default-codec)
-                ;; TODO pretty sure the client should be doing wrap-revisioned, not us
-                (wrap-revisioned)))]
-      (MasaiSortedLayer. (make-db db) nil (atom nil)
-                         (case assoc-mode
-                           :append true
-                           :overwrite false)
-                         node-format, meta-format, layer-meta-format))))
+(defn make [db & {{:keys [node meta layer-meta]} :formats,
+                  :keys [assoc-mode] :or {assoc-mode :append}}]
+  (let [[node-format meta-format layer-meta-format]
+        (for [format [node meta layer-meta]]
+          (condp invoke format
+              nil? (wrap-revisioned (constantly [[[:edges :*] default-codec]
+                                                 [         [] default-codec]]))
+              (! fn?) (constantly format)
+              format))]
+    (MasaiSortedLayer. (make-db db) nil (atom nil)
+                       (case assoc-mode
+                         :append true
+                         :overwrite false)
+                       node-format, meta-format, layer-meta-format)))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.
