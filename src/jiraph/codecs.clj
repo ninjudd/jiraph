@@ -76,3 +76,6 @@
                   (accept-id? id))
           (codec-fn opts)))
       (copy-meta codec-fn)))
+
+(defn special-codec [codec key]
+  (get (meta codec) key codec))

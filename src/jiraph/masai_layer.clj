@@ -1,6 +1,7 @@
 (ns jiraph.masai-layer
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
                              node-id-seq meta-key meta-key?] :as layer]
+        [jiraph.codecs :only [special-codec]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin returning]]
@@ -83,9 +84,10 @@
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
-              (let [codec ((format-for this id) (-> {:revision revision :id id}
-                                                    (fix append-only?
-                                                         #(assoc % :codec_reset true))))]
+              (let [codec ((format-for this id) {:revision revision :id id})
+                    codec (if append-only?
+                            (special-codec codec :reset)
+                            codec)]
                 (bufseq->bytes (encode codec data))))]
       ((if append-only? db/append! db/put!)
        db id (bytes attrs))))

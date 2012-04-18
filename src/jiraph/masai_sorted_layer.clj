@@ -140,7 +140,7 @@
   [layer deletion-ranges]
   (doseq [{:keys [start stop codec]} deletion-ranges]
     (let [delete (if (:append-only? layer)
-                   (let-later [^:delay deleted (bufseq->bytes (encode (:reset (meta codec))
+                   (let-later [^:delay deleted (bufseq->bytes (encode (codecs/special-codec codec :reset)
                                                                       {}))]
                      (fn [cursor]
                        (-> cursor
@@ -251,7 +251,7 @@
         path-codecs (if append-only?
                       path-codecs
                       (for [[path codec] path-codecs]
-                        [path (:reset (meta codec))]))
+                        [path (codecs/special-codec codec :reset)]))
         write-mode (if append-only?, db/append! db/put!)
         writer (partial write-mode db)
         deletion-ranges (for [[path codec] path-codecs
@@ -387,7 +387,7 @@
   (get-revisions [this id]
     (let [path-codecs (codecs-for this id (revision-to-read this))
           revision-codecs (for [[path codec] path-codecs
-                                :let [codec (:revisions (meta codec))]
+                                :let [codec (codecs/special-codec codec :revisions)]
                                 :when codec]
                             [path codec])
           revs (->> (node-chunks revision-codecs db id)
