@@ -249,9 +249,9 @@
   (let [{:keys [db append-only?]} layer
         [id & keys] keyseq
         path-codecs (if append-only?
-                      path-codecs
                       (for [[path codec] path-codecs]
-                        [path (codecs/special-codec codec :reset)]))
+                        [path (codecs/special-codec codec :reset)])
+                      path-codecs)
         write-mode (if append-only?, db/append! db/put!)
         writer (partial write-mode db)
         deletion-ranges (for [[path codec] path-codecs
