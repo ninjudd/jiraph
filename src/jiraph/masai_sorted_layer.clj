@@ -460,7 +460,7 @@
 
 (defn wrap-revisioned [layout-fn]
   (fn [opts]
-    (let [layout (layout-fn opts)]
+    (when-let [layout (layout-fn opts)]
       (for [[path codec] layout]
         [path ((codecs/revisioned-codec (constantly codec)
                                         (:reduce-fn (meta codec)))
