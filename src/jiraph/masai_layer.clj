@@ -186,8 +186,7 @@
 ;; plain old codecs will be accepted as well
 (let [default-codec (cereal/revisioned-clojure-codec adjoin)
       codec-fn      (fn [codec]
-                      (let [codec (or codec default-codec)]
-                        (-> (as-fn codec))))]
+                      (as-fn (or codec default-codec)))]
   (defn make [db & {{:keys [node meta layer-meta]
                      :or {node (-> (codec-fn default-codec)
                                    (vary-meta merge layer/edges-schema))}} :formats,
