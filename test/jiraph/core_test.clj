@@ -177,7 +177,7 @@
 
 (deftest revisioned-incoming
   (with-graph (make-graph)
-    (test-each-layer [:stm]
+    (test-each-layer all
       (truncate! layer-name)
       (at-revision 100 (is (empty? (get-incoming layer-name "11"))))
       (at-revision 100
