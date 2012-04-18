@@ -50,5 +50,5 @@ message Node {
 
   optional fixed32 proto_length = 13;
   repeated int64 revisions = 14;
-  optional int32 codec_reset = 15;
+  optional bool codec_reset = 15;
 }
