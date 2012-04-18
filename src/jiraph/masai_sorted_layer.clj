@@ -478,6 +478,7 @@
                 (fix (! fn?) constantly)
                 (copy-meta format)
                 (wrap-default-codecs default-codec)
+                ;; TODO pretty sure the client should be doing wrap-revisioned, not us
                 (wrap-revisioned)))]
       (MasaiSortedLayer. (make-db db) nil (atom nil)
                          (case assoc-mode
