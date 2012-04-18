@@ -10,7 +10,7 @@
 (def all [:tr :tp :stm :trs])
 
 (let [masai  masai/make-temp
-      sorted #(sorted/make-temp :formats {:node [[[:edges :*]], [[]]]})]
+      sorted sorted/make-temp]
   (defn make-graph []
     {:tr  (sorted)
      :trs (masai)
