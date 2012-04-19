@@ -4,7 +4,7 @@
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         useful.debug
-        [useful.utils :only [invoke if-ns adjoin returning map-entry let-later empty-coll? copy-meta]]
+        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta]]
         [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
         [useful.map :only [assoc-levels map-vals keyed]]
@@ -140,11 +140,11 @@
   [layer deletion-ranges]
   (doseq [{:keys [start stop codec]} deletion-ranges]
     (let [delete (if (:append-only? layer)
-                   (let-later [^:delay deleted (bufseq->bytes (encode (codecs/special-codec codec :reset)
-                                                                      {}))]
+                   (let [deleted (delay (bufseq->bytes (encode (codecs/special-codec codec :reset)
+                                                               {})))]
                      (fn [cursor]
                        (-> cursor
-                           (cursor/append deleted)
+                           (cursor/append (force deleted))
                            (cursor/next))))
                    cursor/delete)]
       (loop [cur (db/cursor (:db layer) start)]
