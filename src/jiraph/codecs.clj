@@ -42,6 +42,7 @@
      :schema    (-> (:schema (meta base-codec))
                     (schema/dissoc-fields revision-key))}))
 
+;; TODO accept codec+opts as well as codec-fn+reduce-fn
 (defn revisioned-codec [codec-fn reduce-fn] ;; Codec -> (a -> a) -> (opts -> Codec) ;; TODO fix
   ;; TODO take in a map of reduce-fn and (optionally) init-val
   (letfn [(reducer [acc x]
