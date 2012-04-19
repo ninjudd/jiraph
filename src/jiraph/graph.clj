@@ -125,8 +125,7 @@
 (defn get-in-node
   "Fetch data from inside a node."
   ([layer keyseq & [not-found]]
-     (let [[id & keys] (meta-keyseq layer keyseq)]
-       (query-in-node layer [id] get-in keys not-found))))
+     (query-in-node layer (meta-keyseq layer keyseq) identity)))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
