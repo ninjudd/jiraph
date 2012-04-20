@@ -8,7 +8,7 @@
         [useful.seq :only [find-with prefix-of?]]
         [useful.string :only [substring-after]]
         [useful.map :only [assoc-levels map-vals keyed]]
-        [useful.fn :only [as-fn knit any fix to-fix !]]
+        [useful.fn :only [as-fn knit any fix to-fix ! validator]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
@@ -124,6 +124,46 @@
                   {:start start-key
                    :stop (str-after start-key)
                    :keyfn (constantly last)})))))))
+
+(defn- seq-fn [layer path codecs f]
+  (when-let [[id & keys] (seq path)]
+    (let [expected-path `[~@keys :*]
+          db (:db layer)]
+      (when-let [[path codec] (some (validator (fn [[path codec]]
+                                                 (= expected-path path)))
+                                    codecs)]
+        (let [{:keys [start stop keyfn]} (bounds path)
+              start (str id ":" start)
+              stop (str id ":" stop)
+              db-key (fn [k] (str start k))
+              read (fn [nodes]
+                     (for [[k v] nodes]
+                       (map-entry (keyfn k)
+                                  (decode codec [(ByteBuffer/wrap v)]))))]
+          (condp = f
+            seq (fn []
+                  (read (db/fetch-subseq db >= start < stop)))
+            subseq (fn
+                     ([test key]
+                        (read (if (#{< <=} test)
+                                (db/fetch-subseq db >= start test (db-key key))
+                                (db/fetch-subseq db test (db-key key) < stop))))
+                     ([start-test start-key end-test end-key]
+                        (read (db/fetch-subseq db
+                                               start-test (db-key start-key)
+                                               end-test (db-key end-key)))))
+            rseq (fn []
+                   (read (db/fetch-rsubseq db >= start < stop)))
+            rsubseq (fn
+                      ([test key]
+                         (read (if (#{> >=} test)
+                                 (db/fetch-rsubseq db test (db-key key) < stop)
+                                 (db/fetch-rsubseq db >= start test (db-key key)))))
+                      ([start-test start-key end-test end-key]
+                         (read (db/fetch-rsubseq db
+                                                 start-test (db-key start-key)
+                                                 end-test (db-key end-key)))))
+            nil))))))
 
 (defn- codecs-for
   "Look up the layout and codecs to use based on node id and revision."
@@ -329,19 +369,20 @@
   (query-fn [this keyseq f]
     (let [[id & keys] keyseq
           codecs (subnode-codecs (codecs-for this id (revision-to-read this)) keys)]
-      (if (seq codecs)
-        (fn [& args]
-          ;; incoming protobufs store their incoming edges with each key pointing to a map like:
-          ;; {:deleted bool, :revisions [...], :codec_length ...}.
-          ;; we need to coerce it into a map with one entry for each key, whose value is a
-          ;; boolean indicating existence (so inverting the meaning of :deleted, and "lifting" it
-          ;; outside of the map).
-          (let [node (-> (read-node codecs db id nil)
-                         (mapify-incoming this))]
-            (apply f (get-in node keyseq)
-                   args)))
-        ;; if no codecs apply, every read will be nil
-        (fn [& args] (apply f nil args)))))
+      (or (seq-fn this keyseq codecs f)
+          (if (seq codecs)
+            (fn [& args]
+              ;; incoming protobufs store their incoming edges with each key pointing to a map like:
+              ;; {:deleted bool, :revisions [...], :codec_length ...}.
+              ;; we need to coerce it into a map with one entry for each key, whose value is a
+              ;; boolean indicating existence (so inverting the meaning of :deleted, and "lifting" it
+              ;; outside of the map).
+              (let [node (-> (read-node codecs db id nil)
+                             (mapify-incoming this))]
+                (apply f (get-in node keyseq)
+                       args)))
+            ;; if no codecs apply, every read will be nil
+            (fn [& args] (apply f nil args))))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
       (let [path-codecs (subnode-codecs (codecs-for this id revision) keys)]

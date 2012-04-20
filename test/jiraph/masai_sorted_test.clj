@@ -51,3 +51,32 @@
 
         (is (update-in-node! layer [id] adjoin change-4))
         (is (= node-4 (get-node layer id)))))))
+
+(deftest test-subseq
+  (masai/with-temp-layer [layer
+                          :formats {:node (-> (constantly [[[:edges :*]]
+                                                           [[]]])
+                                              (masai/wrap-default-codecs)
+                                              (masai/wrap-revisioned))}]
+    (let [node {:edges {"mary" {:data 1}
+                        "charlie" {:data 2}
+                        "sally" {:data 3}}}
+          sorted (into (sorted-map) (:edges node))]
+
+      ;; make sure there are nodes "around" him to test subseq boundaries
+      (is (assoc-node! layer "charlie" {:data "test"}))
+      (is (assoc-node! layer "mike" node))
+      (is (assoc-node! layer "sally" {:data "test"}))
+
+      (is (= node (get-node layer "mike")))
+
+      (doseq [[f & args] [[seq]
+                          [rseq]
+                          [subseq > "mary"]
+                          [subseq <= "mary"]
+                          [subseq >= "mary" < "sally"]
+                          [rsubseq > "david"]
+                          [rsubseq <= "david"]
+                          [rsubseq > "alex" < "zebediah"]]]
+        (is (= (seq (apply f sorted args))
+               (seq (apply query-in-node layer ["mike" :edges] f args))))))))
