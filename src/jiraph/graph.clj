@@ -120,9 +120,9 @@
         (map-entry id node)))))
 
 (defn merge-fn [f]
-  (case f
-    (seq  subseq)  (partial apply merge-sorted <)
-    (rseq rsubseq) (partial apply merge-sorted >)
+  (condp contains? f
+    #{seq  subseq}  (partial apply merge-sorted <)
+    #{rseq rsubseq} (partial apply merge-sorted >)
     (partial reduce adjoin nil)))
 
 (defn- query-in-node*
