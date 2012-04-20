@@ -341,7 +341,6 @@
             (apply f (get-in node keyseq)
                    args)))
         ;; if no codecs apply, every read will be nil
-        ;; TODO i'm not sure why this case is getting hit, though - wrap-typing with wrong type?
         (fn [& args] (apply f nil args)))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]

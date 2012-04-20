@@ -8,9 +8,9 @@
             [retro.core :as retro])
   (:import java.io.IOException))
 
-(def ^{:dynamic true} *graph*           nil)
-(def ^{:dynamic true} *verbose*         nil)
-(def ^{:dynamic true} *revision*        nil)
+(def ^{:dynamic true} *graph*    nil)
+(def ^{:dynamic true} *verbose*  nil)
+(def ^{:dynamic true} *revision* nil)
 
 (defn layer
   "Return the layer for a given name from *graph*."

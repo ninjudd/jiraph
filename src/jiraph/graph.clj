@@ -2,6 +2,7 @@
   (:use [useful.map :only [into-map update-each filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [memoize-deref adjoin into-set map-entry]]
         [useful.fn :only [any fix to-fix]]
+        [useful.seq :only [merge-sorted]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
@@ -97,50 +98,71 @@
         [(layer/meta-key layer "_layer")])
       keys)))
 
-(defn ^{:dynamic true} get-node
-  "Fetch a node's data from this layer."
-  ([layer id & [not-found]]
-     (layer/get-node layer id not-found)))
+(defn merged-ids [id]
+  [id])
 
 (let [sentinel (Object.)]
+  (defn ^{:dynamic true} get-node
+    "Fetch a node's data from this layer."
+    [layer id & [not-found]]
+    (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
+              ([] not-found)
+              ([a b] (adjoin a b)))
+            (->> (merged-ids id)
+                 (map #(layer/get-node layer % sentinel))
+                 (remove #(identical? % sentinel)))))
+
   (defn find-node
     "Get a node's data along with its id."
-    ([layer id]
-       (let [node (get-node layer id sentinel)]
-         (when-not (identical? node sentinel)
-           (map-entry id node))))))
+    [layer id]
+    (let [node (get-node layer id sentinel)]
+      (when-not (identical? node sentinel)
+        (map-entry id node)))))
+
+(defn merge-fn [f]
+  (case f
+    (seq  subseq)  (partial apply merge-sorted <)
+    (rseq rsubseq) (partial apply merge-sorted >)
+    (partial reduce adjoin nil)))
+
+(defn- query-in-node*
+  [layer keyseq f & args]
+  (let [keyseq (meta-keyseq layer keyseq)]
+    (if-let [query-fn (layer/query-fn layer keyseq f)]
+      (apply query-fn args)
+      (if-let [query-fn (layer/query-fn layer keyseq identity)]
+        (apply f (query-fn) args)
+        (let [[id & keys] keyseq
+              node (get-node layer id)]
+          (apply f (get-in node keys) args))))))
 
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
-  ([layer keyseq f & args]
-     (let [keyseq (meta-keyseq layer keyseq)]
-       (if-let [query-fn (layer/query-fn layer keyseq f)]
-         (apply query-fn args)
-         (if-let [query-fn (layer/query-fn layer keyseq identity)]
-           (apply f (query-fn) args)
-           (let [[id & keys] keyseq
-                 node (get-node layer id)]
-             (apply f (get-in node keys) args)))))))
+  [layer keyseq f & args]
+  ((merge-fn f)
+   (for [id (merged-ids (first keyseq))]
+     (apply query-in-node* layer (cons id (rest keyseq)) f args))))
 
 (defn get-in-node
   "Fetch data from inside a node."
-  ([layer keyseq & [not-found]]
-     (query-in-node layer (meta-keyseq layer keyseq) identity)))
+  [layer keyseq & [not-found]]
+  (let [[id & keys] (meta-keyseq layer keyseq)]
+    (query-in-node layer [id] get-in keys not-found)))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
-  ([layer id]
-     (get-in-node layer [id :edges] nil)))
+  [layer id]
+  (get-in-node layer [id :edges] nil))
 
 (defn get-in-edge
   "Fetch data from inside an edge."
-  ([layer [id to-id & keys] & [not-found]]
-     (get-in-node layer (list* id :edges to-id keys) not-found)))
+  [layer [id to-id & keys] & [not-found]]
+  (get-in-node layer (list* id :edges to-id keys) not-found))
 
 (defn get-edge
   "Fetch an edge from node with id to to-id."
-  ([layer id to-id & [not-found]]
-     (get-in-edge layer [id to-id] not-found)))
+  [layer id to-id & [not-found]]
+  (get-in-edge layer [id to-id] not-found))
 
 (declare update-in-node!)
 
