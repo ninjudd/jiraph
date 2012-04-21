@@ -1,6 +1,6 @@
 (ns jiraph.graph
   (:use [useful.map :only [into-map update-each filter-keys-by-val remove-vals map-to]]
-        [useful.utils :only [memoize-deref adjoin into-set map-entry]]
+        [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [useful.fn :only [any fix to-fix]]
         [useful.seq :only [merge-sorted]]
         [useful.macro :only [with-altered-var]]
@@ -16,6 +16,9 @@
 (def ^{:dynamic true} *skip-writes* false)
 (def ^{:dynamic true, :doc "All layers that are currently in read-only mode. You should probably not modify this directly; prefer using with-readonly instead."}
   *read-only* #{})
+
+(def ^{:dynamic true} *merge-reduce-fn* adjoin)
+(def ^{:dynamic true} *meta-layer*      nil)
 
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
@@ -98,19 +101,24 @@
         [(layer/meta-key layer "_layer")])
       keys)))
 
-(defn merged-ids [id]
-  [id])
+(declare merge-ids)
+
+(defmacro with-merging-disabled [& forms]
+  `(binding [*merge-reduce-fn* nil]
+     ~@forms))
 
 (let [sentinel (Object.)]
   (defn ^{:dynamic true} get-node
     "Fetch a node's data from this layer."
     [layer id & [not-found]]
-    (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
-              ([] not-found)
-              ([a b] (adjoin a b)))
-            (->> (merged-ids id)
-                 (map #(layer/get-node layer % sentinel))
-                 (remove #(identical? % sentinel)))))
+    (if (nil? *merge-reduce-fn*)
+      (layer/get-node layer id not-found)
+      (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
+                ([] not-found)
+                ([a b] (adjoin a b)))
+              (->> (merge-ids id)
+                   (map #(layer/get-node layer % sentinel))
+                   (remove #(identical? % sentinel))))))
 
   (defn find-node
     "Get a node's data along with its id."
@@ -123,7 +131,7 @@
   (condp contains? f
     #{seq  subseq}  (partial apply merge-sorted <)
     #{rseq rsubseq} (partial apply merge-sorted >)
-    (partial reduce adjoin nil)))
+    (partial reduce *merge-reduce-fn* nil)))
 
 (defn- query-in-node*
   [layer keyseq f & args]
@@ -139,9 +147,11 @@
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
   [layer keyseq f & args]
-  ((merge-fn f)
-   (for [id (merged-ids (first keyseq))]
-     (apply query-in-node* layer (cons id (rest keyseq)) f args))))
+  (if (nil? *merge-reduce-fn*)
+    (apply query-in-node* layer keyseq f args)
+    ((merge-fn f)
+     (for [id (merge-ids (first keyseq))]
+       (apply query-in-node* layer (cons id (rest keyseq)) f args)))))
 
 (defn get-in-node
   "Fetch data from inside a node."
@@ -195,7 +205,9 @@
         (update-in-node! layer [:meta node-id "affected-by"] conj rev-id)
         (update-in-node! layer [:meta :changed-ids rev-id] conj node-id)))))
 
-(defn update-in-node! [layer keyseq f & args]
+(defn update-in-node!
+  "Update the subnode at keyseq by calling function f with the old value and any supplied args."
+  [layer keyseq f & args]
   (refuse-readonly [layer])
   (with-transaction layer
     (when-not *skip-writes*
@@ -398,6 +410,100 @@
      `((wrap-caching (fn [] ~form))))
   ([cache form]
      `((fix (fn [] ~form) (boolean ~cache) wrap-caching))))
+
+(defn merged-into
+  "Returns the list of node ids that are merged into a specific node."
+  ([id]
+     (merged-into *meta-layer* id))
+  ([layer id]
+     (with-merging-disabled
+       (get-incoming layer id))))
+
+(defn merge-head
+  "Returns the head-id that a specific node is merged into."
+  ([id]
+     (merge-head *meta-layer* id))
+  ([layer id]
+     (with-merging-disabled
+       (not-empty (:head (get-node layer id))))))
+
+(defn merge-ids
+  "Returns a list of node ids in the merge chain of id. Always starts with the head-id,
+   followed by tail-ids in the reverse order they were merged."
+  ([id]
+     (merge-ids *meta-layer* id))
+  ([layer id]
+     (if layer
+       (let [head-id (merge-head id)]
+         `[~head-id ~@(merged-into head-id)])
+       [id])))
+
+(defn merge-node
+  "Functional version of merge-node."
+  [layer head-id tail-id]
+  (verify (not= head-id tail-id)
+          (format "cannot merge %s into itself" tail-id))
+  (verify (= (type-key head-id) (type-key tail-id))
+          (format "cannot merge %s into %s because they are not the same type" tail-id head-id))
+  (let [head-merged (merge-head head-id)
+        tail-merged (merge-head tail-id)]
+    (if (= head-id tail-merged)
+      (printf "warning: %s is already merged into %s\n" tail-id head-id)
+      (do
+        (verify (not head-merged)
+                (format "cannot merge %s into %s because %2$s is already merged into %s"
+                        tail-id head-id head-merged))
+        (verify (not tail-merged)
+                (format "cannot merge %s into %s because %1$s is already merged into %s"
+                        tail-id head-id tail-merged))
+        (let [revision (retro/current-revision layer)]
+          (reduce (fn [layer id]
+                    (update-node layer id adjoin {:head head-id :edges {head-id {:rev revision}}}))
+                  layer
+                  (cons tail-id (merged-into tail-id))))))))
+
+(defn merge-node!
+  "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
+  ([head-id tail-id]
+     (merge-node! *meta-layer* head-id tail-id))
+  ([layer head-id tail-id]
+     (retro/dotxn layer
+        (merge-node layer head-id tail-id))))
+
+(defn- delete-merges-after
+  "Delete all merges from node that happened at or after rev."
+  [layer rev id node]
+  (update-node layer id adjoin
+               {:edges
+                (into {} (for [[to-id edge] (:edges node)
+                               :when (and (not (:deleted edge))
+                                          (<= rev (:rev edge)))]
+                           [to-id {:deleted true}]))}))
+
+(defn unmerge-node
+  "Mutable version of unmerge-node."
+  [layer head-id tail-id]
+  (with-merging-disabled
+    (let [tail-node (get-node layer tail-id)
+          merge-rev (get-in tail-node [:edges head-id :rev])]
+      (verify merge-rev ;; revision of the original merge of tail into head
+              (format "cannot unmerge %s from %s because they aren't merged" tail-id head-id))
+      (reduce (fn [layer id]
+                (-> layer
+                    (delete-merges-after merge-rev id (get-node layer id))
+                    (update-node id adjoin {:head_id tail-id})))
+              (-> layer
+                  (delete-merges-after merge-rev tail-id tail-node)
+                  (update-node tail-id adjoin {:head_id ""}))
+              (merged-into tail-id)))))
+
+(defn unmerge-node!
+  "Unmerge tail node from head node, taking all nodes that were previously merged into tail with it."
+  ([head-id tail-id]
+     (unmerge-node! *meta-layer* head-id tail-id))
+  ([layer head-id tail-id]
+     (retro/dotxn layer
+       (unmerge-node layer head-id tail-id))))
 
 (comment these guys need to be updated and split up once we've figured out our
          plan for wrapping, and also the split between graph and core.

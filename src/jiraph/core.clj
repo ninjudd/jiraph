@@ -115,7 +115,7 @@
 ;; we don't want to make the "simple" uses of jiraph.core have to mention
 ;; jiraph.graph at all
 (doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node
-               wrap-caching with-caching]]
+               wrap-caching with-caching merge-head merged-into merge-ids]]
   (let [{:keys [func meta]} (graph-impl name)]
     (intern *ns* (with-meta name meta) func)))
 
@@ -128,8 +128,8 @@
   sync! optimize! truncate!)
 
 (defmacro at-revision
-  "Execute the given forms with the curren revision set to rev. Can be used to mark changes with a given
-   revision, or read the state at a given revision."
+  "Execute the given forms with the current revision set to rev. Can be used to mark changes with a
+   given revision, or read the state at a given revision."
   [rev & forms]
   `(binding [*revision* ~rev]
       ~@forms))
@@ -146,10 +146,12 @@
   (alter-var-root #'*graph* (constantly graph)))
 
 (defmacro with-graph [graph & forms]
-  `(binding [*graph* ~graph]
-     (try (open!)
-          ~@forms
-          (finally (close!)))))
+  `(let [graph# ~graph]
+     (binding [*graph* graph#
+               graph/*meta-layer* (get graph# :meta)]
+       (try (open!)
+            ~@forms
+            (finally (close!))))))
 
 (defmacro with-graph! [graph & forms]
   `(let [graph# *graph*]
@@ -195,6 +197,17 @@
   "Does the named layer exist in the current graph?"
   [layer-name]
   (contains? *graph* layer-name))
+
+(defn merge-node! [head-id tail-id]
+  (graph/merge-node! (layer :meta) head-id tail-id))
+
+(defn unmerge-node! [head-id tail-id]
+  (graph/unmerge-node! (layer :meta) head-id tail-id))
+
+;; copy docstrings
+(doseq [[from to] {#'graph/merge-node!   #'merge-node!
+                   #'graph/unmerge-node! #'unmerge-node!}]
+  (alter-meta! to assoc :doc (:doc (meta from))))
 
 (defmacro txn-> [layer-name & actions]
   `(let [layer-name# ~layer-name
