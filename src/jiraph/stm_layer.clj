@@ -7,7 +7,6 @@
                                  max-revision get-queue at-revision current-revision empty-queue]]
         [useful.fn        :only [given fix]]
         [useful.utils     :only [returning or-min]]
-        [useful.map       :only [keyed]]
         [useful.datatypes :only [assoc-record]])
   (:import (java.io FileNotFoundException)))
 
@@ -51,7 +50,7 @@
   (-> layer :store deref (get (current-rev layer))))
 
 (def ^{:private true} nodes (comp :nodes now))
-(def ^{:private true} meta (comp :meta now))
+(def ^{:private true} meta  (comp :meta now))
 
 (defrecord STMLayer [store revision filename]
   Object
@@ -63,24 +62,6 @@
     (-> this nodes keys))
   (node-seq [this]
     (-> this nodes seq))
-
-  ;; the STM layer can't optimize any of these things; these are simply
-  ;; reference/testing implementations
-  Optimized
-  (query-fn [this keyseq f]
-    (when (= 'specialized-count f)
-      (fn [update-counter]
-        (do (swap! update-counter inc)
-            (count (get-in (nodes this) keyseq))))))
-  (update-fn [this [id key :as keyseq] f]
-    (when (= :edges key)
-      (fn [& args]
-        (let [old (get-in (nodes this) keyseq)
-              new (apply f old args)]
-          (alter store
-                 assoc-in (list* (current-rev this) :nodes keyseq)
-                 new)
-          (keyed [old new])))))
 
   Meta
   (meta-key [this k]
