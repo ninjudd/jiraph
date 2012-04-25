@@ -7,11 +7,11 @@
 ;; STMLayer can't optimize anything, so add reference/testing implementations.
 (extend-type jiraph.stm_layer.STMLayer
   jiraph.layer/Optimized
-  (query-fn [this keyseq f]
+  (query-fn [this keyseq not-found f]
     (when (= 'specialized-count f)
       (fn [counter]
         (do (swap! counter inc)
-            (count (get-in (:nodes (now this)) keyseq))))))
+            (count (get-in (:nodes (now this)) keyseq not-found))))))
   (update-fn [this [id key :as keyseq] f]
     (when (= :edges key)
       (fn [& args]

@@ -95,7 +95,7 @@
     (db/delete! db id))
 
   Optimized
-  (query-fn [this keyseq f] nil)
+  (query-fn [this keyseq not-found f] nil)
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
       (let [encoder ((format-for this id) {:revision revision :id id})]

@@ -158,38 +158,43 @@
       (for [from-id from-ids]
         (cons from-id (rest keyseq))))))
 
-(defn- query-in-node* [layer keyseq f & args]
+(defn- query-unmerged* [layer keyseq not-found f & args]
   (let [keyseq (meta-keyseq layer keyseq)]
-    (if-let [query-fn (layer/query-fn layer keyseq f)]
+    (if-let [query-fn (layer/query-fn layer keyseq not-found f)]
       (apply query-fn args)
-      (if-let [query-fn (layer/query-fn layer keyseq identity)]
+      (if-let [query-fn (layer/query-fn layer keyseq not-found identity)]
         (apply f (query-fn) args)
         (let [[id & keys] keyseq
               node (get-node layer id)]
           (apply f (get-in node keys) args))))))
 
-(defn- query-in-node-merged* [layer keyseq f & args]
+(defn- query-merged* [layer keyseq not-found f & args]
   (let [keyseqs (expand-keyseq-merges keyseq)]
     (if (= 1 (count keyseqs))
-      (apply query-in-node* layer keyseq f args) ; no merging needed
+      (apply query-unmerged* layer keyseq not-found f args) ; no merging needed
       (if-let [merge-data (merge-fn keyseq f)]
         (merge-data (for [keyseq keyseqs]
-                      (apply query-in-node* layer keyseq f args)))
-        (apply f (query-in-node-merged* layer keyseq identity) args)))))
+                      (apply query-unmerged* layer keyseq not-found f args)))
+        (apply f (query-merged* layer keyseq not-found identity) args)))))
+
+(defn query-in-node*
+  "Fetch data from inside a node, replacing it with not-found if it is missing,
+   and immediately call a function on it."
+  [layer keyseq not-found f & args]
+  (apply (if (nil? *merge-reduce-fn*)
+           query-unmerged*
+           query-merged*)
+         layer keyseq not-found f args))
 
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
   [layer keyseq f & args]
-  (apply (if (nil? *merge-reduce-fn*)
-           query-in-node*
-           query-in-node-merged*)
-         layer keyseq f args))
+  (apply query-in-node* layer keyseq nil f args))
 
 (defn get-in-node
   "Fetch data from inside a node."
   [layer keyseq & [not-found]]
-  (let [[id & keys] (meta-keyseq layer keyseq)]
-    (query-in-node layer [id] get-in keys not-found)))
+  (query-in-node* layer (meta-keyseq layer keyseq) not-found identity))
 
 (defn get-edges
   "Fetch the edges for a node on this layer."
@@ -331,10 +336,7 @@
 (defn fields
   "Return a map of fields to their metadata for the given layer."
   ([layer id-or-type]
-     (keys (:fields (schema layer id-or-type))))
-  ([layer id subfields]
-     nil ;; TODO find out what subfields is supposed to mean
-     ))
+     (keys (:fields (schema layer id-or-type)))))
 
 (defn edges-valid? [layer edges]
   (or (not (layer/single-edge? layer))

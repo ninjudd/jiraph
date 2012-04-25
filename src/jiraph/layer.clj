@@ -92,11 +92,11 @@
     Jiraph's behavior in the case of return values of any type other than hash (including nil) is
     unspecified; these may receive special handling in some future version.")
 
-  (query-fn [layer keyseq f]
+  (query-fn [layer keyseq not-found f]
     "Get a function for performing an optimized read on the layer at a specified node. See
     documentation of Optimized for the general contract of Optimized functions. The function
-    returned by query-fn should, when called, call f on the data at keyseq (presumably in some
-    optimized way), and return f's result.
+    returned by query-fn should, when called, call f (presumably in some optimized way) on the data
+    at keyseq (or not-found if no data is present), and return f's result.
 
     For example, a layer might store a node's edge-count in a separate field which can be read
     without reading the edges themselves; in that case, (query-fn layer [node-name :edges] count)
@@ -193,7 +193,7 @@
 
   Optimized
   ;; can't optimize anything
-  (query-fn  [layer keyseq f] nil)
+  (query-fn  [layer keyseq not-found f] nil)
   (update-fn [layer keyseq f] nil))
 
 (extend-type nil
