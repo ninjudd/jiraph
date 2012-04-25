@@ -6,7 +6,7 @@
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
-        [useful.fn :only [as-fn fix]]
+        [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
         [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
@@ -17,10 +17,11 @@
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
-(defn- format-for [layer node-id]
-  (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
-                   (meta-key? layer node-id) :node-meta-format
-                   :else :node-format)))
+(defn- codec-for [layer node-id opts]
+  ((get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-codec-fn
+                    (meta-key? layer node-id) :node-meta-codec-fn
+                    :else :node-codec-fn))
+   (assoc opts :id node-id)))
 
 ;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
 (defn- main-node-id [meta-id]
@@ -58,7 +59,7 @@
              revision)))))
 
 (defrecord MasaiLayer [db revision max-written-revision append-only?
-                       node-format node-meta-format layer-meta-format]
+                       node-codec-fn node-meta-codec-fn layer-meta-codec-fn]
   Object
   (toString [this]
     (pr-str this))
@@ -78,16 +79,13 @@
   Basic
   (get-node [this id not-found]
     (if-let [data (db/fetch db id)]
-      (let [codec ((format-for this id) {:revision (revision-to-read this) :id id})]
-        (decode codec
-                [(ByteBuffer/wrap data)]))
+      (decode (codec-for this id {:revision (revision-to-read this)})
+              [(ByteBuffer/wrap data)])
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
-              (let [codec ((format-for this id) {:revision revision :id id})
-                    codec (if append-only?
-                            (special-codec codec :reset)
-                            codec)]
+              (let [codec (-> (codec-for this id {:revision revision})
+                              (given append-only? (special-codec :reset)))]
                 (bufseq->bytes (encode codec data))))]
       ((if append-only? db/append! db/put!)
        db id (bytes attrs))))
@@ -98,13 +96,13 @@
   (query-fn [this keyseq not-found f] nil)
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [encoder ((format-for this id) {:revision revision :id id})]
-        (when (= f (:reduce-fn (meta encoder)))
+      (let [codec (codec-for this id {:revision revision})]
+        (when (= f (:reduce-fn (meta codec)))
           (fn [attrs]
             (->> (if keys
                    (assoc-in {} keys attrs)
                    attrs)
-                 (encode encoder)
+                 (encode codec)
                  (bufseq->bytes)
                  (db/append! db id))
             {:old nil :new attrs})))))
@@ -125,16 +123,16 @@
 
   Schema
   (schema [this id]
-    (:schema (meta ((format-for this id) {:id id :revision revision}))))
+    (:schema (meta (codec-for this id {:revision revision}))))
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (dorun (bufseq->bytes (encode (format-for this id) attrs)))
+      (dorun (bufseq->bytes (encode (codec-for this id attrs))))
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
-    (when-let [rev-codec (:revisions (meta ((format-for this id) {:id id})))]
+    (when-let [rev-codec (:revisions (meta (codec-for this id {:id id})))]
       (when-let [data (db/fetch db id)]
         (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
           (distinct
@@ -182,7 +180,7 @@
        (defn- make-db [db]
          db))
 
-;; formats should be functions:
+;; codec-fns should be functions:
 ;; - accept as arg: a map containing {revision and node-id}
 ;; - return: a gloss codec
 ;; plain old codecs will be accepted as well
@@ -191,15 +189,15 @@
                       (as-fn (or codec default-codec)))]
   (defn make [db & {{:keys [node meta layer-meta]
                      :or {node (-> (codec-fn default-codec)
-                                   (vary-meta merge layer/edges-schema))}} :formats,
+                                   (vary-meta merge layer/edges-schema))}} :codec-fns,
                     :keys [assoc-mode] :or {assoc-mode :append}}]
-    (let [[node-format meta-format layer-meta-format]
+    (let [[node-codec-fn meta-codec-fn layer-meta-codec-fn]
           (map codec-fn [node meta layer-meta])]
       (MasaiLayer. (make-db db) nil (atom nil)
                    (case assoc-mode
                      :append true
                      :overwrite false)
-                   node-format, meta-format, layer-meta-format))))
+                   node-codec-fn, meta-codec-fn, layer-meta-codec-fn))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.

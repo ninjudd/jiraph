@@ -29,7 +29,7 @@
   (let [base (revisioned-clojure-codec adjoin)
         wrapped (wrap-typing base (comp #{:profile} ego/type-key))
         id "person-1"]
-    (masai/with-temp-layer [base-layer :formats {:node base}]
+    (masai/with-temp-layer [base-layer :codec-fns {:node base}]
       (let [l (at-revision base-layer 1)]
         (dotxn l
           (-> l
@@ -37,7 +37,7 @@
         (is (= {:foo :blah}
                (graph/get-node l id)))
         (is (= [1] (graph/get-revisions l id)))))
-    (masai/with-temp-layer [wrapped-layer :formats {:node wrapped}]
+    (masai/with-temp-layer [wrapped-layer :codec-fns {:node wrapped}]
       (let [l (at-revision wrapped-layer 1)]
         (is (thrown? Exception ;; due to no codec for writing "person"s
                      (dotxn l
@@ -53,7 +53,7 @@
 
 (deftest protobuf-sets
   (let [master (masai/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                           :formats {:node (proto/protobuf-codec Test$Foo)})
+                           :codec-fns {:node (proto/protobuf-codec Test$Foo)})
         rev (vec (for [r (range 5)]
                    (at-revision master r)))
         before {:bar 5, :tag-set #{"a" "b"}}

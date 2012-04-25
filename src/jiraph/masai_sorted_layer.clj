@@ -63,8 +63,8 @@
   "This is used to find, given a path through a node and a sequence of [path,codec] pairs,
    all the codecs that will actually be needed to write at that path. Basically, this means all
    codecs whose path is below the write-path, and one codec which is at or above it."
-  [codecs path]
-  (let [path-to-root (filter #(along-path? (first %) path) codecs)
+  [layout path]
+  (let [path-to-root (filter #(along-path? (first %) path) layout)
         [below above] (split-with #(path-prefix? path (first %) true)
                                   path-to-root)]
     (concat below (take 1 above))))

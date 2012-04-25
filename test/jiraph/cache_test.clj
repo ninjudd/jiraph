@@ -12,7 +12,7 @@
 
 (def test-graph
   {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                  :formats {:node (protobuf-codec Test$Node)})})
+                  :codec-fns {:node (protobuf-codec Test$Node)})})
 
 (defwalk full-walk
   :add?      true
