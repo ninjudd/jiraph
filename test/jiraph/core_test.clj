@@ -140,7 +140,7 @@
     (test-each-layer all
       (truncate! layer-name)
 
-      (testing "append-node! supports viewing old revisions"
+      (testing "adjoin supports viewing old revisions"
         (let [node  {:bar "cat" :baz [5]}
               attrs {:baz [8]}]
           (at-revision 100
