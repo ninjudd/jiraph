@@ -17,11 +17,11 @@
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
-(defn- codec-for [layer node-id opts]
-  ((get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-codec-fn
-                    (meta-key? layer node-id) :node-meta-codec-fn
-                    :else :node-codec-fn))
-   (assoc opts :id node-id)))
+(defn- codec-for [layer node-id revision]
+  (let [codec-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-codec-fn
+                                  (meta-key? layer node-id) :node-meta-codec-fn
+                                  :else :node-codec-fn))]
+    (codec-fn {:id node-id :revision revision})))
 
 ;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
 (defn- main-node-id [meta-id]
@@ -79,12 +79,12 @@
   Basic
   (get-node [this id not-found]
     (if-let [data (db/fetch db id)]
-      (decode (codec-for this id {:revision (revision-to-read this)})
+      (decode (codec-for this id (revision-to-read this))
               [(ByteBuffer/wrap data)])
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
-              (let [codec (-> (codec-for this id {:revision revision})
+              (let [codec (-> (codec-for this id revision)
                               (given append-only? (special-codec :reset)))]
                 (bufseq->bytes (encode codec data))))]
       ((if append-only? db/append! db/put!)
@@ -96,7 +96,7 @@
   (query-fn [this keyseq not-found f] nil)
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codec (codec-for this id {:revision revision})]
+      (let [codec (codec-for this id revision)]
         (when (= f (:reduce-fn (meta codec)))
           (fn [attrs]
             (->> (if keys
@@ -123,16 +123,16 @@
 
   Schema
   (schema [this id]
-    (:schema (meta (codec-for this id {:revision revision}))))
+    (:schema (meta (codec-for this id revision))))
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (dorun (bufseq->bytes (encode (codec-for this id attrs))))
+      (dorun (bufseq->bytes (encode (codec-for this id revision) attrs)))
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
-    (when-let [rev-codec (:revisions (meta (codec-for this id {:id id})))]
+    (when-let [rev-codec (:revisions (meta (codec-for this id nil)))]
       (when-let [data (db/fetch db id)]
         (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
           (distinct
