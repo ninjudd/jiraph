@@ -104,65 +104,66 @@
       str-after (fn [s] ;; the string immediately after this one in lexical order
                   (str s \u0001))]
   (defn bounds [path]
-    (let [path       (vec path)
-          last       (peek path)
-          multi?     (= :* last)
-          path       (pop path)
-          top-level? (empty? path)
-          start      (db-name path)]
-      (if top-level?
-        {:start last, :stop (str-after last)
-         :keyfn (constantly last), :parent []}
-        (into {:parent path}
-              (if multi?
+    (let [path  (vec path)
+          last  (peek path)
+          path  (pop path)
+          start (db-name path)]
+      (into {:parent path}            
+            (if (empty? path) ; top-level
+              {:start last, :stop (str-after last)
+               :keyfn (constantly last)}
+              (if (= :* last) ; multi
                 {:start (str start ":")
-                 :stop (str start after-colon)
+                 :stop  (str start after-colon)
                  :keyfn (substring-after ":")
                  :multi true}
                 (let [start-key (str start ":" (name last))]
                   {:start start-key
-                   :stop (str-after start-key)
+                   :stop  (str-after start-key)
                    :keyfn (constantly last)})))))))
 
-(defn- seq-fn [layer path layout not-found f]
-  (when-let [[id & keys] (seq path)]
-    (let [expected-path `[~@keys :*]
-          db (:db layer)]
-      (when-let [[path codec] (find-first (fn [[path codec]] (= expected-path path))
-                                          layout)]
-        (let [{:keys [start stop keyfn]} (bounds path)
-              start   (str id ":" start)
-              stop    (str id ":" stop)
-              db-key  (fn [k] (str start k))
-              all     (db/fetch-subseq db >= start < stop)]
-          (when-let [fetch-nodes
-                     (switch f
-                       seq  #(seq all)
-                       rseq #(db/fetch-rsubseq db >= start < stop)
-                       subseq (fn
-                                ([test key]
-                                   (if (#{< <=} test)
-                                     (db/fetch-subseq db >= start test (db-key key))
-                                     (db/fetch-subseq db test (db-key key) < stop)))
-                                ([start-test start-key end-test end-key]
-                                   (db/fetch-subseq db
+(defn- find-codec [keyseq codecs]
+  (when-let [expected-path (next keyseq)]
+    (some (fn [[path codec]]
+            (when (= expected-path path)
+              codec))
+          codecs)))
+
+(defn- seq-fn [layer keys layout not-found f]
+  (let [path `[~@keys :*]]
+    (when-let [codec (find-codec path layout)]
+      (let [{:keys [start stop keyfn]} (bounds path)
+            db-key (partial str start)
+            db     (:db layer)
+            all    (db/fetch-subseq db >= start < stop)]
+        (when-let [fetch-nodes
+                   (switch f
+                     seq  #(seq all)
+                     rseq #(db/fetch-rsubseq db >= start < stop)
+                     subseq (fn
+                              ([test key]
+                                 (if (#{< <=} test)
+                                   (db/fetch-subseq db >= start test (db-key key))
+                                   (db/fetch-subseq db test (db-key key) < stop)))
+                              ([start-test start-key end-test end-key]
+                                 (db/fetch-subseq db
+                                                  start-test (db-key start-key)
+                                                  end-test (db-key end-key))))
+                     rsubseq (fn
+                               ([test key]
+                                  (if (#{> >=} test)
+                                    (db/fetch-rsubseq db test (db-key key) < stop)
+                                    (db/fetch-rsubseq db >= start test (db-key key))))
+                               ([start-test start-key end-test end-key]
+                                  (db/fetch-rsubseq db
                                                     start-test (db-key start-key)
-                                                    end-test (db-key end-key))))
-                       rsubseq (fn
-                                 ([test key]
-                                    (if (#{> >=} test)
-                                      (db/fetch-rsubseq db test (db-key key) < stop)
-                                      (db/fetch-rsubseq db >= start test (db-key key))))
-                                 ([start-test start-key end-test end-key]
-                                    (db/fetch-rsubseq db
-                                                      start-test (db-key start-key)
-                                                      end-test (db-key end-key)))))]
-            (fn [& args]
-              (if (seq all)
-                (for [[k v] (apply fetch-nodes args)]
-                  (map-entry (keyfn k)
-                             (decode codec [(ByteBuffer/wrap v)])))
-                (apply f not-found args)))))))))
+                                                    end-test (db-key end-key)))))]
+          (fn [& args]
+            (if (seq all)
+              (for [[k v] (apply fetch-nodes args)]
+                (map-entry (keyfn k)
+                           (decode codec [(ByteBuffer/wrap v)])))
+              (apply f not-found args))))))))
 
 (defn- layout-for
   "Look up the layout and codecs to use based on node id and revision."
