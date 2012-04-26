@@ -124,12 +124,12 @@
                    :stop (str-after start-key)
                    :keyfn (constantly last)})))))))
 
-(defn- seq-fn [layer path codecs not-found f]
+(defn- seq-fn [layer path layout not-found f]
   (when-let [[id & keys] (seq path)]
     (let [expected-path `[~@keys :*]
           db (:db layer)]
       (when-let [[path codec] (find-first (fn [[path codec]] (= expected-path path))
-                                          codecs)]
+                                          layout)]
         (let [{:keys [start stop keyfn]} (bounds path)
               start   (str id ":" start)
               stop    (str id ":" stop)
@@ -164,13 +164,13 @@
                              (decode codec [(ByteBuffer/wrap v)])))
                 (apply f not-found args)))))))))
 
-(defn- codecs-for
+(defn- layout-for
   "Look up the layout and codecs to use based on node id and revision."
   [layer node-id revision]
-  (let [path-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format
-                                    (meta-key? layer node-id) :node-meta-format
-                                    :else :node-format))]
-    (path-fn {:id node-id, :revision revision})))
+  (let [layout-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-layout-fn
+                                    (meta-key? layer node-id) :node-meta-layout-fn
+                                    :else :node-layout-fn))]
+    (layout-fn {:id node-id, :revision revision})))
 
 (defn- delete-ranges!
   "Given a layer and a sequence of [start, end) intervals, delete every key in range. If the
@@ -219,8 +219,8 @@
            (when (< revision max-written)
              revision)))))
 
-(defn- node-chunks [codecs db id]
-  (for [[path codec] codecs
+(defn- node-chunks [layout db id]
+  (for [[path codec] layout
         :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
               kvs (seq (for [[k v] (db/fetch-seq db start)
                              :while (neg? (compare k stop))
@@ -231,11 +231,11 @@
     (assoc-levels {} parent
                   (into {} kvs))))
 
-(defn- read-node [codecs db id not-found]
+(defn- read-node [layout db id not-found]
   (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
             ([] not-found)
             ([a b] (adjoin a b)))
-          (node-chunks codecs db id)))
+          (node-chunks layout db id)))
 
 (defn- optimized-writer
   "Return a writer iff the keyseq corresponds exactly to one path in path-codecs, and the
@@ -339,7 +339,7 @@
 
 
 ;;; TODO pull the three formats into a single field?
-(defrecord MasaiSortedLayer [db revision max-written-revision append-only? node-format node-meta-format layer-meta-format]
+(defrecord MasaiSortedLayer [db revision max-written-revision append-only? node-layout-fn node-meta-layout-fn layer-meta-layout-fn]
   Meta
   (meta-key [this k]
     (str "_" k))
@@ -354,7 +354,7 @@
 
   Basic
   (get-node [this id not-found]
-    (let [node (read-node (codecs-for this id (revision-to-read this)) db id not-found)]
+    (let [node (read-node (layout-for this id (revision-to-read this)) db id not-found)]
       (if (identical? node not-found)
         not-found
         (get node id))))
@@ -367,7 +367,7 @@
   Optimized
   (query-fn [this keyseq not-found f]
     (let [[id & keys] keyseq
-          codecs (subnode-codecs (codecs-for this id (revision-to-read this)) keys)]
+          codecs (subnode-codecs (layout-for this id (revision-to-read this)) keys)]
       (or (seq-fn this keyseq codecs not-found f)
           (if (seq codecs)
             (fn [& args]
@@ -385,7 +385,7 @@
             (fn [& args] (apply f not-found args))))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [path-codecs (subnode-codecs (codecs-for this id revision) keys)]
+      (let [path-codecs (subnode-codecs (layout-for this id revision) keys)]
         (assert (seq path-codecs) "No codecs to write with")
         (some #(% this path-codecs keyseq f)
               [specialized-writer, optimized-writer, simple-writer]))))
@@ -416,23 +416,23 @@
                                     [path schema])]
                 (schema/assoc-in acc path schema)))
             {},
-            (reverse (codecs-for this id nil)))) ;; start with shortest path for schema
+            (reverse (layout-for this id nil)))) ;; start with shortest path for schema
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (do (write-paths! this (constantly nil), (codecs-for this id revision),
+      (do (write-paths! this (constantly nil), (layout-for this id revision),
                         id, attrs, false)
           true)
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
-    (let [path-codecs (codecs-for this id (revision-to-read this))
-          revision-codecs (for [[path codec] path-codecs
-                                :let [codec (codecs/special-codec codec :revisions)]
-                                :when codec]
-                            [path codec])
-          revs (->> (node-chunks revision-codecs db id)
+    (let [layout (layout-for this id (revision-to-read this))
+          revisioned-layout (for [[path codec] layout
+                                  :let [codec (:revisions (meta codec))]
+                                  :when codec]
+                              [path codec])
+          revs (->> (node-chunks revisioned-layout db id)
                     (tree-seq (any map? sequential?) (to-fix map? vals,
                                                              sequential? seq))
                     (filter number?)
@@ -451,7 +451,7 @@
   (txn-wrap [this f]
     ;; todo *skip-writes* for past revisions
     (fn [^MasaiSortedLayer layer]
-      (let [db-wrapped (txn-wrap db     ; let db wrap transaction, but call f with layer
+      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
                                  (fn [_]
                                    (returning (f layer)
                                      (save-maxrev layer))))]
@@ -506,20 +506,20 @@
                                         (:reduce-fn (meta codec)))
                opts)]))))
 
-(defn make [db & {{:keys [node meta layer-meta]} :formats,
+(defn make [db & {{:keys [node meta layer-meta]} :layout-fns,
                   :keys [assoc-mode] :or {assoc-mode :append}}]
-  (let [[node-format meta-format layer-meta-format]
-        (for [format [node meta layer-meta]]
-          (condp invoke format
+  (let [[node-fn meta-fn layer-meta-fn]
+        (for [layout-fn [node meta layer-meta]]
+          (condp invoke layout-fn
               nil? (wrap-revisioned (constantly [[[:edges :*] default-codec]
                                                  [         [] default-codec]]))
-              (! fn?) (constantly format)
-              format))]
+              (! fn?) (constantly layout-fn)
+              layout-fn))]
     (MasaiSortedLayer. (make-db db) nil (atom nil)
                        (case assoc-mode
                          :append true
                          :overwrite false)
-                       node-format, meta-format, layer-meta-format)))
+                       node-fn, meta-fn, layer-meta-fn)))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.

@@ -101,9 +101,9 @@
 
 (deftest layer-impls
   (doseq [layer [;(stm/make)
-                 (sorted/make-temp :formats {:node (-> (constantly [[[:edges :*]], [[]]])
-                                                       (sorted/wrap-default-codecs)
-                                                       (sorted/wrap-revisioned))})
+                 (sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]], [[]]])
+                                                          (sorted/wrap-default-codecs)
+                                                          (sorted/wrap-revisioned))})
                  (masai/make-temp)]] ;; add more layers as they're implemented
     (layer/open layer)
     (try

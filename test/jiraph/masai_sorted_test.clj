@@ -25,11 +25,11 @@
   ;; cereal's revisioned clojure-reader codec
   (let [= =*] ;; jiraph treats {} and nil equivalently; test must account for this
     (masai/with-temp-layer [layer
-                            :formats {:node (-> (constantly [[[:edges :*]]
-                                                             [[:names]] ;; TODO support indexing non-maps
-                                                             [[]]])
-                                                (masai/wrap-default-codecs)
-                                                (masai/wrap-revisioned))}]
+                            :layout-fns {:node (-> (constantly [[[:edges :*]]
+                                                                [[:names]] ;; TODO support indexing non-maps
+                                                                [[]]])
+                                                   (masai/wrap-default-codecs)
+                                                   (masai/wrap-revisioned))}]
       (let [id "profile-1"
             init-node {:edges {"profile-10" {:rel :child}}
                        :age 24, :names {:first "Clancy"}}
@@ -54,10 +54,10 @@
 
 (deftest test-subseq
   (masai/with-temp-layer [layer
-                          :formats {:node (-> (constantly [[[:edges :*]]
-                                                           [[]]])
-                                              (masai/wrap-default-codecs)
-                                              (masai/wrap-revisioned))}]
+                          :layout-fns {:node (-> (constantly [[[:edges :*]]
+                                                              [[]]])
+                                                 (masai/wrap-default-codecs)
+                                                 (masai/wrap-revisioned))}]
     (let [node {:edges {"mary" {:data 1}
                         "charlie" {:data 2}
                         "sally" {:data 3}}}

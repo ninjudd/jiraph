@@ -12,10 +12,10 @@
 (defn test-graph []
   {:foo (masai/make-temp)
    :bar (masai/make-temp)
-   :baz (sorted/make-temp :formats {:node (-> (constantly [[[:edges :*]]
-                                                           [[]]])
-                                              (sorted/wrap-default-codecs)
-                                              (sorted/wrap-revisioned))})
+   :baz (sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]]
+                                                              [[]]])
+                                                 (sorted/wrap-default-codecs)
+                                                 (sorted/wrap-revisioned))})
    :stm (stm/make)})
 
 (defwalk full-walk

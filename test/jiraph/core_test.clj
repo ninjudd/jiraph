@@ -10,10 +10,10 @@
 (def all [:tr :tp :stm :trs])
 
 (let [masai  masai/make-temp
-      sorted #(sorted/make-temp :formats {:node (-> (constantly [[[:edges :*]]
-                                                                 [[]]])
-                                                    (sorted/wrap-default-codecs)
-                                                    (sorted/wrap-revisioned))})]
+      sorted #(sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]]
+                                                                    [[]]])
+                                                       (sorted/wrap-default-codecs)
+                                                       (sorted/wrap-revisioned))})]
   (defn make-graph []
     {:tr  (sorted)
      :trs (masai)
