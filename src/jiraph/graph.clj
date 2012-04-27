@@ -1,5 +1,5 @@
 (ns jiraph.graph
-  (:use [useful.map :only [update into-map update-each filter-keys-by-val remove-vals map-to]]
+  (:use [useful.map :only [filter-keys-by-val dissoc-in* assoc-in*]]
         [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [useful.fn :only [any fix to-fix given]]
         [useful.seq :only [merge-sorted indexed]]
@@ -17,8 +17,7 @@
 (def ^{:dynamic true, :doc "All layers that are currently in read-only mode. You should probably not modify this directly; prefer using with-readonly instead."}
   *read-only* #{})
 
-(def ^{:dynamic true} *merge-reduce-fn* adjoin)
-(def ^{:dynamic true} *meta-layer*      nil)
+(def ^{:dynamic true} *meta-layer* nil)
 
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
@@ -101,25 +100,62 @@
         [(layer/meta-key layer "_layer")])
       keys)))
 
-(declare merge-ids merge-edges)
+(declare merge-ids merge-head merge-position)
+
+(defn- edges-keyseq [keyseq]
+  (let [keyseq  (vec keyseq)
+        [n key] (if (= :meta (first keyseq))
+                  [3 :incoming]
+                  [2 :edges])]
+    (cond (< (count keyseq) n)
+          [key]
+          (and (= n (count keyseq))
+               (= key (peek keyseq)))
+          [])))
+
+(defn- merge-edges [edges-seq & [invert?]]
+  (->> (for [[i edges] (indexed edges-seq)
+             [id edge] edges]
+         (let [pos  (merge-position id)
+               head (or (merge-head id) id)]
+           [(if invert? [pos i], [i pos])
+            {head edge} id]))
+       (sort-by first #(compare %2 %1))
+       (map second)
+       (apply merge-with adjoin)))
+
+(defn merge-nodes [keyseq nodes]
+  (if-let [ks (edges-keyseq keyseq)]
+    (let [edges (merge-edges
+                 (map #(get-in % ks) nodes)
+                 (= :meta (first keyseq)))]
+      (-> (reduce adjoin nil
+                  (map #(dissoc-in* % ks) nodes))
+          (given (seq edges)
+                 (assoc-in* ks edges))))
+    (reduce adjoin nil nodes)))
+
+(def ^{:dynamic true} *merge-fn* merge-nodes)
+
+(defn merging-enabled? []
+  (boolean (and *merge-fn* *meta-layer*)))
 
 (defmacro with-merging-disabled [& forms]
-  `(binding [*merge-reduce-fn* nil]
+  `(binding [*merge-fn* nil]
      ~@forms))
 
 (let [sentinel (Object.)]
   (defn ^{:dynamic true} get-node
     "Fetch a node's data from this layer."
     [layer id & [not-found]]
-    (if (nil? *merge-reduce-fn*)
-      (layer/get-node layer id not-found)
-      (-> (reduce (fn ;; for an empty list, reduce calls f with no args
-                    ([] not-found)
-                    ([a b] (*merge-reduce-fn* a b)))
-                  (->> (reverse (merge-ids id))
+    (if (merging-enabled?)
+      (let [nodes (->> (reverse (merge-ids id))
                        (map #(layer/get-node layer % sentinel))
-                       (remove #(identical? % sentinel))))
-          (update-each [:edges] merge-edges))))
+                       (remove #(identical? % sentinel)))]
+        (if (empty? nodes)
+          not-found
+          (*merge-fn* [] nodes)))
+      (layer/get-node layer id not-found)))
 
   (defn find-node
     "Get a node's data along with its id."
@@ -127,26 +163,6 @@
     (let [node (get-node layer id sentinel)]
       (when-not (identical? node sentinel)
         (map-entry id node)))))
-
-(defn- merge-edges-fn [keyseq n key]
-  (let [keyseq (vec keyseq)]
-    (cond (< (count keyseq) n)
-          #(update-each % [key] merge-edges)
-          (and (= n (count keyseq))
-               (= key (peek keyseq)))
-          merge-edges
-          :else identity)))
-
-(defn merge-fn [keyseq f]
-  (when (seq keyseq)
-    (condp contains? f
-      #{seq  subseq}  (partial apply merge-sorted <)
-      #{rseq rsubseq} (partial apply merge-sorted >)
-      (when (= identity f)
-        (comp (if (= :meta (first keyseq))
-                (merge-edges-fn keyseq 3 :incoming)
-                (merge-edges-fn keyseq 2 :edges))
-              (partial reduce *merge-reduce-fn* nil))))))
 
 (defn- expand-keyseq-merges [keyseq]
   (if (= :meta (first keyseq))
@@ -168,25 +184,31 @@
       (if-let [query-fn (layer/query-fn layer keyseq not-found identity)]
         (apply f (query-fn) args)
         (let [[id & keys] keyseq
-              node (get-node layer id)]
+              node (layer/get-node layer id nil)]
           (apply f (get-in node keys) args))))))
 
+(defn- merge-fn [keyseq f]
+  (when (seq keyseq)
+    (condp contains? f
+      #{seq  subseq}  (partial apply merge-sorted <)
+      #{rseq rsubseq} (partial apply merge-sorted >)
+      (when (= identity f)
+        (partial *merge-fn* keyseq)))))
+
 (defn- query-merged* [layer keyseq not-found f & args]
-  (let [keyseqs (expand-keyseq-merges keyseq)]
-    (if (= 1 (count keyseqs))
-      (apply query-unmerged* layer keyseq not-found f args) ; no merging needed
-      (if-let [merge-data (merge-fn keyseq f)]
-        (merge-data (for [keyseq keyseqs]
-                      (apply query-unmerged* layer keyseq not-found f args)))
-        (apply f (query-merged* layer keyseq not-found identity) args)))))
+  (if-let [merge-data (merge-fn keyseq f)]
+    (let [keyseqs (expand-keyseq-merges keyseq)]
+      (merge-data (for [keyseq keyseqs]
+                    (apply query-unmerged* layer keyseq not-found f args))))
+    (apply f (query-merged* layer keyseq not-found identity) args)))
 
 (defn query-in-node*
   "Fetch data from inside a node, replacing it with not-found if it is missing,
    and immediately call a function on it."
   [layer keyseq not-found f & args]
-  (apply (if (nil? *merge-reduce-fn*)
-           query-unmerged*
-           query-merged*)
+  (apply (if (merging-enabled?)
+           query-merged*
+           query-unmerged*)
          layer keyseq not-found f args))
 
 (defn query-in-node
@@ -252,7 +274,7 @@
   (with-transaction layer
     (when-not *skip-writes*
       (let [keys (meta-keyseq layer keyseq)
-            update-meta! (if (identical? keys keyseq) ; not a meta-node
+            update-meta! (if (identical? keys keyseq) ; not a meta
                            (fn [keys old new]
                              (update-incoming! layer keys old new)
                              (update-changelog! layer (first keys)))
@@ -436,9 +458,9 @@
     (if *use-outer-cache*
       (f)
       (binding [*use-outer-cache* true
-                get-node          (memoize-deref [write-count] get-node)
-                get-incoming      (memoize-deref [write-count] get-incoming)
-                get-revisions     (memoize-deref [write-count] get-revisions)]
+                get-node          (memoize-deref [write-count #'*merge-fn*] get-node)
+                get-incoming      (memoize-deref [write-count #'*merge-fn*] get-incoming)
+                get-revisions     (memoize-deref [write-count #'*merge-fn*] get-revisions)]
         (f)))))
 
 (defmacro with-caching
@@ -450,61 +472,39 @@
 
 (defn meta-node
   "Returns the node from the meta-layer for id."
-  ([id]
-     (meta-node *meta-layer* id))
-  ([layer id]
-     (with-merging-disabled
-       (get-node layer id))))
+  [id]
+  (with-merging-disabled
+    (when *meta-layer*
+      (get-node *meta-layer* id))))
 
 (defn merged-into
   "Returns the list of node ids that are merged into a specific node."
-  ([id]
-     (merged-into *meta-layer* id))
-  ([layer id]
-     (with-merging-disabled
-       (get-incoming layer id))))
+  [id]
+  (with-merging-disabled
+    (get-incoming *meta-layer* id)))
 
 (defn merge-head
   "Returns the head-id that a specific node is merged into."
-  ([id]
-     (merge-head *meta-layer* id))
-  ([layer id]
-     (:head (meta-node id))))
-
-(defn- merge-edges [edges]
-  (if (nil? *meta-layer*)
-    edges
-    (->> (for [[id edge] edges]
-           (let [head-id (merge-head id)]
-             (if (or (empty? head-id)
-                     (= id head-id))
-               [true  {id      edge}]
-               [false {head-id edge}])))
-         (sort-by first) ; make sure heads come last
-         (map second)  ; TODO (ordered-set)
-         (apply merge-with adjoin))))
+  [id]
+  (:head (meta-node id)))
 
 (defn merge-ids
   "Returns a list of node ids in the merge chain of id. Always starts with the head-id,
    followed by tail-ids in the reverse order they were merged."
-  ([id]
-     (merge-ids *meta-layer* id))
-  ([layer id]
-     (if-let [head-id (and layer (merge-head id))]
-       `[~head-id ~@(merged-into head-id)]
-       [id])))
+  [id]
+  (if-let [head-id (and *meta-layer* (merge-head id))]
+    `[~head-id ~@(merged-into head-id)]
+    [id]))
 
 (defn merge-position
   "Returns the position in the merge chain for a given id, 0 for the head."
-  ([id]
-     (merge-position *meta-layer* id))
-  ([layer id]
-     (with-merging-disabled
-       (let [node (meta-node id)]
-         (when-let [head (:head node)]
-           (if (= head id)
-             0
-             (get-in node [:edges head :position])))))))
+  [id]
+  (with-merging-disabled
+    (let [node (meta-node id)]
+      (when-let [head (:head node)]
+        (if (= head id)
+          0
+          (get-in node [:edges head :position]))))))
 
 (defn merge-node
   "Functional version of merge-node!"
