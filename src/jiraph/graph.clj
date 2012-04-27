@@ -2,7 +2,7 @@
   (:use [useful.map :only [update into-map update-each filter-keys-by-val remove-vals map-to]]
         [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [useful.fn :only [any fix to-fix given]]
-        [useful.seq :only [merge-sorted]]
+        [useful.seq :only [merge-sorted indexed]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
@@ -448,6 +448,14 @@
   ([cache form]
      `((fix (fn [] ~form) (boolean ~cache) wrap-caching))))
 
+(defn meta-node
+  "Returns the node from the meta-layer for id."
+  ([id]
+     (meta-node *meta-layer* id))
+  ([layer id]
+     (with-merging-disabled
+       (get-node layer id))))
+
 (defn merged-into
   "Returns the list of node ids that are merged into a specific node."
   ([id]
@@ -461,8 +469,7 @@
   ([id]
      (merge-head *meta-layer* id))
   ([layer id]
-     (with-merging-disabled
-       (not-empty (:head (get-node layer id))))))
+     (:head (meta-node id))))
 
 (defn- merge-edges [edges]
   (if (nil? *meta-layer*)
@@ -487,14 +494,28 @@
        `[~head-id ~@(merged-into head-id)]
        [id])))
 
+(defn merge-position
+  "Returns the position in the merge chain for a given id, 0 for the head."
+  ([id]
+     (merge-position *meta-layer* id))
+  ([layer id]
+     (with-merging-disabled
+       (let [node (meta-node id)]
+         (when-let [head (:head node)]
+           (if (= head id)
+             0
+             (get-in node [:edges head :position])))))))
+
 (defn merge-node
-  "Functional version of merge-node."
+  "Functional version of merge-node!"
   [layer head-id tail-id]
   (verify (not= head-id tail-id)
           (format "cannot merge %s into itself" tail-id))
   (verify (= (type-key head-id) (type-key tail-id))
           (format "cannot merge %s into %s because they are not the same type" tail-id head-id))
-  (let [head-merged (fix (merge-head head-id) #{head-id} nil)
+  (let [head-meta   (meta-node head-id)
+        merge-count (or (:merge-count head-meta) 0)
+        head-merged (fix (:head head-meta)    #{head-id} nil)
         tail-merged (fix (merge-head tail-id) #{tail-id} nil)]
     (if (= head-id tail-merged)
       (printf "warning: %s is already merged into %s\n" tail-id head-id)
@@ -505,11 +526,17 @@
         (verify (not tail-merged)
                 (format "cannot merge %s into %s because %1$s is already merged into %s"
                         tail-id head-id tail-merged))
-        (let [revision (retro/current-revision layer)]
-          (reduce (fn [layer id]
-                    (update-node layer id adjoin {:head head-id :edges {head-id {:rev revision}}}))
-                  (update-node layer head-id adjoin {:head head-id})
-                  (cons tail-id (merged-into tail-id))))))))
+        (let [revision (retro/current-revision layer)
+              tail-ids (cons tail-id (merged-into tail-id))]
+          (reduce (fn [layer [pos id]]
+                    (update-node layer id adjoin
+                                 {:head head-id
+                                  :edges {head-id {:revision revision
+                                                   :position (+ 1 pos merge-count)}}}))
+                  (update-node layer head-id adjoin
+                               {:head head-id
+                                :merge-count (+ merge-count (count tail-ids))})
+                  (indexed tail-ids)))))))
 
 (defn merge-node!
   "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
@@ -520,13 +547,13 @@
         (merge-node layer head-id tail-id))))
 
 (defn- delete-merges-after
-  "Delete all merges from node that happened at or after rev."
-  [layer rev id node]
+  "Delete all merges from node that happened at or after revision."
+  [layer revision id node]
   (update-node layer id adjoin
                {:edges
                 (into {} (for [[to-id edge] (:edges node)
                                :when (and (not (:deleted edge))
-                                          (<= rev (:rev edge)))]
+                                          (<= revision (:revision edge)))]
                            [to-id {:deleted true}]))}))
 
 (defn unmerge-node
@@ -534,7 +561,7 @@
   [layer head-id tail-id]
   (with-merging-disabled
     (let [tail-node (get-node layer tail-id)
-          merge-rev (get-in tail-node [:edges head-id :rev])
+          merge-rev (get-in tail-node [:edges head-id :revision])
           tail-ids  (merged-into tail-id)
           head-ids  (merged-into head-id)]
       (verify merge-rev ;; revision of the original merge of tail into head

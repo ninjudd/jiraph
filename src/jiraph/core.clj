@@ -114,8 +114,8 @@
 ;; or any indirection, because they can't meaningfully work with layer names but
 ;; we don't want to make the "simple" uses of jiraph.core have to mention
 ;; jiraph.graph at all
-(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node
-               wrap-caching with-caching merge-head merged-into merge-ids]]
+(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node meta-node
+               wrap-caching with-caching merge-head merged-into merge-ids merge-position]]
   (let [{:keys [func meta]} (graph-impl name)]
     (intern *ns* (with-meta name meta) func)))
 

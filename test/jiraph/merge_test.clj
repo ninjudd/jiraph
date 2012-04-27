@@ -16,7 +16,9 @@
     (is (= ["A"] (merge-ids "A")))
     (is (= ["B"] (merge-ids "B")))
     (is (= nil (merge-head "A")))
-    (is (= nil (merge-head "B"))))
+    (is (= nil (merge-head "B")))
+    (is (= nil (merge-position "A")))
+    (is (= nil (merge-position "B"))))
 
   (testing "merge two nodes"
     (at-revision 1 (merge-node! "A" "B"))
@@ -24,7 +26,9 @@
     (is (= ["A" "B"] (merge-ids "A")))
     (is (= ["A" "B"] (merge-ids "B")))
     (is (= "A" (merge-head "A")))
-    (is (= "A" (merge-head "B"))))
+    (is (= "A" (merge-head "B")))
+    (is (= 0 (merge-position "A")))
+    (is (= 1 (merge-position "B"))))
 
   (testing "cannot re-merge tail"
     (is (thrown-with-msg? Exception #"already merged"
@@ -37,15 +41,29 @@
   (testing "merge multiple nodes into a single head"
     (at-revision 2 (merge-node! "A" "C"))
     (at-revision 3 (merge-node! "A" "D"))
-    (is (= #{"B" "C" "D"} (merged-into "A"))))
+    (is (= #{"B" "C" "D"} (merged-into "A")))
+    (is (= 0 (merge-position "A")))
+    (is (= 1 (merge-position "B")))
+    (is (= 2 (merge-position "C")))
+    (is (= 3 (merge-position "D"))))
 
   (testing "merge two chains together"
     (at-revision 4 (merge-node! "E" "F"))
     (at-revision 5 (merge-node! "E" "G"))
     (is (= #{"F" "G"} (merged-into "E")))
+    (is (= 0 (merge-position "E")))
+    (is (= 1 (merge-position "F")))
+    (is (= 2 (merge-position "G")))
     (at-revision 6 (merge-node! "A" "E"))
     (is (= #{"F" "G"} (merged-into "E")))
-    (is (= #{"B" "C" "D" "E" "F" "G"} (merged-into "A"))))
+    (is (= #{"B" "C" "D" "E" "F" "G"} (merged-into "A")))
+    (is (= 0 (merge-position "A")))
+    (is (= 1 (merge-position "B")))
+    (is (= 2 (merge-position "C")))
+    (is (= 3 (merge-position "D")))
+    (is (= 4 (merge-position "E")))
+    (is (= 5 (merge-position "F")))
+    (is (= 6 (merge-position "G"))))
 
   (testing "unmerge latest merge"
     (at-revision 7 (unmerge-node! "A" "E"))
