@@ -4,6 +4,7 @@
         [useful.fn :only [any fix to-fix given]]
         [useful.seq :only [merge-sorted indexed]]
         [useful.macro :only [with-altered-var]]
+useful.debug
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
         [jiraph.wrapper :only [*read-wrappers* *write-wrappers*]]
@@ -114,7 +115,7 @@
           [])))
 
 (defn- merge-edges [edges-seq & [invert?]]
-  (->> (for [[i edges] (indexed edges-seq)
+  (->> (for [[i edges] (indexed (reverse edges-seq))
              [id edge] edges]
          (let [pos  (merge-position id)
                head (or (merge-head id) id)]

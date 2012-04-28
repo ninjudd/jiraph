@@ -85,8 +85,8 @@
   (is (= {"B" {:foo 1}} (get-in-node :people ["A" :edges])))
   (is (= #{"A"} (get-incoming :people "C")))
 
-  (at-revision 5 (assoc-node! :people "D" {:a 1 :edges {"F" {:foo 1 :bar 2 :baz 3}}}))
-  (at-revision 6 (assoc-node! :people "E" {:a 2 :edges {"G" {:foo 3 :baz nil}}}))
+  (at-revision 5 (assoc-node! :people "D" {:a 1 :edges {"F" {:foo 3 :baz nil}}}))
+  (at-revision 6 (assoc-node! :people "E" {:a 2 :edges {"G" {:foo 1 :bar 2 :baz 3}}}))
   (at-revision 7 (merge-node! "D" "E"))
   (at-revision 8 (merge-node! "G" "F"))
 
@@ -98,8 +98,8 @@
   (at-revision 9  (unmerge-node! "D" "E"))
   (at-revision 10 (unmerge-node! "G" "F"))
 
-  (is (= {:a 1 :edges {"F" {:foo 1 :bar 2 :baz 3}}} (get-node :people "D")))
-  (is (= {:a 2 :edges {"G" {:foo 3 :baz nil}}}      (get-node :people "E")))
+  (is (= {:a 1 :edges {"F" {:foo 3 :baz nil}}}      (get-node :people "D")))
+  (is (= {:a 2 :edges {"G" {:foo 1 :bar 2 :baz 3}}} (get-node :people "E")))
   (is (= #{"E"} (get-incoming :people "G")))
   (is (= #{"D"} (get-incoming :people "F"))))
 
@@ -109,10 +109,10 @@
   (at-revision 3 (merge-node! "A" "B"))
   (at-revision 4 (merge-node! "D" "C"))
 
-  (is (= {:edges {"D" {:deleted false}}} (get-node :people "A")))
-  (is (= {:edges {"D" {:deleted false}}} (get-node :people "B")))
-  (is (= {"A" true} (get-incoming-map :people "C")))
-  (is (= {"A" true} (get-incoming-map :people "D"))))
+  (is (= {:edges {"D" {:deleted true}}} (get-node :people "A")))
+  (is (= {:edges {"D" {:deleted true}}} (get-node :people "B")))
+  (is (= {"A" false} (get-incoming-map :people "C")))
+  (is (= {"A" false} (get-incoming-map :people "D"))))
 
 (deftest deleted-edge-merging-same-direction
   (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:deleted true}}}))
