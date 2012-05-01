@@ -1,6 +1,7 @@
 (ns jiraph.masai-sorted-layer
-  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences
-                             Schema node-id-seq meta-key meta-key?] :as layer]
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
+                             node-id-seq meta-key meta-key?] :as layer]
+        [jiraph.codecs :only [special-codec revisioned-codec encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
@@ -10,13 +11,11 @@
         [useful.fn :only [as-fn knit any fix to-fix ! validator]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
-        [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
             [masai.cursor :as cursor]
             [jiraph.graph :as graph]
             [cereal.core :as cereal]
-            [jiraph.codecs :as codecs]
             [schematic.core :as schema]
             [clojure.string :as s])
   (:import [java.nio ByteBuffer]))
@@ -180,7 +179,7 @@
   [layer deletion-ranges]
   (doseq [{:keys [start stop codec]} deletion-ranges]
     (let [delete (if (:append-only? layer)
-                   (let [deleted (delay (bufseq->bytes (encode (codecs/special-codec codec :reset)
+                   (let [deleted (delay (bufseq->bytes (encode (special-codec codec :reset)
                                                                {})))]
                      (fn [cursor]
                        (-> cursor
@@ -290,7 +289,7 @@
         [id & keys] keyseq
         path-codecs (if append-only?
                       (for [[path codec] path-codecs]
-                        [path (codecs/special-codec codec :reset)])
+                        [path (special-codec codec :reset)])
                       path-codecs)
         write-mode (if append-only?, db/append! db/put!)
         writer (partial write-mode db)
@@ -503,8 +502,8 @@
   (fn [opts]
     (when-let [layout (layout-fn opts)]
       (for [[path codec] layout]
-        [path ((codecs/revisioned-codec (constantly codec)
-                                        (:reduce-fn (meta codec)))
+        [path ((revisioned-codec (constantly codec)
+                                 (:reduce-fn (meta codec)))
                opts)]))))
 
 (defn make [db & {{:keys [node meta layer-meta]} :layout-fns,

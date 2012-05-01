@@ -17,11 +17,11 @@
       (dissoc reset-key len-key)
       (lift-meta revision-key)))
 
-(defn encode [codec val opts] ; (opts -> Codec) -> Deserialized -> opts -> [Byte]
-  (io/encode (codec opts) val))
+(defn encode [codec val]
+  (io/encode codec val))
 
-(defn decode [codec data opts]
-  (io/decode (codec opts) data))
+(defn decode [codec data]
+  (io/decode codec data))
 
 (defn revisions-codec [codec]
   ;; read revisions just by discarding the rest

@@ -1,14 +1,13 @@
 (ns jiraph.masai-layer
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
                              node-id-seq meta-key meta-key?] :as layer]
-        [jiraph.codecs :only [special-codec]]
+        [jiraph.codecs :only [special-codec encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
-        [gloss.io :only [encode decode]]
         [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
             [jiraph.graph :as graph]
