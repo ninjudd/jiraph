@@ -4,7 +4,6 @@
         [useful.fn :only [any fix to-fix given]]
         [useful.seq :only [merge-sorted indexed]]
         [useful.macro :only [with-altered-var]]
-useful.debug
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
         [jiraph.wrapper :only [*read-wrappers* *write-wrappers*]]
@@ -473,39 +472,56 @@ useful.debug
 
 (defn meta-node
   "Returns the node from the meta-layer for id."
-  [id]
-  (with-merging-disabled
-    (when *meta-layer*
-      (get-node *meta-layer* id))))
+  ([id]
+     (meta-node *meta-layer* id))
+  ([layer id]
+     (with-merging-disabled
+       (when layer
+         (get-node layer id)))))
 
 (defn merged-into
   "Returns the list of node ids that are merged into a specific node."
-  [id]
-  (with-merging-disabled
-    (get-incoming *meta-layer* id)))
+  ([id]
+     (merged-into *meta-layer* id))
+  ([layer id]
+     (with-merging-disabled
+       (get-incoming layer id))))
 
 (defn merge-head
   "Returns the head-id that a specific node is merged into."
-  [id]
-  (:head (meta-node id)))
+  ([id]
+     (merge-head *meta-layer* id))
+  ([layer id]
+     (:head (meta-node layer id))))
+
+(defn node-deleted?
+  "Returns true if the specified node has been deleted."
+  ([id]
+     (node-deleted? *meta-layer* id))
+  ([layer id]
+     (boolean (:deleted (meta-node layer id)))))
 
 (defn merge-ids
   "Returns a list of node ids in the merge chain of id. Always starts with the head-id,
    followed by tail-ids in the reverse order they were merged."
-  [id]
-  (if-let [head-id (and *meta-layer* (merge-head id))]
-    `[~head-id ~@(merged-into head-id)]
-    [id]))
+  ([id]
+     (merge-ids *meta-layer* id))
+  ([layer id]
+     (if-let [head-id (and layer (merge-head layer id))]
+       `[~head-id ~@(merged-into layer head-id)]
+       [id])))
 
 (defn merge-position
   "Returns the position in the merge chain for a given id, 0 for the head."
-  [id]
-  (with-merging-disabled
-    (let [node (meta-node id)]
-      (when-let [head (:head node)]
-        (if (= head id)
-          0
-          (get-in node [:edges head :position]))))))
+  ([id]
+     (merge-position *meta-layer* id))
+  ([layer id]
+     (with-merging-disabled
+       (let [node (meta-node layer id)]
+         (when-let [head (:head node)]
+           (if (= head id)
+             0
+             (get-in node [:edges head :position])))))))
 
 (defn merge-node
   "Functional version of merge-node!"
@@ -514,10 +530,10 @@ useful.debug
           (format "cannot merge %s into itself" tail-id))
   (verify (= (type-key head-id) (type-key tail-id))
           (format "cannot merge %s into %s because they are not the same type" tail-id head-id))
-  (let [head-meta   (meta-node head-id)
+  (let [head-meta   (meta-node layer head-id)
         merge-count (or (:merge-count head-meta) 0)
-        head-merged (fix (:head head-meta)    #{head-id} nil)
-        tail-merged (fix (merge-head tail-id) #{tail-id} nil)]
+        head-merged (fix (:head head-meta)          #{head-id} nil)
+        tail-merged (fix (merge-head layer tail-id) #{tail-id} nil)]
     (if (= head-id tail-merged)
       (printf "warning: %s is already merged into %s\n" tail-id head-id)
       (do
@@ -528,7 +544,7 @@ useful.debug
                 (format "cannot merge %s into %s because %1$s is already merged into %s"
                         tail-id head-id tail-merged))
         (let [revision (retro/current-revision layer)
-              tail-ids (cons tail-id (merged-into tail-id))]
+              tail-ids (cons tail-id (merged-into layer tail-id))]
           (reduce (fn [layer [pos id]]
                     (update-node layer id adjoin
                                  {:head head-id
@@ -545,34 +561,34 @@ useful.debug
      (merge-node! *meta-layer* head-id tail-id))
   ([layer head-id tail-id]
      (retro/dotxn layer
-        (merge-node layer head-id tail-id))))
+       (merge-node layer head-id tail-id))))
 
 (defn- delete-merges-after
   "Delete all merges from node that happened at or after revision."
-  [layer revision id node]
+  [layer revision id meta-node]
   (update-node layer id adjoin
                {:edges
-                (into {} (for [[to-id edge] (:edges node)
+                (into {} (for [[to-id edge] (:edges meta-node)
                                :when (and (not (:deleted edge))
                                           (<= revision (:revision edge)))]
                            [to-id {:deleted true}]))}))
 
 (defn unmerge-node
-  "Mutable version of unmerge-node."
+  "Functional version of unmerge-node!"
   [layer head-id tail-id]
   (with-merging-disabled
-    (let [tail-node (get-node layer tail-id)
-          merge-rev (get-in tail-node [:edges head-id :revision])
-          tail-ids  (merged-into tail-id)
-          head-ids  (merged-into head-id)]
+    (let [tail-meta (meta-node layer tail-id)
+          merge-rev (get-in tail-meta [:edges head-id :revision])
+          tail-ids  (merged-into layer tail-id)
+          head-ids  (merged-into layer head-id)]
       (verify merge-rev ;; revision of the original merge of tail into head
               (format "cannot unmerge %s from %s because they aren't merged" tail-id head-id))
       (reduce (fn [layer id]
                 (-> layer
-                    (delete-merges-after merge-rev id (get-node layer id))
+                    (delete-merges-after merge-rev id (meta-node layer id))
                     (update-node id adjoin {:head tail-id})))
               (-> layer
-                  (delete-merges-after merge-rev tail-id tail-node)
+                  (delete-merges-after merge-rev tail-id tail-meta)
                   (update-node tail-id adjoin {:head nil})
                   (given (= (count head-ids) (inc (count tail-ids)))
                          (update-node head-id adjoin {:head nil})))
@@ -585,6 +601,19 @@ useful.debug
   ([layer head-id tail-id]
      (retro/dotxn layer
        (unmerge-node layer head-id tail-id))))
+
+(defn delete-node
+  "Functional version of delete-node!"
+  [layer id]
+  (update-node layer id adjoin {:deleted true}))
+
+(defn delete-node!
+  "Mark the specified node as deleted."
+  ([id]
+     (delete-node! *meta-layer* id))
+  ([layer id]
+     (retro/dotxn layer
+       (delete-node layer id))))
 
 (comment these guys need to be updated and split up once we've figured out our
          plan for wrapping, and also the split between graph and core.
