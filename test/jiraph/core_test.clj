@@ -37,7 +37,7 @@
   (with-graph (make-graph)
     (test-each-layer all
       (truncate! layer-name)
-      (testing "update-node! supports artitrary functions"
+      (testing "update-node! supports arbitrary functions"
         (let [node1 {:foo 2 :bar "three" :baz [1 2 3]}
               node2 {:foo 2 :bar "three"}
               node3 {:foo 2 :bar "three" :baz [5]}
