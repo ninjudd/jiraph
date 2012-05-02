@@ -266,11 +266,11 @@
   (def ^:private structify-incoming (partial fix-incoming (fn [exists]
                                                             {:deleted (not exists)}))))
 
-(defn- write-paths! [layer write-fn layout id node include-deletions?]
+(defn- write-paths! [layer write-fn layout id node include-deletions? codec-type]
   (reduce (fn [node [path format]]
             (let [write! (fn [key data]
                            (->> data
-                                (encode (:codec format))
+                                (encode (get format codec-type))
                                 (bufseq->bytes)
                                 (write-fn key)))]
               (reduce (fn [node path]
@@ -288,7 +288,9 @@
 (defn- simple-writer [layer layout keyseq f]
   (let [{:keys [db append-only?]} layer
         [id & keys] keyseq
-        write-mode (if append-only?, db/append! db/put!)
+        [write-mode codec-type] (if append-only?
+                                  [db/append! :reset]
+                                  [db/put! :codec])
         writer (partial write-mode db)
         deletion-ranges (for [[path format] layout
                               :let [{:keys [start stop multi]} (bounds (cons id path))]
@@ -299,7 +301,7 @@
             new (apply update-in old keyseq f args)]
         (returning {:old (get-in old keyseq), :new (get-in new keyseq)}
           (delete-ranges! layer deletion-ranges)
-          (write-paths! layer writer layout id new true))))))
+          (write-paths! layer writer layout id new true codec-type))))))
 
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
@@ -332,7 +334,7 @@
         (returning {:old nil, :new arg}
           (write-paths! layer writer layout id
                         (assoc-in {} keyseq arg)
-                        false)))))) ;; don't include deletions
+                        false :codec)))))) ;; don't include deletions
 
 
 ;;; TODO pull the three formats into a single field?
@@ -418,7 +420,7 @@
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
       (do (write-paths! this (constantly nil), (layout-for this id revision),
-                        id, attrs, false)
+                        id, attrs, false, :codec)
           true)
       (catch Exception _ false)))
 
