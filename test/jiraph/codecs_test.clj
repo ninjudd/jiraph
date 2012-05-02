@@ -1,6 +1,7 @@
 (ns jiraph.codecs-test
   (:use clojure.test jiraph.codecs jiraph.codecs.cereal retro.core
-        [useful.utils :only [adjoin]])
+        [useful.utils :only [adjoin]]
+        [gloss.io :only [encode decode]])
   (:require [jiraph.masai-layer :as masai]
             [jiraph.layer :as layer]
             [jiraph.graph :as graph]

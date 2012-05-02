@@ -1,7 +1,7 @@
 (ns jiraph.masai-sorted-layer
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
                              node-id-seq meta-key meta-key?] :as layer]
-        [jiraph.codecs :only [special-codec revisioned-codec encode decode]]
+        [jiraph.codecs :only [special-codec revisioned-codec]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
@@ -11,7 +11,8 @@
         [useful.fn :only [as-fn knit any fix to-fix ! validator]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
-        [io.core :only [bufseq->bytes]])
+        [io.core :only [bufseq->bytes]]
+        [gloss.io :only [encode decode]])
   (:require [masai.db :as db]
             [masai.cursor :as cursor]
             [jiraph.graph :as graph]

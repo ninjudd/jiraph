@@ -4,8 +4,7 @@
         [useful.map :only [update]]
         [useful.utils :only [copy-meta]]
         [gloss.core :only [compile-frame]])
-  (:require [gloss.io :as io]
-            [ego.core :as ego]
+  (:require [ego.core :as ego]
             [schematic.core :as schema]))
 
 (def reset-key :codec_reset)
@@ -16,12 +15,6 @@
   (-> node
       (dissoc reset-key len-key)
       (lift-meta revision-key)))
-
-(defn encode [codec val]
-  (io/encode codec val))
-
-(defn decode [codec data]
-  (io/decode codec data))
 
 (defn revisions-codec [codec]
   ;; read revisions just by discarding the rest

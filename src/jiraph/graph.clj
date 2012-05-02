@@ -419,9 +419,9 @@
   (get-incoming [layer id]
     (get-in-node layer [:meta id :incoming]))
   (add-incoming! [layer id from-id]
-    (update-in-node! layer [:meta id :incoming] adjoin {from-id true}))
+    (update-in-node! layer [:meta id :incoming] adjoin (ordered-map from-id true)))
   (drop-incoming! [layer id from-id]
-    (update-in-node! layer [:meta id :incoming] adjoin {from-id false})))
+    (update-in-node! layer [:meta id :incoming] adjoin (ordered-map from-id false))))
 
 (defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
