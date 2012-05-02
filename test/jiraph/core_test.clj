@@ -12,7 +12,7 @@
 (let [masai  masai/make-temp
       sorted #(sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]]
                                                                     [[]]])
-                                                       (sorted/wrap-default-codecs)
+                                                       (sorted/wrap-default-formats)
                                                        (sorted/wrap-revisioned))})]
   (defn make-graph []
     {:tr  (sorted)

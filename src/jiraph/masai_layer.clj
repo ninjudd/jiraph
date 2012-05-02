@@ -1,7 +1,7 @@
 (ns jiraph.masai-layer
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
                              node-id-seq meta-key meta-key?] :as layer]
-        [jiraph.codecs :only [special-codec]]
+        [jiraph.formats :only [special-codec]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin returning]]
@@ -12,15 +12,24 @@
         [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
             [jiraph.graph :as graph]
-            [jiraph.codecs.cereal :as cereal])
+            [jiraph.formats.cereal :as cereal])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
             DataOutputStream DataInputStream]
            [java.nio ByteBuffer]))
 
-(defn- codec-for [layer node-id revision]
-  (let [codec-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-codec-fn
-                                  (meta-key? layer node-id) :node-meta-codec-fn
-                                  :else :node-codec-fn))]
+;;; A masai-layer "format" is a map containing, at least, a Gloss codec for encoding nodes,
+;;; under the :codec key. Optional components:
+;;; - a Schematic :schema
+;;; - the :reduce-fn the codec uses when combining revisions
+;;;   - this is used to optimize updates
+;;; - a :reset codec, for writing data that should not use the reduce-fn
+;;;   - this codec need not be capable of reading - it will only be written with
+;;; - a :revisions codec, for reading the list of revisions at which a node has been touched.
+
+(defn- format-for [layer node-id revision]
+  (let [codec-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format-fn
+                                  (meta-key? layer node-id) :node-meta-format-fn
+                                  :else :node-format-fn))]
     (codec-fn {:id node-id :revision revision})))
 
 ;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
@@ -59,7 +68,7 @@
              revision)))))
 
 (defrecord MasaiLayer [db revision max-written-revision append-only?
-                       node-codec-fn node-meta-codec-fn layer-meta-codec-fn]
+                       node-format-fn node-meta-format-fn layer-meta-format-fn]
   Object
   (toString [this]
     (pr-str this))
@@ -79,13 +88,15 @@
   Basic
   (get-node [this id not-found]
     (if-let [data (db/fetch db id)]
-      (decode (codec-for this id (revision-to-read this))
+      (decode (:codec (format-for this id (revision-to-read this)))
               [(ByteBuffer/wrap data)])
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
-              (let [codec (-> (codec-for this id revision)
-                              (given append-only? (special-codec :reset)))]
+              (let [format (format-for this id revision)
+                    codec (or (and append-only?
+                                   (:reset format))
+                              (:codec format))]
                 (bufseq->bytes (encode codec data))))]
       ((if append-only? db/append! db/put!)
        db id (bytes attrs))))
@@ -96,8 +107,8 @@
   (query-fn [this keyseq not-found f] nil)
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [codec (codec-for this id revision)]
-        (when (= f (:reduce-fn (meta codec)))
+      (let [{:keys [reduce-fn codec]} (format-for this id revision)]
+        (when (= f reduce-fn)
           (fn [attrs]
             (->> (if keys
                    (assoc-in {} keys attrs)
@@ -123,16 +134,17 @@
 
   Schema
   (schema [this id]
-    (:schema (meta (codec-for this id revision))))
+    (:schema (format-for this id revision)))
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (dorun (bufseq->bytes (encode (codec-for this id revision) attrs)))
+      (dorun (bufseq->bytes (encode (:codec (format-for this id revision))
+                                    attrs)))
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
-    (when-let [rev-codec (:revisions (meta (codec-for this id nil)))]
+    (when-let [rev-codec (:revisions (format-for this id nil))]
       (when-let [data (db/fetch db id)]
         (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
           (distinct
@@ -180,24 +192,31 @@
        (defn- make-db [db]
          db))
 
-;; codec-fns should be functions:
+(defn- wrap-default-format [format-fn]
+  (let [default-format-fn (cereal/revisioned-clojure-format adjoin)]
+    (fn [opts]
+      (let [format (format-fn opts)]
+        (if (:codec format)
+          format
+          (merge (default-format-fn opts)
+                 format))))))
+
+;; format-fn should be a function:
 ;; - accept as arg: a map containing {revision and node-id}
-;; - return: a gloss codec
-;; plain old codecs will be accepted as well
-(let [default-codec (cereal/revisioned-clojure-codec adjoin)
-      codec-fn      (fn [codec]
-                      (as-fn (or codec default-codec)))]
+;; - return: a format (see doc for formats at the top of this file)
+(letfn [(format-fn [format]
+          (wrap-default-format
+           (as-fn format)))]
   (defn make [db & {{:keys [node meta layer-meta]
-                     :or {node (-> (codec-fn default-codec)
-                                   (vary-meta merge layer/edges-schema))}} :codec-fns,
+                     :or {node {:schema layer/edges-schema}}} :format-fns,
                     :keys [assoc-mode] :or {assoc-mode :append}}]
-    (let [[node-codec-fn meta-codec-fn layer-meta-codec-fn]
-          (map codec-fn [node meta layer-meta])]
+    (let [[node-format-fn meta-format-fn layer-meta-format-fn]
+          (map format-fn [node meta layer-meta])]
       (MasaiLayer. (make-db db) nil (atom nil)
                    (case assoc-mode
                      :append true
                      :overwrite false)
-                   node-codec-fn, meta-codec-fn, layer-meta-codec-fn))))
+                   node-format-fn, meta-format-fn, layer-meta-format-fn))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.

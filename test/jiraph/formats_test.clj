@@ -1,35 +1,40 @@
-(ns jiraph.codecs-test
-  (:use clojure.test jiraph.codecs jiraph.codecs.cereal retro.core
+(ns jiraph.formats-test
+  (:use clojure.test jiraph.formats jiraph.formats.cereal retro.core
         [useful.utils :only [adjoin]])
   (:require [jiraph.masai-layer :as masai]
             [jiraph.layer :as layer]
             [jiraph.graph :as graph]
             [masai.tokyo :as tokyo]
+            [gloss.io :as gloss]
             [ego.core :as ego]
-            [jiraph.codecs.protobuf :as proto])
+            [jiraph.formats.protobuf :as proto])
   (:import (java.nio ByteBuffer)
            (jiraph Test$Foo)))
 
 (deftest revisioned-codecs
-  (doseq [impl [revisioned-clojure-codec revisioned-java-codec] ; (a -> a) -> (opts -> Codec)
-          :let [codec (impl adjoin)]]     ; (opts -> Codec)
-    (testing "append two simple encoded data structures"
-      (let [data1 (encode codec {:foo 1 :bar 2}              {:revision 1})
-            data2 (encode codec {:foo 4 :baz 8 :bap [1 2 3]} {:revision 2})
-            data3 (encode codec {:foo 3 :bap [10 11 12]}     {:revision 3})
-            data  (concat data1 data2 data3)]
-        (doseq [[rev expect] [[1 {:foo 1 :bar 2}]
-                              [2 {:foo 4 :bar 2 :baz 8 :bap [1 2 3]}]
-                              [3 {:foo 3 :bar 2 :baz 8 :bap [1 2 3 10 11 12]}]]]
-          (let [node (decode codec data {:revision rev})]
-            (is (= (-> node meta :revisions last) rev))
-            (is (= node expect))))))))
+  (doseq [impl [revisioned-clojure-format revisioned-java-format]
+          :let [format-fn (impl adjoin)]]
+    (letfn [(encode [node revision]
+              (gloss/encode (:codec (format-fn {:revision revision})) node))
+            (decode [bytes revision]
+              (gloss/decode (:codec (format-fn {:revision revision})) bytes))]
+     (testing "append two simple encoded data structures"
+       (let [data1 (encode {:foo 1 :bar 2}              1)
+             data2 (encode {:foo 4 :baz 8 :bap [1 2 3]} 2)
+             data3 (encode {:foo 3 :bap [10 11 12]}     3)
+             data  (concat data1 data2 data3)]
+         (doseq [[rev expect] [[1 {:foo 1 :bar 2}]
+                               [2 {:foo 4 :bar 2 :baz 8 :bap [1 2 3]}]
+                               [3 {:foo 3 :bar 2 :baz 8 :bap [1 2 3 10 11 12]}]]]
+           (let [node (decode data rev)]
+             (is (= (-> node meta :revisions last) rev))
+             (is (= node expect)))))))))
 
 (deftest typed-layers
-  (let [base (revisioned-clojure-codec adjoin)
+  (let [base (revisioned-clojure-format adjoin)
         wrapped (wrap-typing base (comp #{:profile} ego/type-key))
         id "person-1"]
-    (masai/with-temp-layer [base-layer :codec-fns {:node base}]
+    (masai/with-temp-layer [base-layer :format-fns {:node base}]
       (let [l (at-revision base-layer 1)]
         (dotxn l
           (-> l
@@ -37,7 +42,7 @@
         (is (= {:foo :blah}
                (graph/get-node l id)))
         (is (= [1] (graph/get-revisions l id)))))
-    (masai/with-temp-layer [wrapped-layer :codec-fns {:node wrapped}]
+    (masai/with-temp-layer [wrapped-layer :format-fns {:node wrapped}]
       (let [l (at-revision wrapped-layer 1)]
         (is (thrown? Exception ;; due to no codec for writing "person"s
                      (dotxn l
@@ -53,7 +58,7 @@
 
 (deftest protobuf-sets
   (let [master (masai/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                           :codec-fns {:node (proto/protobuf-codec Test$Foo)})
+                           :format-fns {:node (proto/protobuf-format Test$Foo)})
         rev (vec (for [r (range 5)]
                    (at-revision master r)))
         before {:bar 5, :tag-set #{"a" "b"}}
