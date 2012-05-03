@@ -192,26 +192,15 @@
        (defn- make-db [db]
          db))
 
-(defn- wrap-default-format [format-fn]
-  (let [default-format-fn (cereal/revisioned-clojure-format adjoin)]
-    (fn [opts]
-      (let [format (format-fn opts)]
-        (if (:codec format)
-          format
-          (merge (default-format-fn opts)
-                 format))))))
-
-;; format-fn should be a function:
-;; - accept as arg: a map containing {revision and node-id}
-;; - return: a format (see doc for formats at the top of this file)
-(letfn [(format-fn [format]
-          (wrap-default-format
-           (as-fn format)))]
-  (defn make [db & {{:keys [node meta layer-meta]
-                     :or {node {:schema layer/edges-schema}}} :format-fns,
+(let [default-format-fn (cereal/revisioned-clojure-format adjoin)]
+  ;; format-fn should be a function:
+  ;; - accept as arg: a map containing {revision and node-id}
+  ;; - return: a format (see doc for formats at the top of this file)
+  (defn make [db & {{:keys [node meta layer-meta]} :format-fns,
                     :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format-fn meta-format-fn layer-meta-format-fn]
-          (map format-fn [node meta layer-meta])]
+          (map #(as-fn (or % default-format-fn))
+               [node meta layer-meta])]
       (MasaiLayer. (make-db db) nil (atom nil)
                    (case assoc-mode
                      :append true
