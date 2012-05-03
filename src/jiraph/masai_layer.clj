@@ -27,10 +27,10 @@
 ;;; - a :revisions codec, for reading the list of revisions at which a node has been touched.
 
 (defn- format-for [layer node-id revision]
-  (let [codec-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format-fn
-                                  (meta-key? layer node-id) :node-meta-format-fn
-                                  :else :node-format-fn))]
-    (codec-fn {:id node-id :revision revision})))
+  (let [format-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format-fn
+                                   (meta-key? layer node-id) :node-meta-format-fn
+                                   :else :node-format-fn))]
+    (format-fn {:id node-id :revision revision})))
 
 ;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
 (defn- main-node-id [meta-id]
