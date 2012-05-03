@@ -293,8 +293,9 @@
                                   [db/put! :codec])
         writer (partial write-mode db)
         deletion-ranges (for [[path format] layout
+                              :when (prefix-of? (butlast path) keys)
                               :let [{:keys [start stop multi]} (bounds (cons id path))]
-                              :when (and multi (prefix-of? (butlast path) keys))]
+                              :when multi]
                           (keyed [start stop format]))]
     (fn [& args]
       (let [old (read-node layout db id nil)
