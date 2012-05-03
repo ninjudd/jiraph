@@ -1,6 +1,6 @@
 (ns jiraph.masai-sorted-layer
-  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences
-                             Schema node-id-seq meta-key meta-key?] :as layer]
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
+                             node-id-seq meta-key meta-key?] :as layer]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
@@ -10,8 +10,8 @@
         [useful.fn :only [as-fn knit any fix to-fix ! validator]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
-        [gloss.io :only [encode decode]]
-        [io.core :only [bufseq->bytes]])
+        [io.core :only [bufseq->bytes]]
+        [gloss.io :only [encode decode]])
   (:require [masai.db :as db]
             [masai.cursor :as cursor]
             [jiraph.graph :as graph]
@@ -496,7 +496,6 @@
            db))
        (defn- make-db [db]
          db))
-
 
 (defn make [db & {{:keys [node meta layer-meta]} :layout-fns,
                   :keys [assoc-mode] :or {assoc-mode :append}}]

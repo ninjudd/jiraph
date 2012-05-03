@@ -8,8 +8,8 @@
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
-        [gloss.io :only [encode decode]]
-        [io.core :only [bufseq->bytes]])
+        [io.core :only [bufseq->bytes]]
+        [gloss.io :only [encode decode]])
   (:require [masai.db :as db]
             [jiraph.graph :as graph]
             [jiraph.formats.cereal :as cereal])

@@ -12,14 +12,17 @@
 (def ^{:dynamic true} *verbose*  nil)
 (def ^{:dynamic true} *revision* nil)
 
+(defn get-layer [layer-name]
+  (when-let [layer (get *graph* layer-name)]
+    (retro/at-revision layer *revision*)))
+
 (defn layer
   "Return the layer for a given name from *graph*."
   [layer-name]
   (if *graph*
-    (retro/at-revision (or (get *graph* layer-name)
-                           (throw (IOException.
-                                   (format "cannot find layer %s in open graph" layer-name))))
-                       *revision*)
+    (or (get-layer layer-name)
+        (throw (IOException.
+                (format "cannot find layer %s in open graph" layer-name))))
     (throw (IOException. (format "attempt to use a layer without an open graph")))))
 
 (defn layer-entries
@@ -70,52 +73,48 @@
           {:varname impl-name
            :var var
            :meta meta ;; for use by functions
-           :fixed-meta (update meta :arglists (partial list 'quote)) ; for macros
            :func @var})))
+
+(defn- fix-meta [meta]
+  (update meta :arglists (partial list 'quote)))
 
 ;; define forwarders to resolve keyword layer-names in *graph*
 (macro-do [name]
-  (let [{:keys [varname fixed-meta]} (graph-impl name)]
-    `(def ~(with-meta name fixed-meta)
+  (let [{:keys [varname meta]} (graph-impl name)]
+    `(def ~(with-meta name (fix-meta meta))
        (fn ~name [layer-name# & args#]
-         (apply ~varname (layer layer-name#)
-                args#))))
-  node-id-seq get-node find-node query-in-node get-in-node get-edges get-edge
+         (apply ~varname (layer layer-name#) args#))))
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
-  fields node-valid? verify-node
+  node-id-seq fields node-valid? verify-node)
+
+;; define forwarders to resolve keyword layer-names in *graph*
+(macro-do [name]
+  (let [{:keys [varname meta]} (graph-impl name)]
+    `(def ~(with-meta name (fix-meta meta))
+       (fn ~name [layer-name# & args#]
+         (if-let [meta-layer# (get-layer :meta)]
+           (binding [graph/*meta-layer* meta-layer#]
+             (apply ~varname (layer layer-name#) args#))
+           (apply ~varname (layer layer-name#) args#)))))
+  get-node find-node query-in-node get-in-node get-edges get-edge
   get-revisions get-incoming get-incoming-map)
 
-(defn schema-by-layer
-  "Get the schema for a node-type across all layers, indexed by layer.
-
-   Optionally you may pass in a graph to use instead of *graph*, to allow
-   things like filtering which layers are included in the schema."
-  ([type] (schema-by-layer type *graph*))
-  ([type graph]
-     (into {}
-           (for [[layer-name layer] graph
-                 :let [schema (graph/schema layer type)]
-                 :when (seq schema)]
-             [layer-name (:fields schema)]))))
-
-(defn schema-by-attr
-  "Get the schema for a node-type across all layers, indexed by attribute name.
-
-   Optionally you may pass in a graph to use instead of *graph*, to allow
-   things like filtering which layers are included in the schema."
-  ([type] (schema-by-attr type *graph*))
-  ([type graph]
-     (apply merge-with conj {}
-            (for [[layer-name attrs] (schema-by-layer type graph)
-                  [attr type] attrs]
-              {attr {layer-name type}}))))
+;; these functions all take the meta layer (at the current revision) as their first argument.
+(macro-do [name]
+  (let [{:keys [varname meta]} (graph-impl name)
+        meta (update meta :arglists (comp list first))]
+    `(def ~(with-meta name (fix-meta meta))
+       (fn ~name [& args#]
+         (apply ~varname (layer :meta) args#))))
+  merge-node! unmerge-node! delete-node!
+  meta-node merge-head merged-into merge-ids merge-position node-deleted?)
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution
 ;; or any indirection, because they can't meaningfully work with layer names but
 ;; we don't want to make the "simple" uses of jiraph.core have to mention
 ;; jiraph.graph at all
-(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node meta-node
-               wrap-caching with-caching merge-head merged-into merge-ids merge-position]]
+(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node
+               wrap-caching with-caching]]
   (let [{:keys [func meta]} (graph-impl name)]
     (intern *ns* (with-meta name meta) func)))
 
@@ -147,8 +146,7 @@
 
 (defmacro with-graph [graph & forms]
   `(let [graph# ~graph]
-     (binding [*graph* graph#
-               graph/*meta-layer* (get graph# :meta)]
+     (binding [*graph* graph#]
        (try (open!)
             ~@forms
             (finally (close!))))))
@@ -198,17 +196,6 @@
   [layer-name]
   (contains? *graph* layer-name))
 
-(defn merge-node! [head-id tail-id]
-  (graph/merge-node! (layer :meta) head-id tail-id))
-
-(defn unmerge-node! [head-id tail-id]
-  (graph/unmerge-node! (layer :meta) head-id tail-id))
-
-;; copy docstrings
-(doseq [[from to] {#'graph/merge-node!   #'merge-node!
-                   #'graph/unmerge-node! #'unmerge-node!}]
-  (alter-meta! to assoc :doc (:doc (meta from))))
-
 (defmacro txn-> [layer-name & actions]
   `(let [layer-name# ~layer-name
          layer# (layer layer-name#)]
@@ -216,3 +203,28 @@
                   (-> layer#
                       ~@actions))
      layer-name#))
+
+(defn schema-by-layer
+  "Get the schema for a node-type across all layers, indexed by layer.
+
+   Optionally you may pass in a graph to use instead of *graph*, to allow
+   things like filtering which layers are included in the schema."
+  ([type] (schema-by-layer type *graph*))
+  ([type graph]
+     (into {}
+           (for [[layer-name layer] graph
+                 :let [schema (graph/schema layer type)]
+                 :when (seq schema)]
+             [layer-name (:fields schema)]))))
+
+(defn schema-by-attr
+  "Get the schema for a node-type across all layers, indexed by attribute name.
+
+   Optionally you may pass in a graph to use instead of *graph*, to allow
+   things like filtering which layers are included in the schema."
+  ([type] (schema-by-attr type *graph*))
+  ([type graph]
+     (apply merge-with conj {}
+            (for [[layer-name attrs] (schema-by-layer type graph)
+                  [attr type] attrs]
+              {attr {layer-name type}}))))
