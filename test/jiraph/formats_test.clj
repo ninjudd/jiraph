@@ -1,11 +1,12 @@
 (ns jiraph.formats-test
   (:use clojure.test jiraph.formats jiraph.formats.cereal retro.core
+        [io.core :only [catbytes]]
         [useful.utils :only [adjoin]])
   (:require [jiraph.masai-layer :as masai]
             [jiraph.layer :as layer]
             [jiraph.graph :as graph]
+            [jiraph.codex :as codex]
             [masai.tokyo :as tokyo]
-            [gloss.io :as gloss]
             [ego.core :as ego]
             [jiraph.formats.protobuf :as proto])
   (:import (java.nio ByteBuffer)
@@ -15,14 +16,14 @@
   (doseq [impl [revisioned-clojure-format revisioned-java-format]
           :let [format-fn (impl adjoin)]]
     (letfn [(encode [node revision]
-              (gloss/encode (:codec (format-fn {:revision revision})) node))
+              (codex/encode (:codec (format-fn {:revision revision})) node))
             (decode [bytes revision]
-              (gloss/decode (:codec (format-fn {:revision revision})) bytes))]
+              (codex/decode (:codec (format-fn {:revision revision})) bytes))]
      (testing "append two simple encoded data structures"
        (let [data1 (encode {:foo 1 :bar 2}              1)
              data2 (encode {:foo 4 :baz 8 :bap [1 2 3]} 2)
              data3 (encode {:foo 3 :bap [10 11 12]}     3)
-             data  (concat data1 data2 data3)]
+             data  (catbytes data1 data2 data3)]
          (doseq [[rev expect] [[1 {:foo 1 :bar 2}]
                                [2 {:foo 4 :bar 2 :baz 8 :bap [1 2 3]}]
                                [3 {:foo 3 :bar 2 :baz 8 :bap [1 2 3 10 11 12]}]]]

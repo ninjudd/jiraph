@@ -2,14 +2,14 @@
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
                              node-id-seq meta-key meta-key?] :as layer]
         [jiraph.formats :only [special-codec]]
+        [jiraph.codex :only [encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
-        [io.core :only [bufseq->bytes]]
-        [gloss.io :only [encode decode]])
+        [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
             [jiraph.graph :as graph]
             [jiraph.formats.cereal :as cereal])
@@ -89,7 +89,7 @@
   (get-node [this id not-found]
     (if-let [data (db/fetch db id)]
       (decode (:codec (format-for this id (revision-to-read this)))
-              [(ByteBuffer/wrap data)])
+              data)
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
@@ -97,7 +97,7 @@
                     codec (or (and append-only?
                                    (:reset format))
                               (:codec format))]
-                (bufseq->bytes (encode codec data))))]
+                (encode codec data)))]
       ((if append-only? db/append! db/put!)
        db id (bytes attrs))))
   (dissoc-node! [this id]
@@ -114,7 +114,6 @@
                    (assoc-in {} keys attrs)
                    attrs)
                  (encode codec)
-                 (bufseq->bytes)
                  (db/append! db id))
             {:old nil :new attrs})))))
 
@@ -138,15 +137,15 @@
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (dorun (bufseq->bytes (encode (:codec (format-for this id revision))
-                                    attrs)))
+      (encode (:codec (format-for this id revision))
+              attrs)
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
     (when-let [rev-codec (:revisions (format-for this id nil))]
       (when-let [data (db/fetch db id)]
-        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
+        (let [revs (decode rev-codec data)]
           (distinct
            (if-not revision
              revs

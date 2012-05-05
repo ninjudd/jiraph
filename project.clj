@@ -7,7 +7,7 @@
                  [ordered "1.2.2"]
                  [schematic "0.0.6"]
                  [retro "0.6.0-beta1"]
-                 [io "0.1.0-alpha2"]
+                 [io "0.2.0-beta2"]
                  [ego "0.1.7"]]
   :dev-dependencies [[protobuf "0.6.0-beta17"]
                      [tokyocabinet "1.24.3" :ext true]

@@ -1,12 +1,10 @@
 (ns jiraph.formats
-  (:use [gloss.core.protocols :only [Reader Writer read-bytes write-bytes sizeof]]
-        [useful.experimental :only [lift-meta]]
+  (:use [useful.experimental :only [lift-meta]]
         [useful.map :only [update update-each]]
-        [useful.utils :only [copy-meta]]
-        [gloss.core :only [compile-frame]])
-  (:require [gloss.io :as io]
-            [ego.core :as ego]
-            [schematic.core :as schema]))
+        [useful.utils :only [copy-meta]])
+  (:require [ego.core :as ego]
+            [schematic.core :as schema]
+            [jiraph.codex :as codex]))
 
 (def reset-key :codec_reset)
 (def revision-key :revisions)
@@ -19,14 +17,14 @@
 
 (defn revisions-codec [codec]
   ;; read revisions just by discarding the rest
-  (compile-frame codec
-                 nil ;; never write with this codec
-                 (comp revision-key meta)))
+  (codex/wrap codec
+              nil ;; never write with this codec
+              (comp revision-key meta)))
 
 (defn resetting-codec [codec]
-  (compile-frame codec
-                 (fn [data] (assoc data reset-key true))
-                 identity))
+  (codex/wrap codec
+              (fn [data] (assoc data reset-key true))
+              identity))
 
 (defn add-revisioning-modes [format]
   (let [{:keys [codec]} format]
@@ -50,7 +48,7 @@
                   (tidy-node (or (reduce reducer items) {}))))
               (frame [pre-encode post-decode]
                 (-> format
-                    (update :codec compile-frame
+                    (update :codec codex/wrap
                             (comp list pre-encode)
                             (comp combine post-decode))
                     (add-revisioning-modes)))]
