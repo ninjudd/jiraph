@@ -1,4 +1,4 @@
-(ns jiraph.merge-test
+(ns jiraph.meta-test
   (:use clojure.test jiraph.core)
   (:require [jiraph.masai-layer :as masai]))
 
@@ -42,10 +42,18 @@
     (at-revision 2 (merge-node! "A" "C"))
     (at-revision 3 (merge-node! "A" "D"))
     (is (= #{"B" "C" "D"} (merged-into "A")))
+    (is (= "A" (merge-head "C")))
+    (is (= "A" (merge-head "D")))
     (is (= 0 (merge-position "A")))
     (is (= 1 (merge-position "B")))
     (is (= 2 (merge-position "C")))
     (is (= 3 (merge-position "D"))))
+
+  (testing "can view previous merge data with at-revision"
+    (at-revision 1
+      (is (= #{"B"} (merged-into "A")))
+      (is (= nil (merge-head "C")))
+      (is (= nil (merge-head "D")))))
 
   (testing "merge two chains together"
     (at-revision 4 (merge-node! "E" "F"))
@@ -124,3 +132,12 @@
   (is (= {:edges {"C" {:deleted true}}} (get-node :people "B")))
   (is (= {"A" false} (get-incoming-map :people "C")))
   (is (= {"A" false} (get-incoming-map :people "D"))))
+
+(deftest delete-node
+  (at-revision 1 (assoc-node! :people "A" {:foo 1}))
+  (is (= {:foo 1} (get-node :people "A")))
+  (is (not (node-deleted? "A")))
+
+  (delete-node! "A")
+  (is (= {:foo 1} (get-node :people "A")))
+  (is (node-deleted? "A")))
