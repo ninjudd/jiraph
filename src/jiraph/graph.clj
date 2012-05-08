@@ -613,7 +613,20 @@
      (delete-node! *meta-layer* id))
   ([layer id]
      (retro/dotxn layer
-       (delete-node layer id))))
+        (delete-node layer id))))
+
+(defn undelete-node
+  "Functional version of undelete-node!"
+  [layer id]
+  (update-node layer id adjoin {:deleted false}))
+
+(defn undelete-node!
+  "Mark the specified node as not deleted."
+  ([id]
+     (undelete-node! *meta-layer* id))
+  ([layer id]
+     (retro/dotxn layer
+       (undelete-node layer id))))
 
 (comment these guys need to be updated and split up once we've figured out our
          plan for wrapping, and also the split between graph and core.

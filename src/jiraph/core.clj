@@ -106,7 +106,7 @@
     `(def ~(with-meta name (fix-meta meta))
        (fn ~name [& args#]
          (apply ~varname (layer :meta) args#))))
-  merge-node! unmerge-node! delete-node!
+  merge-node! unmerge-node! delete-node! undelete-node!
   meta-node merge-head merged-into merge-ids merge-position node-deleted?)
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution

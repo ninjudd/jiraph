@@ -133,11 +133,15 @@
   (is (= {"A" false} (get-incoming-map :people "C")))
   (is (= {"A" false} (get-incoming-map :people "D"))))
 
-(deftest delete-node
+(deftest delete-and-undelete-node
   (at-revision 1 (assoc-node! :people "A" {:foo 1}))
   (is (= {:foo 1} (get-node :people "A")))
   (is (not (node-deleted? "A")))
 
   (delete-node! "A")
   (is (= {:foo 1} (get-node :people "A")))
-  (is (node-deleted? "A")))
+  (is (node-deleted? "A"))
+
+  (undelete-node! "A")
+  (is (= {:foo 1} (get-node :people "A")))
+  (is (not (node-deleted? "A"))))
