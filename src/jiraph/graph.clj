@@ -8,6 +8,7 @@
         [ego.core :only [type-key]]
         [jiraph.wrapper :only [*read-wrappers* *write-wrappers*]]
         [useful.experimental :only [wrap-multiple]]
+        [clojure.core.match :only [match]]
         (ordered [set :only [ordered-set]]
                  [map :only [ordered-map]]))
   (:require [jiraph.layer :as layer]
@@ -103,15 +104,11 @@
 (declare merge-ids merge-head merge-position)
 
 (defn- edges-keyseq [keyseq]
-  (let [keyseq  (vec keyseq)
-        [n key] (if (= :meta (first keyseq))
-                  [3 :incoming]
-                  [2 :edges])]
-    (cond (< (count keyseq) n)
-          [key]
-          (and (= n (count keyseq))
-               (= key (peek keyseq)))
-          [])))
+  (match (vec keyseq)
+    [_]                 [:edges]
+    [_ :edges]          []
+    [:meta _]           [:incoming]
+    [:meta _ :incoming] []))
 
 (defn- merge-edges [edges-seq & [invert?]]
   (->> (for [[i edges] (indexed (reverse edges-seq))
@@ -154,7 +151,7 @@
                        (remove #(identical? % sentinel)))]
         (if (empty? nodes)
           not-found
-          (*merge-fn* [] nodes)))
+          (*merge-fn* [id] nodes)))
       (layer/get-node layer id not-found)))
 
   (defn find-node
