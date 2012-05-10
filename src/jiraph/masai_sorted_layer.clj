@@ -7,7 +7,7 @@
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
         [useful.seq :only [find-with prefix-of? find-first]]
         [useful.string :only [substring-after]]
-        [useful.map :only [assoc-levels map-vals keyed]]
+        [useful.map :only [assoc-in* map-vals keyed]]
         [useful.fn :only [as-fn knit any fix to-fix ! validator]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
@@ -229,8 +229,8 @@
                              :when (not (empty-coll? node))]
                          (map-entry (keyfn k) node)))]
         :when kvs]
-    (assoc-levels {} parent
-                  (into {} kvs))))
+    (assoc-in* {} parent
+               (into {} kvs))))
 
 (defn- read-node [layout db id not-found]
   (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args

@@ -1,7 +1,7 @@
 (ns jiraph.graph
-  (:use [useful.map :only [filter-keys-by-val dissoc-in* assoc-in*]]
+  (:use [useful.map :only [filter-keys-by-val map-vals-with-keys update dissoc-in* assoc-in* update-in*]]
         [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
-        [useful.fn :only [any fix to-fix given]]
+        [useful.fn :only [any fix to-fix fixing given]]
         [useful.seq :only [merge-sorted indexed]]
         [useful.macro :only [with-altered-var]]
         [clojure.string :only [split join]]
@@ -101,16 +101,17 @@
         [(layer/meta-key layer "_layer")])
       keys)))
 
-(declare merge-ids merge-head merge-position)
+(declare merge-ids merge-head merge-position node-deleted?)
 
 (defn- edges-keyseq [keyseq]
-  (match (vec keyseq)
-    [_]                 [:edges]
-    [_ :edges]          []
-    [:meta _]           [:incoming]
-    [:meta _ :incoming] []))
+  (match keyseq
+    [:meta (k :guard keyword?)] nil ; layer-meta
+    [_]                         [:edges]
+    [_ :edges]                  []
+    [:meta _]                   [:incoming]
+    [:meta _ :incoming]         []))
 
-(defn- merge-edges [edges-seq & [invert?]]
+(defn- merge-edges [edges-seq invert?]
   (->> (for [[i edges] (indexed (reverse edges-seq))
              [id edge] edges]
          (let [pos  (merge-position id)
@@ -134,6 +135,45 @@
 
 (def ^{:dynamic true} *merge-fn* merge-nodes)
 
+(defn- deleted-edge-keyseq [keyseq]
+  (match keyseq
+    [:meta (k :guard keyword?)] nil ; layer-meta
+    [_ :edges _]                [:deleted]
+    [_ :edges _ :deleted]       []
+    [:meta _ :incoming]         []))
+
+(defn- deleted-node-keyseq [keyseq]
+  (match keyseq
+    [:meta (k :guard keyword?)] nil ; layer-meta
+    [_]                         [:deleted]
+    [_ :deleted]                []))
+
+(letfn [(incoming-exists? [id exists?]  (and exists? (not (node-deleted? id))))
+        (is-deleted?      [id deleted?] (or deleted? (node-deleted? id)))]
+
+  (defn- mark-edges-deleted [keyseq incoming? node]
+    (if-let [ks (edges-keyseq keyseq)]
+      (update-in* node ks fixing map? map-vals-with-keys
+                  (if incoming?
+                    incoming-exists?
+                    (fn [id edge]
+                      (update edge :deleted (partial is-deleted? id)))))
+      (if-let [ks (deleted-edge-keyseq keyseq)]
+        (update-in* node ks
+                    (if incoming?
+                      (partial incoming-exists? (second keyseq))
+                      (partial is-deleted?      (first  keyseq))))
+        node)))
+
+  (defn mark-deleted [keyseq node]
+    (let [incoming? (= :meta (first keyseq))]
+      (->> (if-let [ks (deleted-node-keyseq keyseq)]
+             (update-in* node ks (partial is-deleted? (first keyseq)))
+             node)
+           (mark-edges-deleted keyseq incoming?)))))
+
+(def ^{:dynamic true} *transform-fn* mark-deleted)
+
 (defn merging-enabled? []
   (boolean (and *merge-fn* *meta-layer*)))
 
@@ -141,18 +181,33 @@
   `(binding [*merge-fn* nil]
      ~@forms))
 
+(defmacro with-transform-disabled [& forms]
+  `(binding [*transform-fn* nil]
+     ~@forms))
+
+(defmacro with-meta-disabled [& forms]
+  `(binding [*merge-fn* nil
+             *transform-fn* nil]
+     ~@forms))
+
+(defn- transform-fn [keyseq]
+  (if *transform-fn*
+    (partial *transform-fn* keyseq)
+    identity))
+
 (let [sentinel (Object.)]
   (defn ^{:dynamic true} get-node
     "Fetch a node's data from this layer."
     [layer id & [not-found]]
-    (if (merging-enabled?)
-      (let [nodes (->> (reverse (merge-ids id))
-                       (map #(layer/get-node layer % sentinel))
-                       (remove #(identical? % sentinel)))]
-        (if (empty? nodes)
-          not-found
-          (*merge-fn* [id] nodes)))
-      (layer/get-node layer id not-found)))
+    ((transform-fn [id])
+     (if (merging-enabled?)
+       (let [nodes (->> (reverse (merge-ids id))
+                        (map #(layer/get-node layer % sentinel))
+                        (remove #(identical? % sentinel)))]
+         (if (empty? nodes)
+           not-found
+           (*merge-fn* [id] nodes)))
+       (layer/get-node layer id not-found))))
 
   (defn find-node
     "Get a node's data along with its id."
@@ -203,10 +258,12 @@
   "Fetch data from inside a node, replacing it with not-found if it is missing,
    and immediately call a function on it."
   [layer keyseq not-found f & args]
-  (apply (if (merging-enabled?)
-           query-merged*
-           query-unmerged*)
-         layer keyseq not-found f args))
+  (let [keyseq (vec keyseq)]
+    ((transform-fn keyseq)
+     (apply (if (merging-enabled?)
+              query-merged*
+              query-unmerged*)
+            layer keyseq not-found f args))))
 
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
@@ -472,7 +529,7 @@
   ([id]
      (meta-node *meta-layer* id))
   ([layer id]
-     (with-merging-disabled
+     (with-meta-disabled
        (when layer
          (get-node layer id)))))
 
@@ -481,7 +538,7 @@
   ([id]
      (merged-into *meta-layer* id))
   ([layer id]
-     (with-merging-disabled
+     (with-meta-disabled
        (get-incoming layer id))))
 
 (defn merge-head
@@ -496,7 +553,7 @@
   ([id]
      (node-deleted? *meta-layer* id))
   ([layer id]
-     (boolean (:deleted (meta-node layer id)))))
+     (:deleted (meta-node layer id))))
 
 (defn merge-ids
   "Returns a list of node ids in the merge chain of id. Always starts with the head-id,
@@ -513,7 +570,7 @@
   ([id]
      (merge-position *meta-layer* id))
   ([layer id]
-     (with-merging-disabled
+     (with-meta-disabled
        (let [node (meta-node layer id)]
          (when-let [head (:head node)]
            (if (= head id)
@@ -573,7 +630,7 @@
 (defn unmerge-node
   "Functional version of unmerge-node!"
   [layer head-id tail-id]
-  (with-merging-disabled
+  (with-meta-disabled
     (let [tail-meta (meta-node layer tail-id)
           merge-rev (get-in tail-meta [:edges head-id :revision])
           tail-ids  (merged-into layer tail-id)

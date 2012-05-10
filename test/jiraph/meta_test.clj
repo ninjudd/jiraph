@@ -139,9 +139,9 @@
   (is (not (node-deleted? "A")))
 
   (delete-node! "A")
-  (is (= {:foo 1} (get-node :people "A")))
+  (is (= {:foo 1 :deleted true} (get-node :people "A")))
   (is (node-deleted? "A"))
 
   (undelete-node! "A")
-  (is (= {:foo 1} (get-node :people "A")))
+  (is (= {:foo 1 :deleted false} (get-node :people "A")))
   (is (not (node-deleted? "A"))))
