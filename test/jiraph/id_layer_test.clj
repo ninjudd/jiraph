@@ -1,11 +1,12 @@
-(ns jiraph.meta-test
+(ns jiraph.id-layer-test
   (:use clojure.test jiraph.core)
   (:require [jiraph.masai-layer :as masai]))
 
 (defn empty-graph [f]
-  (with-graph {:meta   (masai/make-temp)
-               :people (masai/make-temp)}
-    (f)))
+  (let [id-layer (masai/make-temp)]
+    (with-graph {:id     id-layer
+                 :people (masai/make-temp :id-layer id-layer)}
+      (f))))
 
 (use-fixtures :each empty-graph)
 

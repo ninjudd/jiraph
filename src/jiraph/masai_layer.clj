@@ -1,5 +1,5 @@
 (ns jiraph.masai-layer
-  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema IdentityLayer
                              node-id-seq meta-key meta-key?] :as layer]
         [jiraph.codecs :only [special-codec]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
@@ -58,7 +58,7 @@
            (when (< revision max-written)
              revision)))))
 
-(defrecord MasaiLayer [db revision max-written-revision append-only?
+(defrecord MasaiLayer [db revision max-written-revision append-only? id-layer
                        node-codec-fn node-meta-codec-fn layer-meta-codec-fn]
   Object
   (toString [this]
@@ -70,6 +70,10 @@
   (meta-key? [this k]
     (.startsWith ^String k "_"))
 
+  IdentityLayer
+  (id-layer [this]
+    id-layer)
+  
   Enumerate
   (node-id-seq [this]
     (remove #(meta-key? this %) (db/key-seq db)))
@@ -190,13 +194,14 @@
   (defn make [db & {{:keys [node meta layer-meta]
                      :or {node (-> (codec-fn default-codec)
                                    (vary-meta merge layer/edges-schema))}} :codec-fns,
-                    :keys [assoc-mode] :or {assoc-mode :append}}]
+                    :keys [assoc-mode id-layer] :or {assoc-mode :append}}]
     (let [[node-codec-fn meta-codec-fn layer-meta-codec-fn]
           (map codec-fn [node meta layer-meta])]
       (MasaiLayer. (make-db db) nil (atom nil)
                    (case assoc-mode
                      :append true
                      :overwrite false)
+                   id-layer
                    node-codec-fn, meta-codec-fn, layer-meta-codec-fn))))
 
 (defn temp-layer

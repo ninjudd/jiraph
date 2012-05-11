@@ -12,6 +12,8 @@
 (def ^{:dynamic true} *verbose*  nil)
 (def ^{:dynamic true} *revision* nil)
 
+(def ^{:dynamic true} *default-id-layer-name* :id)
+
 (defn get-layer [layer-name]
   (when-let [layer (get *graph* layer-name)]
     (retro/at-revision layer *revision*)))
@@ -85,29 +87,28 @@
        (fn ~name [layer-name# & args#]
          (apply ~varname (layer layer-name#) args#))))
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
-  node-id-seq fields node-valid? verify-node)
-
-;; define forwarders to resolve keyword layer-names in *graph*
-(macro-do [name]
-  (let [{:keys [varname meta]} (graph-impl name)]
-    `(def ~(with-meta name (fix-meta meta))
-       (fn ~name [layer-name# & args#]
-         (if-let [meta-layer# (get-layer :meta)]
-           (binding [graph/*meta-layer* meta-layer#]
-             (apply ~varname (layer layer-name#) args#))
-           (apply ~varname (layer layer-name#) args#)))))
+  node-id-seq fields node-valid? verify-node
   get-node find-node query-in-node get-in-node get-edges get-edge
   get-revisions get-incoming get-incoming-map)
 
-;; these functions all take the meta layer (at the current revision) as their first argument.
 (macro-do [name]
-  (let [{:keys [varname meta]} (graph-impl name)
-        meta (update meta :arglists (comp list first))]
-    `(def ~(with-meta name (fix-meta meta))
-       (fn ~name [& args#]
-         (apply ~varname (layer :meta) args#))))
-  merge-node! unmerge-node! delete-node! undelete-node!
-  meta-node merge-head merged-into merge-ids merge-position node-deleted?)
+  (let [{:keys [varname meta]} (graph-impl name)]
+    `(defn ~name ~(:doc meta)
+       (~'[head-id tail-id]
+        (~name *default-id-layer-name* ~@'[head-id tail-id]))
+       (~'[layer-name head-id tail-id]
+        (~varname (layer ~'layer-name) ~@'[head-id tail-id]))))
+  merge-node! unmerge-node!)
+
+(macro-do [name]
+  (let [{:keys [varname meta]} (graph-impl name)]
+    `(defn ~name ~(:doc meta)
+       (~'[id]
+        (~name *default-id-layer-name* ~'id))
+       (~'[layer-name id]
+        (~varname (layer ~'layer-name) ~'id))))
+  delete-node! undelete-node!
+  merge-head merged-into merge-ids merge-position node-deleted?)
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution
 ;; or any indirection, because they can't meaningfully work with layer names but
@@ -120,8 +121,8 @@
 
 ;; operations on a list of layers
 (macro-do [name]
-  (let [{:keys [varname fixed-meta]} (graph-impl name)]
-    `(def ~(with-meta name fixed-meta)
+  (let [{:keys [varname meta]} (graph-impl name)]
+    `(def ~(with-meta name (fix-meta meta))
        (fn ~name [& layers#]
          (apply ~varname (vals (as-layer-map layers#))))))
   sync! optimize! truncate!)

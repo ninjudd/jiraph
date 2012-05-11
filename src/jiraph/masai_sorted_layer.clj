@@ -1,5 +1,5 @@
 (ns jiraph.masai-sorted-layer
-  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema
+  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema IdentityLayer
                              node-id-seq meta-key meta-key?] :as layer]
         [jiraph.codecs :only [special-codec revisioned-codec]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
@@ -108,7 +108,7 @@
           last  (peek path)
           path  (pop path)
           start (db-name path)]
-      (into {:parent path}            
+      (into {:parent path}
             (if (empty? path) ; top-level
               {:start last, :stop (str-after last)
                :keyfn (constantly last)}
@@ -340,12 +340,17 @@
 
 
 ;;; TODO pull the three formats into a single field?
-(defrecord MasaiSortedLayer [db revision max-written-revision append-only? node-layout-fn node-meta-layout-fn layer-meta-layout-fn]
+(defrecord MasaiSortedLayer [db revision max-written-revision append-only? id-layer
+                             node-layout-fn node-meta-layout-fn layer-meta-layout-fn]
   Meta
   (meta-key [this k]
     (str "_" k))
   (meta-key? [this k]
     (.startsWith ^String k "_"))
+
+  IdentityLayer
+  (id-layer [this]
+    id-layer)
 
   Enumerate
   (node-id-seq [this]
@@ -508,7 +513,7 @@
                opts)]))))
 
 (defn make [db & {{:keys [node meta layer-meta]} :layout-fns,
-                  :keys [assoc-mode] :or {assoc-mode :append}}]
+                  :keys [assoc-mode id-layer] :or {assoc-mode :append}}]
   (let [[node-fn meta-fn layer-meta-fn]
         (for [layout-fn [node meta layer-meta]]
           (condp invoke layout-fn
@@ -520,6 +525,7 @@
                        (case assoc-mode
                          :append true
                          :overwrite false)
+                       id-layer
                        node-fn, meta-fn, layer-meta-fn)))
 
 (defn temp-layer

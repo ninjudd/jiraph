@@ -39,6 +39,10 @@
   (meta-key? [layer id]
     "Is the specified id a meta-node id?"))
 
+(defprotocol IdentityLayer
+  (id-layer [layer]
+    "Return the layer used to store merges and deletions for this layer, or nil if there is none."))
+
 (defprotocol Incoming
   (get-incoming [layer id]
     "Return the ids of all nodes that have an incoming edge to this one.
@@ -194,7 +198,15 @@
   Optimized
   ;; can't optimize anything
   (query-fn  [layer keyseq not-found f] nil)
-  (update-fn [layer keyseq f] nil))
+  (update-fn [layer keyseq f] nil)
+
+  IdentityLayer
+  (id-layer [layer] nil))
+
+(extend-type clojure.lang.IPersistentMap
+  IdentityLayer
+  (id-layer [layer]
+    (:id-layer layer)))
 
 (extend-type nil
   Schema
