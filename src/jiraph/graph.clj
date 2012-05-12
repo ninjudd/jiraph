@@ -110,16 +110,28 @@
     [:meta _ :incoming]         []))
 
 (defn- merge-edges [id-layer keyseq edges-seq]
-  (->> (for [[i edges] (indexed (reverse edges-seq))
-             [id edge] edges]
-         (let [pos  (merge-position id-layer id)
-               head (or (merge-head id-layer id) id)]
-           [(if (= :meta (first keyseq))
-              [pos i], [i pos])
-            {head edge} id]))
-       (sort-by first #(compare %2 %1))
-       (map second)
-       (apply merge-with adjoin)))
+  (let [incoming? (= :meta (first keyseq))]
+    (letfn [(edge-sort-order [i id edge]
+              (let [pos (merge-position id-layer id)]
+                (if incoming?
+                  [pos i]
+                  [(:deleted edge) i pos])))]
+      (->> (for [[i edges] (indexed (reverse edges-seq))
+                 [id edge] edges]
+             (let [head-id (or (merge-head id-layer id) id)]
+               [(edge-sort-order i id edge)
+                [head-id edge]]))
+           (sort-by first #(compare %2 %1))
+           (map second)
+           (reduce (if incoming?
+                     (fn [edges [id exists?]]
+                       (assoc edges id exists?))
+                     (fn [edges [id edge]]
+                       (if (and (:deleted edge)
+                                (get edges id))
+                         edges
+                         (adjoin edges {id edge}))))
+                   {})))))
 
 (defn merge-nodes [id-layer keyseq nodes]
   (if-let [ks (edges-keyseq keyseq)]
@@ -146,7 +158,7 @@
     [_ :deleted]                []))
 
 (letfn [(exists?  [id-layer id exists]  (and exists (not (node-deleted? id-layer id))))
-        (deleted? [id-layer id deleted] (or deleted (node-deleted? id-layer id)))]
+        (deleted? [id-layer id deleted] (or deleted (node-deleted? id-layer id) deleted))]
 
   (defn mark-edges-deleted [id-layer incoming? keyseq node]
     (if-let [ks (edges-keyseq keyseq)]

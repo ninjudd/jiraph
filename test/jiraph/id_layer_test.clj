@@ -118,8 +118,8 @@
   (at-revision 3 (merge-node! "A" "B"))
   (at-revision 4 (merge-node! "D" "C"))
 
-  (is (= {:edges {"D" {:deleted true}}} (get-node :people "A")))
-  (is (= {:edges {"D" {:deleted true}}} (get-node :people "B")))
+  (is (= {:edges {"D" {:deleted false}}} (get-node :people "A")))
+  (is (= {:edges {"D" {:deleted false}}} (get-node :people "B")))
   (is (= {"A" false} (get-incoming-map :people "C")))
   (is (= {"A" false} (get-incoming-map :people "D"))))
 
@@ -129,8 +129,8 @@
   (at-revision 3 (merge-node! "A" "B"))
   (at-revision 4 (merge-node! "C" "D"))
 
-  (is (= {:edges {"C" {:deleted true}}} (get-node :people "A")))
-  (is (= {:edges {"C" {:deleted true}}} (get-node :people "B")))
+  (is (= {:edges {"C" {:deleted false}}} (get-node :people "A")))
+  (is (= {:edges {"C" {:deleted false}}} (get-node :people "B")))
   (is (= {"A" false} (get-incoming-map :people "C")))
   (is (= {"A" false} (get-incoming-map :people "D"))))
 
@@ -144,5 +144,5 @@
   (is (node-deleted? "A"))
 
   (undelete-node! "A")
-  (is (= {:foo 1 :deleted false} (get-node :people "A")))
+  (is (= {:foo 1} (get-node :people "A")))
   (is (not (node-deleted? "A"))))
