@@ -290,14 +290,11 @@
                 (assoc-in edges [edge-id :deleted] was-present))))
           new-edges old-edges))
 
-(defn- update-incoming! [layer [id & keys] old new]
+(defn- update-edges! [layer [id & keys] old new]
   (when (layer/manage-incoming? layer)
     (doseq [[edge-id {:keys [deleted]}]
             (apply changed-edges ;; TODO does this to-fix work? could it just be an if?
-                   (map (comp :edges #(and %
-                                           (if keys
-                                             (assoc-in {} keys %)
-                                             %)))
+                   (map (comp :edges (partial assoc-in* {} keys))
                         [old new]))]
       ((if deleted layer/drop-incoming! layer/add-incoming!)
        layer edge-id id))))
@@ -319,7 +316,7 @@
       (let [keys (meta-keyseq layer keyseq)
             update-meta! (if (identical? keys keyseq) ; not a meta
                            (fn [keys old new]
-                             (update-incoming! layer keys old new)
+                             (update-edges! layer keys old new)
                              (update-changelog! layer (first keys)))
                            (constantly nil))]
         (let [updater (partial layer/update-fn layer)
