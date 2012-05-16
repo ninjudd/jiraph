@@ -77,6 +77,7 @@
     (is (= before
            (graph/get-node (rev 1) "1")))
 
+    ;; TODO worried the protobuf codec might never be using the "full" codec
     (dotxn (rev 2)
       (-> (rev 2) (graph/update-node "1" (comp identity adjoin) change)))
     (is (= after
