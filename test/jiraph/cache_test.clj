@@ -3,7 +3,7 @@
         [jiraph.walk :only
          [defwalk path paths *parallel-follow* intersection enable-walk-cache! reset-walk-cache!]]
         [jiraph.walk.predicates :only [at-limit]]
-        [jiraph.codecs.protobuf :only [protobuf-codec]]
+        [jiraph.formats.protobuf :only [protobuf-format]]
         [fogus.unk :only [memo-lru snapshot]])
   (:require [jiraph.masai-layer :as bal]
             [jiraph.stm-layer :as stm]
@@ -12,7 +12,7 @@
 
 (def test-graph
   {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                  :codec-fns {:node (protobuf-codec Test$Node)})})
+                  :format-fns {:node (protobuf-format Test$Node)})})
 
 (defwalk full-walk
   :add?      true

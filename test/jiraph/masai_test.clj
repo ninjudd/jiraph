@@ -4,16 +4,17 @@
             [jiraph.masai-layer :as masai]
             [jiraph.layer :as layer]))
 
-(deftest id-based-codecs
+(deftest id-based-formats
   (let [profile-stub {:type :profile}
         other-stub {:type :other}
-        codec-builder (fn [{:keys [id]}]
-                        (if (.startsWith id "profile")
-                          ;; profiles get written as 100 and read as :profile, regardless of data
-                          (gloss/compile-frame :int32 (constantly 100) (constantly profile-stub))
-                          ;; others are written as 500 and read as :other
-                          (gloss/compile-frame :int32 (constantly 500) (constantly other-stub))))]
-    (masai/with-temp-layer [layer :codec-fns {:node codec-builder}]
+        format-builder (fn [{:keys [id]}]
+                        {:codec
+                         (if (.startsWith id "profile")
+                           ;; profiles get written as 100 and read as :profile, regardless of data
+                           (gloss/compile-frame :int32 (constantly 100) (constantly profile-stub))
+                           ;; others are written as 500 and read as :other
+                           (gloss/compile-frame :int32 (constantly 500) (constantly other-stub)))})]
+    (masai/with-temp-layer [layer :format-fns {:node format-builder}]
       (assoc-node! layer "profile-1" {:data :whatever})
       (assoc-node! layer "user-22" {:this :is-ignored})
       (is (= profile-stub (get-node layer "profile-1")))

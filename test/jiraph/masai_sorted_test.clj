@@ -28,7 +28,7 @@
                             :layout-fns {:node (-> (constantly [[[:edges :*]]
                                                                 [[:names]] ;; TODO support indexing non-maps
                                                                 [[]]])
-                                                   (masai/wrap-default-codecs)
+                                                   (masai/wrap-default-formats)
                                                    (masai/wrap-revisioned))}]
       (let [id "profile-1"
             init-node {:edges {"profile-10" {:rel :child}}
@@ -56,7 +56,7 @@
   (masai/with-temp-layer [layer
                           :layout-fns {:node (-> (constantly [[[:edges :*]]
                                                               [[]]])
-                                                 (masai/wrap-default-codecs)
+                                                 (masai/wrap-default-formats)
                                                  (masai/wrap-revisioned))}]
     (let [node {:edges {"mary" {:data 1}
                         "charlie" {:data 2}

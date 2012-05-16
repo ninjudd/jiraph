@@ -14,7 +14,7 @@
    :bar (masai/make-temp)
    :baz (sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]]
                                                               [[]]])
-                                                 (sorted/wrap-default-codecs)
+                                                 (sorted/wrap-default-formats)
                                                  (sorted/wrap-revisioned))})
    :stm (stm/make)})
 

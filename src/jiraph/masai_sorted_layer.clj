@@ -1,7 +1,6 @@
 (ns jiraph.masai-sorted-layer
   (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema IdentityLayer
                              node-id-seq meta-key meta-key?] :as layer]
-        [jiraph.codecs :only [special-codec revisioned-codec]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
@@ -17,6 +16,7 @@
             [masai.cursor :as cursor]
             [jiraph.graph :as graph]
             [cereal.core :as cereal]
+            [jiraph.formats :as formats]
             [schematic.core :as schema]
             [clojure.string :as s])
   (:import [java.nio ByteBuffer]))
@@ -59,10 +59,10 @@
                  (or (= x y) (= x :*) (= y :*)))
                pattern, path)))
 
-(defn- subnode-codecs
-  "This is used to find, given a path through a node and a sequence of [path,codec] pairs,
-   all the codecs that will actually be needed to write at that path. Basically, this means all
-   codecs whose path is below the write-path, and one codec which is at or above it."
+(defn- subnode-formats
+  "This is used to find, given a path through a node and a sequence of [path,format] pairs,
+   all the formats that will actually be needed to write at that path. Basically, this means all
+   formats whose path is below the write-path, and one format which is at or above it."
   [layout path]
   (let [path-to-root (filter #(along-path? (first %) path) layout)
         [below above] (split-with #(path-prefix? path (first %) true)
@@ -122,16 +122,16 @@
                    :stop  (str-after start-key)
                    :keyfn (constantly last)})))))))
 
-(defn- find-codec [keyseq codecs]
+(defn- find-format [keyseq formats]
   (when-let [expected-path (next keyseq)]
-    (some (fn [[path codec]]
+    (some (fn [[path format]]
             (when (= expected-path path)
-              codec))
-          codecs)))
+              format))
+          formats)))
 
 (defn- seq-fn [layer keys layout not-found f]
   (let [path `[~@keys :*]]
-    (when-let [codec (find-codec path layout)]
+    (when-let [{:keys [codec]} (find-format path layout)]
       (let [{:keys [start stop keyfn]} (bounds path)
             db-key (partial str start)
             db     (:db layer)
@@ -166,7 +166,7 @@
               (apply f not-found args))))))))
 
 (defn- layout-for
-  "Look up the layout and codecs to use based on node id and revision."
+  "Look up the layout and formats to use based on node id and revision."
   [layer node-id revision]
   (let [layout-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-layout-fn
                                     (meta-key? layer node-id) :node-meta-layout-fn
@@ -175,12 +175,12 @@
 
 (defn- delete-ranges!
   "Given a layer and a sequence of [start, end) intervals, delete every key in range. If the
-   layer is in append-only mode, then a codec-fn must be included with each interval to enable
+   layer is in append-only mode, then a format must be included with each interval to enable
    us to encode a reset."
   [layer deletion-ranges]
-  (doseq [{:keys [start stop codec]} deletion-ranges]
+  (doseq [{:keys [start stop format]} deletion-ranges]
     (let [delete (if (:append-only? layer)
-                   (let [deleted (delay (bufseq->bytes (encode (special-codec codec :reset)
+                   (let [deleted (delay (bufseq->bytes (encode (formats/special-codec format :reset)
                                                                {})))]
                      (fn [cursor]
                        (-> cursor
@@ -221,7 +221,7 @@
              revision)))))
 
 (defn- node-chunks [layout db id]
-  (for [[path codec] layout
+  (for [[path {:keys [codec]}] layout
         :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
               kvs (seq (for [[k v] (db/fetch-seq db start)
                              :while (neg? (compare k stop))
@@ -239,19 +239,19 @@
           (node-chunks layout db id)))
 
 (defn- optimized-writer
-  "Return a writer iff the keyseq corresponds exactly to one path in path-codecs, and the
-   corresponding codec has f as its reduce-fn (that is, we can apply the change to f by merely
-   appending something to a single codec)."
-  [layer path-codecs keyseq f]
-  (when-not (next path-codecs) ;; can only optimize a single codec
-    (let [[path codec] (first path-codecs)]
-      (when (= f (:reduce-fn (meta codec))) ;; performing optimized function
+  "Return a writer iff the keyseq corresponds exactly to one path in path-formats, and the
+   corresponding format has f as its reduce-fn (that is, we can apply the change to f by merely
+   appending something to a single database value)."
+  [layer layout keyseq f]
+  (when-not (next layout) ;; can only optimize a single codec
+    (let [[path format] (first layout)]
+      (when (= f (:reduce-fn format)) ;; performing optimized function
         (let [[id & keys] keyseq]
           (when (= (count keys) (count path)) ;; at exactly this level
             (let [db (:db layer)
                   db-key (db-name keyseq)] ;; great, we can optimize it
               (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
-                (db/append! db db-key (bufseq->bytes (encode codec arg)))
+                (db/append! db db-key (bufseq->bytes (encode (:codec format) arg)))
                 {:old nil, :new nil} ;; we didn't read the old data, so we don't know the new data
                 ))))))))
 
@@ -266,11 +266,11 @@
   (def ^:private structify-incoming (partial fix-incoming (fn [exists]
                                                             {:deleted (not exists)}))))
 
-(defn- write-paths! [layer write-fn codecs id node include-deletions?]
-  (reduce (fn [node [path codec]]
+(defn- write-paths! [layer write-fn layout id node include-deletions? codec-type]
+  (reduce (fn [node [path format]]
             (let [write! (fn [key data]
                            (->> data
-                                (encode codec)
+                                (encode (get format codec-type))
                                 (bufseq->bytes)
                                 (write-fn key)))]
               (reduce (fn [node path]
@@ -283,60 +283,58 @@
           (-> node
               (structify-incoming layer)
               (get id))
-          codecs))
+          layout))
 
-(defn- simple-writer [layer path-codecs keyseq f]
+(defn- simple-writer [layer layout keyseq f]
   (let [{:keys [db append-only?]} layer
         [id & keys] keyseq
-        path-codecs (if append-only?
-                      (for [[path codec] path-codecs]
-                        [path (special-codec codec :reset)])
-                      path-codecs)
-        write-mode (if append-only?, db/append! db/put!)
+        [write-mode codec-type] (if append-only?
+                                  [db/append! :reset]
+                                  [db/put! :codec])
         writer (partial write-mode db)
-        deletion-ranges (for [[path codec] path-codecs
+        deletion-ranges (for [[path format] layout
                               :let [{:keys [start stop multi]} (bounds (cons id path))]
                               :when (and multi (prefix-of? (butlast path) keys))]
-                          (keyed [start stop codec]))]
+                          (keyed [start stop format]))]
     (fn [& args]
-      (let [old (read-node path-codecs db id nil)
+      (let [old (read-node layout db id nil)
             new (apply update-in old keyseq f args)]
         (returning {:old (get-in old keyseq), :new (get-in new keyseq)}
           (delete-ranges! layer deletion-ranges)
-          (write-paths! layer writer path-codecs id new true))))))
+          (write-paths! layer writer layout id new true codec-type))))))
 
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
    paths more efficiently than reading the whole node, applying the function, and then writing to
-   each codec, you can implement a method for specialized-writer. For example, useful.utils/adjoin
-   can be split up by matching up the paths in the adjoin-arg and in the path-codecs.
+   each format, you can implement a method for specialized-writer. For example, useful.utils/adjoin
+   can be split up by matching up the paths in the adjoin-arg and in the layout.
 
-   path-codecs is a sequence of [path, codec] pairs, which are computed for your convenience:
+   layout is a sequence of [path, format] pairs, which are computed for your convenience:
    if you preferred, you could recalculate them from layer and keyseq.
    You should return a function of one argument, which writes to the layer the result of
    (update-in layer keyseq f arg). See the contract for jiraph.layer/update-fn - you are
    effectively implementing an update-fn for a particular function rather than a layer.
 
    Note that it is acceptable to return nil instead of a function, if you find the keyseq or
-   path-codecs mean you cannot do any optimization."
-  (fn [layer path-codecs keyseq f]
+   layout means you cannot do any optimization."
+  (fn [layer layout keyseq f]
     f))
 
 (defmethod specialized-writer :default [& args]
   nil)
 
-(defmethod specialized-writer adjoin [layer path-codecs keyseq _]
-  (when (every? (fn [[path codec]] ;; TODO support any reduce-fn
-                  (= adjoin (:reduce-fn (meta codec))))
-                path-codecs)
+(defmethod specialized-writer adjoin [layer layout keyseq _]
+  (when (every? (fn [[path format]] ;; TODO support any reduce-fn
+                  (= adjoin (:reduce-fn format)))
+                layout)
     (let [db (:db layer)
           [id & keys] keyseq
           writer (partial db/append! db)]
       (fn [arg]
         (returning {:old nil, :new arg}
-          (write-paths! layer writer path-codecs id
+          (write-paths! layer writer layout id
                         (assoc-in {} keyseq arg)
-                        false)))))) ;; don't include deletions
+                        false :codec)))))) ;; don't include deletions
 
 
 ;;; TODO pull the three formats into a single field?
@@ -373,16 +371,16 @@
   Optimized
   (query-fn [this keyseq not-found f]
     (let [[id & keys] keyseq
-          codecs (subnode-codecs (layout-for this id (revision-to-read this)) keys)]
-      (or (seq-fn this keyseq codecs not-found f)
-          (if (seq codecs)
+          layout (subnode-formats (layout-for this id (revision-to-read this)) keys)]
+      (or (seq-fn this keyseq layout not-found f)
+          (if (seq layout)
             (fn [& args]
               ;; incoming protobufs store their incoming edges with each key pointing to a map like:
               ;; {:deleted bool, :revisions [...], :codec_length ...}.
               ;; we need to coerce it into a map with one entry for each key, whose value is a
               ;; boolean indicating existence (so inverting the meaning of :deleted, and "lifting" it
               ;; outside of the map).
-              (let [node (read-node codecs db id not-found)]
+              (let [node (read-node layout db id not-found)]
                 (apply f (if (= node not-found)
                            not-found
                            (get-in (mapify-incoming node this) keyseq))
@@ -391,9 +389,9 @@
             (fn [& args] (apply f not-found args))))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [path-codecs (subnode-codecs (layout-for this id revision) keys)]
-        (assert (seq path-codecs) "No codecs to write with")
-        (some #(% this path-codecs keyseq f)
+      (let [layout (subnode-formats (layout-for this id revision) keys)]
+        (assert (seq layout) "No codecs to write with")
+        (some #(% this layout keyseq f)
               [specialized-writer, optimized-writer, simple-writer]))))
 
   Layer
@@ -412,9 +410,9 @@
 
   Schema
   (schema [this id]
-    (reduce (fn [acc [path codec]]
+    (reduce (fn [acc [path format]]
               (let [path (vec path)
-                    schema (:schema (meta codec))
+                    schema (:schema format)
                     [path schema] (if (= :* (peek path))
                                     [(pop path) {:type :map
                                                  :keys {:type :string}
@@ -427,17 +425,18 @@
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
       (do (write-paths! this (constantly nil), (layout-for this id revision),
-                        id, attrs, false)
+                        id, attrs, false, :codec)
           true)
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
     (let [layout (layout-for this id (revision-to-read this))
-          revisioned-layout (for [[path codec] layout
-                                  :let [codec (:revisions (meta codec))]
-                                  :when codec]
-                              [path codec])
+          revisioned-layout (for [[path format] layout
+                                  :let [codec (:revisions format)]
+                                  :when codec] ; pretend :revisions is the normal codec, so that
+                                               ; node-chunks will read using it
+                              [path {:codec codec}])
           revs (->> (node-chunks revisioned-layout db id)
                     (tree-seq (any map? sequential?) (to-fix map? vals,
                                                              sequential? seq))
@@ -479,13 +478,21 @@
   (single-edge? [this] ;; TODO accept option to (make)
     false))
 
-(if-ns (:require protobuf.core
-                 [cereal.protobuf :as protobuf])
-       (defn- make-protobuf [format]
-         (when (instance? cereal.protobuf.ProtobufFormat format)
-           (protobuf/make jiraph.Meta$Node)))
-       (defn- make-protobuf [format]
-         nil))
+(def default-format {:codec (cereal/clojure-codec :repeated true)
+                     :reduce-fn adjoin})
+
+(defn wrap-default-formats [layout-fn]
+  (fn [opts]
+    (when-let [layout (layout-fn opts)]
+      (for [[path format] layout]
+        [path (merge default-format format)]))))
+
+(defn wrap-revisioned [layout-fn]
+  (fn [opts]
+    (when-let [layout (layout-fn opts)]
+      (for [[path format] layout]
+        [path ((formats/revisioned-format (constantly format))
+               opts)]))))
 
 (if-ns (:require [masai.tokyo-sorted :as tokyo])
        (defn- make-db [db]
@@ -495,30 +502,13 @@
        (defn- make-db [db]
          db))
 
-(def default-codec (with-meta (cereal/clojure-codec :repeated true)
-                     {:reduce-fn adjoin}))
-
-(defn wrap-default-codecs [layout-fn]
-  (fn [opts]
-    (when-let [layout (layout-fn opts)]
-      (for [[path codec] layout]
-        [path (or codec default-codec)]))))
-
-(defn wrap-revisioned [layout-fn]
-  (fn [opts]
-    (when-let [layout (layout-fn opts)]
-      (for [[path codec] layout]
-        [path ((revisioned-codec (constantly codec)
-                                 (:reduce-fn (meta codec)))
-               opts)]))))
-
 (defn make [db & {{:keys [node meta layer-meta]} :layout-fns,
                   :keys [assoc-mode id-layer] :or {assoc-mode :append}}]
   (let [[node-fn meta-fn layer-meta-fn]
         (for [layout-fn [node meta layer-meta]]
           (condp invoke layout-fn
-              nil? (wrap-revisioned (constantly [[[:edges :*] default-codec]
-                                                 [         [] default-codec]]))
+              nil? (wrap-revisioned (constantly [[[:edges :*] default-format]
+                                                 [         [] default-format]]))
               (! fn?) (constantly layout-fn)
               layout-fn))]
     (MasaiSortedLayer. (make-db db) nil (atom nil)
