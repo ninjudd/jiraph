@@ -1,7 +1,8 @@
 (ns jiraph.masai-layer
-  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema IdentityLayer
-                             node-id-seq meta-key meta-key?] :as layer]
+  (:use [jiraph.layer :as layer
+         :only [Enumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
         [jiraph.formats :only [special-codec]]
+        [jiraph.utils :only [meta-id meta-id? base-id id->str]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin returning]]
@@ -27,15 +28,10 @@
 ;;; - a :revisions codec, for reading the list of revisions at which a node has been touched.
 
 (defn- format-for [layer node-id revision]
-  (let [format-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-format-fn
-                                   (meta-key? layer node-id) :node-meta-format-fn
-                                   :else :node-format-fn))]
+  (let [format-fn (get layer (cond (= node-id (meta-id :layer)) :layer-meta-format-fn
+                                   (meta-id? node-id)           :node-meta-format-fn
+                                   :else                        :node-format-fn))]
     (format-fn {:id node-id :revision revision})))
-
-;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
-(defn- main-node-id [meta-id]
-  {:pre [(= "_" (first meta-id))]}
-  (subs meta-id 1))
 
 (defn- bytes->long [bytes]
   (-> bytes (ByteArrayInputStream.) (DataInputStream.) (.readLong)))
@@ -67,31 +63,21 @@
            (when (< revision max-written)
              revision)))))
 
-(defrecord MasaiLayer [db revision max-written-revision append-only? id-layer
+(defrecord MasaiLayer [db revision max-written-revision append-only?
                        node-format-fn node-meta-format-fn layer-meta-format-fn]
   Object
   (toString [this]
     (pr-str this))
 
-  Meta
-  (meta-key [this k]
-    (str "_" k))
-  (meta-key? [this k]
-    (.startsWith ^String k "_"))
-
-  IdentityLayer
-  (id-layer [this]
-    id-layer)
-
   Enumerate
   (node-id-seq [this]
-    (remove #(meta-key? this %) (db/key-seq db)))
+    (remove meta-id? (db/key-seq db)))
   (node-seq [this]
     (map #(graph/get-node this %) (node-id-seq this)))
 
   Basic
   (get-node [this id not-found]
-    (if-let [data (db/fetch db id)]
+    (if-let [data (db/fetch db (id->str id))]
       (decode (:codec (format-for this id (revision-to-read this)))
               [(ByteBuffer/wrap data)])
       not-found))
@@ -103,9 +89,9 @@
                               (:codec format))]
                 (bufseq->bytes (encode codec data))))]
       ((if append-only? db/append! db/put!)
-       db id (bytes attrs))))
+       db (id->str id) (bytes attrs))))
   (dissoc-node! [this id]
-    (db/delete! db id))
+    (db/delete! db (id->str id)))
 
   Optimized
   (query-fn [this keyseq not-found f] nil)
@@ -119,21 +105,21 @@
                    attrs)
                  (encode codec)
                  (bufseq->bytes)
-                 (db/append! db id))
+                 (db/append! db (id->str id)))
             {:old nil :new attrs})))))
 
   Layer
-  (open [layer]
+  (open [this]
     (db/open db))
-  (close [layer]
+  (close [this]
     (db/close db))
-  (sync! [layer]
+  (sync! [this]
     (db/sync! db))
-  (optimize! [layer]
+  (optimize! [this]
     (db/optimize! db))
-  (truncate! [layer]
+  (truncate! [this]
     (db/truncate! db)
-    (swap! (:max-written-revision layer)
+    (swap! (:max-written-revision this)
            (constantly nil)))
 
   Schema
@@ -149,7 +135,7 @@
   ChangeLog
   (get-revisions [this id]
     (when-let [rev-codec (:revisions (format-for this id nil))]
-      (when-let [data (db/fetch db id)]
+      (when-let [data (db/fetch db (id->str id))]
         (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
           (distinct
            (if-not revision
@@ -157,7 +143,7 @@
              (take-while #(<= % revision) revs)))))))
 
   ;; TODO this is stubbed, will need to work eventually
-  (get-changed-ids [layer rev]
+  (get-changed-ids [this rev]
     #{})
 
   ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
@@ -201,7 +187,7 @@
   ;; - accept as arg: a map containing {revision and node-id}
   ;; - return: a format (see doc for formats at the top of this file)
   (defn make [db & {{:keys [node meta layer-meta]} :format-fns,
-                    :keys [assoc-mode id-layer] :or {assoc-mode :append}}]
+                    :keys [assoc-mode] :or {assoc-mode :append}}]
     (let [[node-format-fn meta-format-fn layer-meta-format-fn]
           (map #(as-fn (or % default-format-fn))
                [node meta layer-meta])]
@@ -209,7 +195,6 @@
                    (case assoc-mode
                      :append true
                      :overwrite false)
-                   id-layer
                    node-format-fn, meta-format-fn, layer-meta-format-fn))))
 
 (defn temp-layer

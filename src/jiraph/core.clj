@@ -12,8 +12,6 @@
 (def ^{:dynamic true} *verbose*  nil)
 (def ^{:dynamic true} *revision* nil)
 
-(def ^{:dynamic true} *default-id-layer-name* :id)
-
 (defn get-layer [layer-name]
   (when-let [layer (get *graph* layer-name)]
     (retro/at-revision layer *revision*)))
@@ -90,25 +88,6 @@
   node-id-seq fields node-valid? verify-node
   get-node find-node query-in-node get-in-node get-edges get-edge
   get-revisions get-incoming get-incoming-map)
-
-(macro-do [name]
-  (let [{:keys [varname meta]} (graph-impl name)]
-    `(defn ~name ~(:doc meta)
-       (~'[head-id tail-id]
-        (~name *default-id-layer-name* ~@'[head-id tail-id]))
-       (~'[layer-name head-id tail-id]
-        (~varname (layer ~'layer-name) ~@'[head-id tail-id]))))
-  merge-node! unmerge-node!)
-
-(macro-do [name]
-  (let [{:keys [varname meta]} (graph-impl name)]
-    `(defn ~name ~(:doc meta)
-       (~'[id]
-        (~name *default-id-layer-name* ~'id))
-       (~'[layer-name id]
-        (~varname (layer ~'layer-name) ~'id))))
-  delete-node! undelete-node!
-  merge-head merged-into merge-ids merge-position node-deleted?)
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution
 ;; or any indirection, because they can't meaningfully work with layer names but

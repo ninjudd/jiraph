@@ -33,16 +33,6 @@
   (verify-node [layer id attrs]
     "Verify that the given node is valid according to the layer schema."))
 
-(defprotocol Meta
-  (meta-key [layer id]
-    "Convert a node-id to the id of the meta-node holding metadata for that node.")
-  (meta-key? [layer id]
-    "Is the specified id a meta-node id?"))
-
-(defprotocol IdentityLayer
-  (id-layer [layer]
-    "Return the layer used to store merges and deletions for this layer, or nil if there is none."))
-
 (defprotocol Incoming
   (get-incoming [layer id]
     "Return the ids of all nodes that have an incoming edge to this one.
@@ -135,15 +125,6 @@
   (single-edge? [layer]
     "Is it illegal to have more than one outgoing edge per node on this layer?"))
 
-;; the other meta-related protocols are extended in jiraph.graph because they use
-;; update-in-node! which has some fairly complicated machinery in it
-(extend-type Object
-  Meta
-  (meta-key [layer id]
-    (str "_" id))
-  (meta-key? [layer id]
-    (= \_ (first id))))
-
 ;; these guys want a default/permanent sentinel
 (let [sentinel (Object.)]
   (extend-type Object
@@ -198,15 +179,7 @@
   Optimized
   ;; can't optimize anything
   (query-fn  [layer keyseq not-found f] nil)
-  (update-fn [layer keyseq f] nil)
-
-  IdentityLayer
-  (id-layer [layer] nil))
-
-(extend-type clojure.lang.IPersistentMap
-  IdentityLayer
-  (id-layer [layer]
-    (:id-layer layer)))
+  (update-fn [layer keyseq f] nil))
 
 (extend-type nil
   Schema

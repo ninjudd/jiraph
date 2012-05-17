@@ -1,11 +1,11 @@
-(ns jiraph.id-layer-test
-  (:use clojure.test jiraph.core)
+(ns jiraph.merge-test
+  (:use clojure.test jiraph.core jiraph.merge)
   (:require [jiraph.masai-layer :as masai]))
 
 (defn empty-graph [f]
   (let [id-layer (masai/make-temp)]
     (with-graph {:id     id-layer
-                 :people (masai/make-temp :id-layer id-layer)}
+                 :people (mergeable-layer (masai/make-temp) id-layer)}
       (f))))
 
 (use-fixtures :each empty-graph)
@@ -103,7 +103,7 @@
   (is (= {:a 1 :edges {"G" {:foo 3 :bar 2 :baz nil}}} (get-node :people "E")))
   (is (= #{"D"} (get-incoming :people "G")))
   (is (= #{"D"} (get-incoming :people "F")))
-
+  
   (at-revision 9  (unmerge-node! "D" "E"))
   (at-revision 10 (unmerge-node! "G" "F"))
 
@@ -120,8 +120,8 @@
 
   (is (= {:edges {"D" {:deleted false}}} (get-node :people "A")))
   (is (= {:edges {"D" {:deleted false}}} (get-node :people "B")))
-  (is (= {"A" false} (get-incoming-map :people "C")))
-  (is (= {"A" false} (get-incoming-map :people "D"))))
+  (is (= {"A" true} (get-incoming-map :people "C")))
+  (is (= {"A" true} (get-incoming-map :people "D"))))
 
 (deftest deleted-edge-merging-same-direction
   (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:deleted true}}}))
@@ -131,8 +131,8 @@
 
   (is (= {:edges {"C" {:deleted false}}} (get-node :people "A")))
   (is (= {:edges {"C" {:deleted false}}} (get-node :people "B")))
-  (is (= {"A" false} (get-incoming-map :people "C")))
-  (is (= {"A" false} (get-incoming-map :people "D"))))
+  (is (= {"A" true} (get-incoming-map :people "C")))
+  (is (= {"A" true} (get-incoming-map :people "D"))))
 
 (deftest delete-and-undelete-node
   (at-revision 1 (assoc-node! :people "A" {:foo 1}))

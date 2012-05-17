@@ -1,12 +1,12 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [jiraph.layer     :only [Enumerate Basic Layer Optimized Meta meta-key?
-                                 ChangeLog get-revisions close]]
-        [jiraph.graph     :only [*skip-writes*]]
-        [retro.core       :only [WrappedTransactional Revisioned OrderedRevisions
-                                 max-revision get-queue at-revision current-revision empty-queue]]
-        [useful.fn        :only [given fix]]
-        [useful.utils     :only [returning or-min]]
+  (:use [jiraph.layer :only [Enumerate Basic Layer Optimized ChangeLog get-revisions close]]
+        [jiraph.graph :only [*skip-writes*]]
+        [jiraph.utils :only [meta-id meta-id? base-id]]
+        [retro.core :only [WrappedTransactional Revisioned OrderedRevisions
+                           max-revision get-queue at-revision current-revision empty-queue]]
+        [useful.fn :only [given fix]]
+        [useful.utils :only [returning or-min]]
         [useful.datatypes :only [assoc-record]])
   (:import (java.io FileNotFoundException)))
 
@@ -63,16 +63,10 @@
   (node-seq [this]
     (-> this nodes seq))
 
-  Meta
-  (meta-key [this k]
-    [k])
-  (meta-key? [this k]
-    (vector? k))
-
   Basic
   (get-node [this k not-found]
-    (if (meta-key? this k)
-      (-> this meta (get (first k) not-found))
+    (if (meta-id? k)
+      (-> this meta (get (base-id k) not-found))
       (let [n (-> this nodes (get k not-found))]
         (if-not (identical? n not-found)
           n

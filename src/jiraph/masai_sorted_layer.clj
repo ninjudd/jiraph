@@ -1,6 +1,7 @@
 (ns jiraph.masai-sorted-layer
-  (:use [jiraph.layer :only [Enumerate Optimized Basic Layer ChangeLog Meta Preferences Schema IdentityLayer
-                             node-id-seq meta-key meta-key?] :as layer]
+  (:use [jiraph.layer :as layer
+         :only [Enumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
+        [jiraph.utils :only [meta-id meta-id? base-id keyseq->str]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
@@ -92,12 +93,6 @@
          '(())))
      node path)))
 
-(defn- db-name
-  "Convert a key sequence to a database keyname. Currently done by just joining them all together
-   with : characters into a string."
-  [keyseq]
-  (s/join ":" (map name keyseq)))
-
 (let [char-after (fn [c]
                    (char (inc (int c))))
       after-colon (char-after \:)
@@ -107,10 +102,12 @@
     (let [path  (vec path)
           last  (peek path)
           path  (pop path)
-          start (db-name path)]
+          end   (keyseq->str [last])
+          start (keyseq->str path)]
       (into {:parent path}
             (if (empty? path) ; top-level
-              {:start last, :stop (str-after last)
+              {:start end
+               :stop  (str-after end)
                :keyfn (constantly last)}
               (if (= :* last) ; multi
                 {:start (str start ":")
@@ -168,9 +165,9 @@
 (defn- layout-for
   "Look up the layout and formats to use based on node id and revision."
   [layer node-id revision]
-  (let [layout-fn (get layer (cond (= node-id (meta-key layer "_layer")) :layer-meta-layout-fn
-                                    (meta-key? layer node-id) :node-meta-layout-fn
-                                    :else :node-layout-fn))]
+  (let [layout-fn (get layer (cond (= node-id (meta-id :layer)) :layer-meta-layout-fn
+                                   (meta-id? node-id)          :node-meta-layout-fn
+                                   :else                        :node-layout-fn))]
     (layout-fn {:id node-id, :revision revision})))
 
 (defn- delete-ranges!
@@ -192,11 +189,6 @@
           (when-let [cur (and (neg? (compare (String. k) stop))
                               (delete cur))]
             (recur cur)))))))
-
-;; drop leading _ - NB must undo the meta-key impl in MasaiLayer
-(defn- main-node-id [meta-id]
-  {:pre [(= "_" (first meta-id))]}
-  (subs meta-id 1))
 
 (let [revision-key "__revision"]
   (defn- save-maxrev [layer]
@@ -232,11 +224,24 @@
     (assoc-in* {} parent
                (into {} kvs))))
 
+(letfn [(fix-incoming [val-fn nodes]
+          (into {}
+                (for [[id attrs] nodes]
+                  [id (if (and id (meta-id? id) ;; is there anything under the :incoming key?
+                               (seq (:incoming attrs)))
+                        (update-in attrs [:incoming] map-vals val-fn)
+                        attrs)])))]
+  (def ^:private mapify-incoming    (partial fix-incoming (complement :deleted)))
+  (def ^:private structify-incoming (partial fix-incoming (fn [exists]
+                                                            {:deleted (not exists)}))))
+
 (defn- read-node [layout db id not-found]
-  (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
-            ([] not-found)
-            ([a b] (adjoin a b)))
-          (node-chunks layout db id)))
+  (-> (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
+                ([] not-found)
+                ([a b] (adjoin a b)))
+              (node-chunks layout db id))
+      (fix #(not (identical? not-found %))
+           mapify-incoming)))
 
 (defn- optimized-writer
   "Return a writer iff the keyseq corresponds exactly to one path in path-formats, and the
@@ -248,23 +253,12 @@
       (when (= f (:reduce-fn format)) ;; performing optimized function
         (let [[id & keys] keyseq]
           (when (= (count keys) (count path)) ;; at exactly this level
-            (let [db (:db layer)
-                  db-key (db-name keyseq)] ;; great, we can optimize it
+            (let [db  (:db layer)
+                  key (keyseq->str keyseq)] ;; great, we can optimize it
               (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
-                (db/append! db db-key (bufseq->bytes (encode (:codec format) arg)))
-                {:old nil, :new nil} ;; we didn't read the old data, so we don't know the new data
-                ))))))))
-
-(letfn [(fix-incoming [val-fn node layer]
-          (into {}
-                (for [[id attrs] node]
-                  [id (if (and id (meta-key? layer id) ;; is there anything under the :incoming key?
-                               (seq (:incoming attrs)))
-                        (update-in attrs [:incoming] map-vals val-fn)
-                        attrs)])))]
-  (def ^:private mapify-incoming    (partial fix-incoming (complement :deleted)))
-  (def ^:private structify-incoming (partial fix-incoming (fn [exists]
-                                                            {:deleted (not exists)}))))
+                (db/append! db key (bufseq->bytes (encode (:codec format) arg)))
+                ;; we didn't read the old data, so we don't know the new data
+                {:old nil, :new nil}))))))))
 
 (defn- write-paths! [layer write-fn layout id node include-deletions? codec-type]
   (reduce (fn [node [path format]]
@@ -276,12 +270,11 @@
               (reduce (fn [node path]
                         (let [path (vec path)
                               data (get-in node path)]
-                          (write! (db-name (cons id path)) data)
+                          (write! (keyseq->str (cons id path)) data)
                           (when (seq path)
                             (no-nil-update node (pop path) dissoc (peek path)))))
                       node (matching-subpaths node path include-deletions?))))
-          (-> node
-              (structify-incoming layer)
+          (-> (structify-incoming node)
               (get id))
           layout))
 
@@ -338,21 +331,11 @@
 
 
 ;;; TODO pull the three formats into a single field?
-(defrecord MasaiSortedLayer [db revision max-written-revision append-only? id-layer
+(defrecord MasaiSortedLayer [db revision max-written-revision append-only?
                              node-layout-fn node-meta-layout-fn layer-meta-layout-fn]
-  Meta
-  (meta-key [this k]
-    (str "_" k))
-  (meta-key? [this k]
-    (.startsWith ^String k "_"))
-
-  IdentityLayer
-  (id-layer [this]
-    id-layer)
-
   Enumerate
   (node-id-seq [this]
-    (remove #(meta-key? this %) (db/key-seq db)))
+    (remove meta-id? (db/key-seq db)))
   (node-seq [this]
     (map #(graph/get-node this %) (node-id-seq this)))
 
@@ -383,7 +366,7 @@
               (let [node (read-node layout db id not-found)]
                 (apply f (if (= node not-found)
                            not-found
-                           (get-in (mapify-incoming node this) keyseq))
+                           (get-in node keyseq))
                        args)))
             ;; if no codecs apply, every read will be nil
             (fn [& args] (apply f not-found args))))))
@@ -395,17 +378,17 @@
               [specialized-writer, optimized-writer, simple-writer]))))
 
   Layer
-  (open [layer]
+  (open [this]
     (db/open db))
-  (close [layer]
+  (close [this]
     (db/close db))
-  (sync! [layer]
+  (sync! [this]
     (db/sync! db))
-  (optimize! [layer]
+  (optimize! [this]
     (db/optimize! db))
-  (truncate! [layer]
+  (truncate! [this]
     (db/truncate! db)
-    (swap! (:max-written-revision layer)
+    (swap! (:max-written-revision this)
            (constantly nil)))
 
   Schema
@@ -447,7 +430,7 @@
              revs))))
 
   ;; TODO this is stubbed, will need to work eventually
-  (get-changed-ids [layer rev]
+  (get-changed-ids [this rev]
     #{})
 
   ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
@@ -503,19 +486,19 @@
          db))
 
 (defn make [db & {{:keys [node meta layer-meta]} :layout-fns,
-                  :keys [assoc-mode id-layer] :or {assoc-mode :append}}]
+                  :keys [assoc-mode] :or {assoc-mode :append}}]
   (let [[node-fn meta-fn layer-meta-fn]
         (for [layout-fn [node meta layer-meta]]
           (condp invoke layout-fn
-              nil? (wrap-revisioned (constantly [[[:edges :*] default-format]
-                                                 [         [] default-format]]))
-              (! fn?) (constantly layout-fn)
-              layout-fn))]
+            ;; this is not the correct default for meta and layer-meta
+            nil? (wrap-revisioned (constantly [[[:edges :*] default-format]
+                                               [         [] default-format]]))
+            (! fn?) (constantly layout-fn)
+            layout-fn))]
     (MasaiSortedLayer. (make-db db) nil (atom nil)
                        (case assoc-mode
                          :append true
                          :overwrite false)
-                       id-layer
                        node-fn, meta-fn, layer-meta-fn)))
 
 (defn temp-layer

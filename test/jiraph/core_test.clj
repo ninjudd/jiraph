@@ -7,18 +7,14 @@
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
 
-(def all [:tr :tp :stm :trs])
-
 (let [masai  masai/make-temp
       sorted #(sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]]
                                                                     [[]]])
                                                        (sorted/wrap-default-formats)
                                                        (sorted/wrap-revisioned))})]
   (defn make-graph []
-    {:tr  (sorted)
-     :trs (masai)
-     :tp  (masai)
-     :stm (sorted)}))
+    {;:masai  (masai)
+     :sorted (sorted)}))
 
 (defmacro test-each-layer [layer & forms]
   `(with-each-layer ~layer
@@ -27,7 +23,7 @@
 
 (deftest node-info
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
       (testing "node-ids"
         (assoc-node! layer-name "1" {:foo 0})
@@ -35,7 +31,7 @@
 
 (deftest update-test
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
       (testing "update-node! supports arbitrary functions"
         (let [node1 {:foo 2 :bar "three" :baz [1 2 3]}
@@ -60,7 +56,7 @@
 ;; TODO add a way to test that a node isn't gotten multiple times unless writes happen
 (deftest caching
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
       (testing "with-caching"
         (with-caching true
@@ -83,7 +79,7 @@
 
 (deftest transactions
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
       (let [node {:foo 7 :bar "seven"}]
         (with-transaction layer-name
@@ -105,7 +101,7 @@
 
 (deftest properties
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
       (testing "layer-wide properties"
         (let [keys [:meta :foo]
@@ -119,7 +115,7 @@
 
 (deftest incoming
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
       (testing "keeps track of incoming edges"
         (is (empty? (get-incoming layer-name "1")))
@@ -137,7 +133,7 @@
 
 (deftest non-transactional-revisions
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
 
       (testing "adjoin supports viewing old revisions"
@@ -177,7 +173,7 @@
 
 (deftest revisioned-incoming
   (with-graph (make-graph)
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
       (at-revision 100 (is (empty? (get-incoming layer-name "11"))))
       (at-revision 100
@@ -215,7 +211,7 @@
 (deftest test-current-revision
   (with-graph (make-graph)
     (is (zero? (current-revision)))
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
 
       (is (zero? (current-revision layer-name)))
@@ -226,14 +222,14 @@
 
     (is (= 100 (current-revision)))
 
-    (test-each-layer all
+    (test-each-layer []
       (testing "update-in-node"
         (at-revision 200 (update-in-node! layer-name ["1" :memories] (constantly 3)))
         (is (= 200 (current-revision layer-name)))))
 
     (is (= 200 (current-revision)))
 
-    (test-each-layer all
+    (test-each-layer []
       (truncate! layer-name)
 
       (is (zero? (current-revision layer-name))))
@@ -260,7 +256,7 @@
     (with-graph
       (into {} (for [[k v] (make-graph)]
                  [k (with-meta v {:types {:foo #{:bar} :bar #{:bar}}})]))
-      (test-each-layer all
+      (test-each-layer []
         (truncate! layer-name)
         (testing "adheres to the schema"
           (is (add-node! layer-name "bar-1" {:a "b"}))
@@ -367,7 +363,7 @@
   (deftest single-edge ;; TODO need to update layers to enforce single-edgedness
     (with-graph
       (into {} (for [[k v] (make-graph)] [k (with-meta v {:single-edge true})]))
-      (test-each-layer all
+      (test-each-layer []
         (truncate! layer-name)
         (testing "add-node! and update-node! work with single-edge"
           (is (empty? (get-incoming layer-name "1")))
