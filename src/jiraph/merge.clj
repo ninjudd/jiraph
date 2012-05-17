@@ -2,6 +2,7 @@
   (:use jiraph.layer retro.core
         [jiraph.core :only [layer]]
         [jiraph.utils :only [meta-keyseq? meta-id? meta-id base-id edges-keyseq]]
+        [jiraph.wrapped-layer :only [defwrapped]]
         [useful.map :only [dissoc-in* assoc-in* update-in*]]
         [useful.seq :only [merge-sorted indexed]]
         [useful.fn :only [fix given]]
@@ -193,14 +194,7 @@
 
 (def ^{:private true} sentinel (Object.))
 
-(defrecord MergeableLayer [layer merge-layer]
-  Object
-  (toString [this] (pr-str this))
-
-  Enumerate
-  (node-id-seq [this] (node-id-seq layer))
-  (node-seq    [this] (node-seq layer))
-
+(defwrapped MergeableLayer [layer merge-layer]
   Basic
   (get-node [this id not-found]
     (let [nodes (->> (reverse (merge-ids merge-layer id))
@@ -209,9 +203,6 @@
         (if (empty? nodes)
           not-found
           (merge-nodes merge-layer [id] nodes))))
-
-  (assoc-node!  [this id attrs] (assoc-node! layer id attrs))
-  (dissoc-node! [this id]       (dissoc-node! layer id))
 
   Optimized
   (query-fn [this keyseq not-found f]
@@ -226,44 +217,7 @@
               (merge-data nodes)))))
       (let [query (query-fn this keyseq not-found identity)]
         (fn [& args]
-          (apply f (query) args)))))
-
-  (update-fn [this keyseq f] (update-fn layer keyseq f))
-
-  Layer
-  (open      [this] (open  layer))
-  (close     [this] (close layer))
-  (sync!     [this] (sync! layer))
-  (optimize! [this] (optimize! layer))
-  (truncate! [this] (truncate! layer))
-
-  Schema
-  (schema      [this id]       (schema layer id))
-  (verify-node [this id attrs] (verify-node layer id attrs))
-
-  ChangeLog
-  (get-revisions   [this id]  (get-revisions layer id))
-  (get-changed-ids [this rev] (get-changed-ids layer rev))
-
-  WrappedTransactional
-  (txn-wrap [this f]
-    (let [wrapped (txn-wrap layer ; let layer wrap transaction, but call f with this
-                            (fn [_]
-                              (f this)))]
-      (fn [^MergeableLayer layer]
-        (wrapped (.layer layer)))))
-
-  Revisioned
-  (at-revision      [this rev] (assoc-record this :layer (at-revision layer rev)))
-  (current-revision [this]     (current-revision layer))
-
-  OrderedRevisions
-  (max-revision [this] (max-revision layer))
-
-  Preferences
-  (manage-changelog? [this] (manage-changelog? layer))
-  (manage-incoming?  [this] (manage-incoming?  layer))
-  (single-edge?      [this] (single-edge?      layer)))
+          (apply f (query) args))))))
 
 (defn mergeable-layer [layer merge-layer]
   (MergeableLayer. layer merge-layer))
