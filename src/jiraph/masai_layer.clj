@@ -3,14 +3,14 @@
          :only [Enumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
         [jiraph.formats :only [special-codec]]
         [jiraph.utils :only [meta-id meta-id? base-id id->str]]
+        [jiraph.codex :only [encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [if-ns adjoin returning]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
-        [io.core :only [bufseq->bytes]]
-        [gloss.io :only [encode decode]])
+        [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
             [jiraph.graph :as graph]
             [jiraph.formats.cereal :as cereal])
@@ -79,7 +79,7 @@
   (get-node [this id not-found]
     (if-let [data (db/fetch db (id->str id))]
       (decode (:codec (format-for this id (revision-to-read this)))
-              [(ByteBuffer/wrap data)])
+              data)
       not-found))
   (assoc-node! [this id attrs]
     (letfn [(bytes [data]
@@ -87,7 +87,7 @@
                     codec (or (and append-only?
                                    (:reset format))
                               (:codec format))]
-                (bufseq->bytes (encode codec data))))]
+                (encode codec data)))]
       ((if append-only? db/append! db/put!)
        db (id->str id) (bytes attrs))))
   (dissoc-node! [this id]
@@ -104,7 +104,6 @@
                    (assoc-in {} keys attrs)
                    attrs)
                  (encode codec)
-                 (bufseq->bytes)
                  (db/append! db (id->str id)))
             {:old nil :new attrs})))))
 
@@ -128,15 +127,15 @@
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (dorun (bufseq->bytes (encode (:codec (format-for this id revision))
-                                    attrs)))
+      (encode (:codec (format-for this id revision))
+              attrs)
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
     (when-let [rev-codec (:revisions (format-for this id nil))]
       (when-let [data (db/fetch db (id->str id))]
-        (let [revs (decode rev-codec [(ByteBuffer/wrap data)])]
+        (let [revs (decode rev-codec data)]
           (distinct
            (if-not revision
              revs
@@ -215,3 +214,36 @@
      (returning ~@body
        (layer/close layer#)
        (.delete file#))))
+
+
+(def codex (let [type->num {"profile" 1
+                            "union" 2}
+                 num->type (into {} (for [[k v] type->num] [v k]))
+                 write-id (fn [^DataOutputStream out ^String node-id inc?]
+                            (let [[node-type id-str] (clojure.string/split node-id #"-")
+                                  type-abbrev (get type->num node-type)
+                                  id-num (Long/parseLong id-str)]
+                              (.writeByte out type-abbrev)
+                              (.writeLong out (fix id-num inc? inc))))]
+             {:read (fn [bytes]
+                      )
+              :write (let [key-len 9] ;; one-byte type, 8-byte long for id
+                       (fn [keyseq]
+                         (let [[head & tail] keyseq
+                               edge? (= :edges (first tail))]
+                           (if (and edge? (not (next tail)))
+                             nil ;; Don't know how to handle [id :edge] with no futher tail
+                             (let [edge-to (and edge? (second tail))
+                                   range? (keyword? edge-to)
+                                   len (cond range? (inc key-len)
+                                             edge? (* 2 key-len)
+                                             :else key-len)
+                                   buf (ByteArrayOutputStream. len)
+                                   writer (DataOutputStream. buf)]
+                               (write-id writer head (and range? (= :max edge-to)))
+                               (when edge?
+                                 (case edge-to
+                                   :min (.writeByte writer (byte 0))
+                                   :max nil
+                                   (write-id writer edge-to)))
+                               (.toByteArray buf))))))}))

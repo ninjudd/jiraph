@@ -2,6 +2,7 @@
   (:use [jiraph.layer :as layer
          :only [Enumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
         [jiraph.utils :only [meta-id meta-id? base-id keyseq->str]]
+        [jiraph.codex :only [encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
@@ -11,8 +12,7 @@
         [useful.fn :only [as-fn knit any fix to-fix ! validator]]
         [useful.io :only [long->bytes bytes->long]]
         [useful.datatypes :only [assoc-record]]
-        [io.core :only [bufseq->bytes]]
-        [gloss.io :only [encode decode]])
+        [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
             [masai.cursor :as cursor]
             [jiraph.graph :as graph]
@@ -159,7 +159,7 @@
             (if (seq all)
               (for [[k v] (apply fetch-nodes args)]
                 (map-entry (keyfn k)
-                           (decode codec [(ByteBuffer/wrap v)])))
+                           (decode codec v)))
               (apply f not-found args))))))))
 
 (defn- layout-for
@@ -177,8 +177,8 @@
   [layer deletion-ranges]
   (doseq [{:keys [start stop format]} deletion-ranges]
     (let [delete (if (:append-only? layer)
-                   (let [deleted (delay (bufseq->bytes (encode (formats/special-codec format :reset)
-                                                               {})))]
+                   (let [deleted (delay (encode (formats/special-codec format :reset)
+                                                {}))]
                      (fn [cursor]
                        (-> cursor
                            (cursor/append (force deleted))
@@ -217,7 +217,7 @@
         :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
               kvs (seq (for [[k v] (db/fetch-seq db start)
                              :while (neg? (compare k stop))
-                             :let [node (decode codec [(ByteBuffer/wrap v)])]
+                             :let [node (decode codec v)]
                              :when (not (empty-coll? node))]
                          (map-entry (keyfn k) node)))]
         :when kvs]
@@ -256,7 +256,7 @@
             (let [db  (:db layer)
                   key (keyseq->str keyseq)] ;; great, we can optimize it
               (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
-                (db/append! db key (bufseq->bytes (encode (:codec format) arg)))
+                (db/append! db key (encode (:codec format) arg))
                 ;; we didn't read the old data, so we don't know the new data
                 {:old nil, :new nil}))))))))
 
@@ -265,7 +265,6 @@
             (let [write! (fn [key data]
                            (->> data
                                 (encode (get format codec-type))
-                                (bufseq->bytes)
                                 (write-fn key)))]
               (reduce (fn [node path]
                         (let [path (vec path)
