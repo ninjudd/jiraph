@@ -5,7 +5,7 @@ option java_outer_classname = "Meta";
 
 message Node {
   repeated Edge  in   = 1 [(set) = true];
-  optional fixed32 proto_length   = 14;
+  repeated fixed32 proto_length   = 14;
   repeated int64 revisions      = 15;
 }
 
