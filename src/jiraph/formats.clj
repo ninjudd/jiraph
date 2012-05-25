@@ -30,8 +30,7 @@
   (let [{:keys [codec]} format]
     (-> format
         (assoc :revisions (revisions-codec codec)
-               :reset     (resetting-codec codec))
-        (update-each [:schema] schema/dissoc-fields revision-key))))
+               :reset     (resetting-codec codec)))))
 
 ;; TODO accept codec+opts as well as codec-fn+reduce-fn
 (defn revisioned-format [format-fn]

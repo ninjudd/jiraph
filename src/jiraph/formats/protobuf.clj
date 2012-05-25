@@ -6,7 +6,8 @@
         [io.core :only [catbytes]]
         [protobuf.core :only [protodef protobuf-dump]])
   (:require [gloss.core :as gloss]
-            [protobuf.codec :as protobuf]))
+            [protobuf.codec :as protobuf]
+            [schematic.core :as schema]))
 
 (def ^:private ^:const len-key :proto_length)
 
@@ -54,7 +55,8 @@
   ([proto reduce-fn]
      (when-not (= reduce-fn adjoin)
        (throw (IllegalArgumentException. (format "Unsupported reduce-fn %s" reduce-fn))))
-     (let [schema       (protobuf/codec-schema proto)
+     (let [schema       (-> (protobuf/codec-schema proto)
+                            (schema/dissoc-fields :revisions))
            codec        (protobuf/protobuf-codec proto)
            proto-format (keyed [codec schema reduce-fn])
            header-len   (num-bytes-to-encode-length proto)]
