@@ -439,8 +439,14 @@
     (fn [^MasaiSortedLayer layer]
       (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
                                  (fn [_]
-                                   (returning (f layer)
-                                     (save-maxrev layer))))]
+                                   (try
+                                     (returning (f layer)
+                                       (save-maxrev layer))
+                                     (catch Throwable t ; something went wrong, so we need to toss
+                                                        ; out our cached revision and rely on the
+                                                        ; one stored on disk.
+                                       (reset! (.max-written-revision layer) nil)
+                                       (throw t)))))]
         (db-wrapped (.db layer)))))
 
   Revisioned
