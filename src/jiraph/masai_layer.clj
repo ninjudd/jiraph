@@ -118,8 +118,7 @@
     (db/optimize! db))
   (truncate! [this]
     (db/truncate! db)
-    (swap! (:max-written-revision this)
-           (constantly nil)))
+    (reset! (:max-written-revision this) nil))
 
   Schema
   (schema [this id]
