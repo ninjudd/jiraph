@@ -1,5 +1,5 @@
 (ns jiraph.merge
-  (:use jiraph.layer retro.core
+  (:use [jiraph.layer :only [Basic Optimized query-fn get-node]]
         [jiraph.core :only [layer]]
         [jiraph.utils :only [meta-keyseq? meta-id? meta-id base-id edges-keyseq]]
         [jiraph.wrapped-layer :only [defwrapped]]
@@ -9,7 +9,8 @@
         [useful.utils :only [adjoin verify]]
         [useful.datatypes :only [assoc-record]]
         [ego.core :only [type-key]])
-  (:require [jiraph.graph :as graph]))
+  (:require [jiraph.graph :as graph]
+            [retro.core :as retro]))
 
 (declare merge-ids merge-head merge-position)
 
@@ -132,7 +133,7 @@
         (verify (not tail-merged)
                 (format "cannot merge %s into %s because %1$s is already merged into %s"
                         tail-id head-id tail-merged))
-        (let [revision (current-revision merge-layer)
+        (let [revision (retro/current-revision merge-layer)
               tail-ids (cons tail-id (merged-into merge-layer tail-id))]
           (reduce (fn [layer [pos id]]
                     (graph/update-node layer id adjoin
@@ -150,7 +151,7 @@
      (merge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (dotxn merge-layer
+       (retro/dotxn merge-layer
          (merge-node merge-layer head-id tail-id)))))
 
 (defn- delete-merges-after
@@ -189,7 +190,7 @@
      (unmerge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (dotxn merge-layer
+       (retro/dotxn merge-layer
          (unmerge-node merge-layer head-id tail-id)))))
 
 (def ^{:private true} sentinel (Object.))

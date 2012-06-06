@@ -1,8 +1,9 @@
 (ns jiraph.delete
-  (:use jiraph.layer retro.core
-        [jiraph.core :only [layer]]
+  (:use [jiraph.core :only [layer]]
+        [jiraph.layer :only [Basic Optimized get-node]]
         [jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [jiraph.wrapped-layer :only [defwrapped]]
+        [retro.core :only [dotxn]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
         [useful.utils :only [adjoin]]
