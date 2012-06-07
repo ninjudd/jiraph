@@ -6,6 +6,7 @@
             [jiraph.layer :as layer]
             [jiraph.graph :as graph]
             [jiraph.codex :as codex]
+            [jiraph.typed :as typing]
             [masai.tokyo :as tokyo]
             [ego.core :as ego]
             [jiraph.formats.protobuf :as proto])
@@ -33,7 +34,6 @@
 
 (deftest typed-layers
   (let [base (revisioned-clojure-format adjoin)
-        wrapped (wrap-typing base (comp #{:profile} ego/type-key))
         id "person-1"]
     (masai/with-temp-layer [base-layer :format-fns {:node base}]
       (let [l (at-revision base-layer 1)]
@@ -42,20 +42,44 @@
               (graph/assoc-node id {:foo :blah})))
         (is (= {:foo :blah}
                (graph/get-node l id)))
-        (is (= [1] (graph/get-revisions l id)))))
-    (masai/with-temp-layer [wrapped-layer :format-fns {:node wrapped}]
-      (let [l (at-revision wrapped-layer 1)]
-        (is (thrown? Exception ;; due to no codec for writing "person"s
-                     (dotxn l
-                       (-> l
-                           (graph/assoc-node id {:foo :blah})))))
-        (let [id "profile-1"]
-          (dotxn l
-            (-> l
-                (graph/assoc-node id {:foo :blah})))
-          (is (= {:foo :blah}
-                 (graph/get-node l id)))
-          (is (= [1] (graph/get-revisions l id))))))))
+        (is (= [1] (graph/get-revisions l id))))
+      (let [wrapped-layer (typing/typed-layer base-layer {:profile #{:photo :biography}})
+            rev (memoize (fn [rev]
+                           (at-revision wrapped-layer rev)))]
+        (is (thrown? Exception ;; refuses to write "person"s
+                     (graph/assoc-node! (rev 2) id {:foo :blah})))
+
+        (let [l (rev 2)
+              id "profile-2"]
+          (graph/assoc-node! l id {:foo :blah})
+          (is (= {:foo :blah} (graph/get-node l id)))
+          (is (= [2] (graph/get-revisions l id))))
+
+        (let [l (rev 3)
+              id "profile-8"
+              bad-data {:edges {"whatever-10" {:attr :value}}}]
+          (are [keyseq] (thrown? Exception
+                                 (graph/update-in-node! l (cons id keyseq) adjoin
+                                                        (get-in bad-data keyseq)))
+               []
+               [:edges]
+               [:edges "whatever-10"]
+               [:edges "whatever-10" :attr])
+          (let [data {:foo :bar, :edges {"photo-1" {:location "whatever"}}}]
+            (graph/assoc-node! l id data)
+            (is (= data (graph/get-node l id)))
+            (is (= [3] (graph/get-revisions l id)))))
+
+        (let [l (rev 4)]
+          (testing "Should work with functional interface"
+            (is (thrown? Exception
+                         (dotxn l
+                           (-> l
+                               (graph/assoc-node "person-4" {:foo :bar})))))
+            (dotxn l
+              (-> l
+                  (graph/assoc-node id {:foo :bar})))
+            (is (= {:foo :bar} (graph/get-node l id)))))))))
 
 (deftest protobuf-sets
   (let [real-adjoin adjoin
