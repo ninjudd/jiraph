@@ -40,10 +40,10 @@
 
        WrappedTransactional
        (txn-wrap [this# f#]
-                 (let [wrapped# (txn-wrap ~layer-sym ; let layer wrap transaction, but call f with this#
-                                          (fn [_#]
-                                            (f# this#)))]
-                   (fn [layer#]
+                 (fn [layer#] ; stolen from masai-layer: see relevant comments there
+                   (let [wrapped# (txn-wrap ~layer-sym
+                                            (fn [_#]
+                                              (f# layer#)))]
                      (wrapped# (~layer-key layer#)))))
 
        Revisioned

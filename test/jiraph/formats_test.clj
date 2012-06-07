@@ -70,16 +70,17 @@
             (is (= data (graph/get-node l id)))
             (is (= [3] (graph/get-revisions l id)))))
 
-        (let [l (rev 4)]
-          (testing "Should work with functional interface"
+        (testing "Should work with functional interface"
+          (let [l (rev 4)]
             (is (thrown? Exception
                          (dotxn l
                            (-> l
                                (graph/assoc-node "person-4" {:foo :bar})))))
-            (dotxn l
-              (-> l
-                  (graph/assoc-node id {:foo :bar})))
-            (is (= {:foo :bar} (graph/get-node l id)))))))))
+            (let [id "profile-7"]
+              (dotxn l
+                (-> l
+                    (graph/assoc-node id {:foo :bar})))
+              (is (= {:foo :bar} (graph/get-node l id))))))))))
 
 (deftest protobuf-sets
   (let [real-adjoin adjoin
