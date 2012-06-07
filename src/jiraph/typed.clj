@@ -63,3 +63,6 @@
                (prefix-lookup (for [[from-type to-types] types]
                                 [from-type (prefix-lookup (for [to-type to-types]
                                                             [to-type true]))]))))
+
+(defn without-typing [^TypedLayer typed-layer]
+  (.layer typed-layer))

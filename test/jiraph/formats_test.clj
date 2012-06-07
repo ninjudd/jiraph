@@ -80,7 +80,14 @@
               (dotxn l
                 (-> l
                     (graph/assoc-node id {:foo :bar})))
-              (is (= {:foo :bar} (graph/get-node l id))))))))))
+              (is (= {:foo :bar} (graph/get-node l id))))))
+
+        (testing "Can disable type-checking"
+          (let [l (typing/without-typing (rev 5))]
+            (graph/assoc-node! l "person-8" {:blah :baz})
+            (graph/update-node! l "profile-22" adjoin {:edges {"nobody" {:data "stuff"}}})
+            (is (= {:blah :baz} (graph/get-node l "person-8")))
+            (is (= {:data "stuff"} (graph/get-in-node l ["profile-22" :edges "nobody"])))))))))
 
 (deftest protobuf-sets
   (let [real-adjoin adjoin
