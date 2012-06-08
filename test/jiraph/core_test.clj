@@ -13,7 +13,7 @@
                                                        (sorted/wrap-default-formats)
                                                        (sorted/wrap-revisioned))})]
   (defn make-graph []
-    {;:masai  (masai)
+    {:masai  (masai)
      :sorted (sorted)}))
 
 (defmacro test-each-layer [layer & forms]
