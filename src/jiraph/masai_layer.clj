@@ -1,6 +1,7 @@
 (ns jiraph.masai-layer
   (:use [jiraph.layer :as layer
-         :only [Enumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
+         :only [Enumerate Optimized Historical Basic Layer ChangeLog Preferences Schema
+                node-id-seq]]
         [jiraph.formats :only [special-codec]]
         [jiraph.utils :only [meta-id meta-id? base-id id->str]]
         [jiraph.codex :only [encode decode]]
@@ -62,6 +63,14 @@
          (let [max-written (read-maxrev layer)]
            (when (< revision max-written)
              revision)))))
+
+(defn- revision-seq [format revision bytes]
+  (when-let [rev-codec (:revisions format)]
+    (let [revs (decode rev-codec bytes)]
+      (distinct
+       (if-not revision
+         revs
+         (take-while #(<= % revision) revs)))))  )
 
 (defrecord MasaiLayer [db revision max-written-revision append-only?
                        node-format-fn node-meta-format-fn layer-meta-format-fn]
@@ -132,13 +141,19 @@
 
   ChangeLog
   (get-revisions [this id]
-    (when-let [rev-codec (:revisions (format-for this id nil))]
-      (when-let [data (db/fetch db (id->str id))]
-        (let [revs (decode rev-codec data)]
-          (distinct
-           (if-not revision
-             revs
-             (take-while #(<= % revision) revs)))))))
+    (when-let [data (db/fetch db (id->str id))]
+      (revision-seq (format-for this id nil) revision data)))
+
+  Historical
+  (node-history [this id]
+    (when-let [data (db/fetch db (id->str id))]
+      (if-let [historical-codec (:historical (format-for this id revision))]
+        (decode historical-codec data)
+        (when-let [revisions (revision-seq (format-for this id nil) revision data)]
+          (into (sorted-map)
+                (for [revision revisions]
+                  [revision (decode (:codec (format-for this id revision))
+                                    data)]))))))
 
   ;; TODO this is stubbed, will need to work eventually
   (get-changed-ids [this rev]
