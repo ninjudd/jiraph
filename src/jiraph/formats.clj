@@ -59,15 +59,6 @@
                                vals)))
           (frame identity identity))))))
 
-(def ^{:dynamic true, :doc "When bound to false, codecs created by wrap-typing will ignore types."}
-  *honor-layer-types* true)
-
-(defn wrap-typing [format-fn accept-id?]
-  (fn [opts]
-    (when (or (not *honor-layer-types*)
-              (accept-id? (:id opts)))
-      (format-fn opts))))
-
 (defn special-codec [format key]
   (or (get format key)
       (get format :codec)))
