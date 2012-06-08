@@ -276,6 +276,12 @@
   [layer id]
   (layer/get-revisions layer id))
 
+(defn node-history
+  "Return a map from revision number to node data, for each revision that
+   affected this node, sorted with oldest-first."
+  [layer id]
+  (layer/node-history layer id))
+
 (extend-type Object
   layer/ChangeLog
   (get-revisions [layer id]

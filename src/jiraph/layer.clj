@@ -115,6 +115,11 @@
   (get-changed-ids [layer rev]
     "The nodes changed by the given revision."))
 
+(defprotocol Historical
+  (node-history [layer id]
+    "Return a map from revision number to node data, for each revision that
+     affected this node. The map must be sorted, with earliest revisions first."))
+
 (defprotocol Preferences
   "Indicate to Jiraph what things you want it to do for you. These preferences should not
   change while the system is running; Jiraph may choose to cache any of them."
@@ -179,7 +184,13 @@
   Optimized
   ;; can't optimize anything
   (query-fn  [layer keyseq not-found f] nil)
-  (update-fn [layer keyseq f] nil))
+  (update-fn [layer keyseq f] nil)
+
+  Historical
+  (node-history [layer id]
+    (into (sorted-map)
+          (for [r (get-revisions layer id)]
+            [r (get-node (retro/at-revision layer r) id nil)]))))
 
 (extend-type nil
   Schema

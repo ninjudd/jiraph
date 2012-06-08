@@ -206,7 +206,14 @@
 
         (is (= "1" (get-in-node layer-name ["13" :edges "11" :a])))
         (at-revision 201
-          (is (= "one" (get-in-node layer-name ["13" :edges "11" :a]))))))))
+          (is (= "one" (get-in-node layer-name ["13" :edges "11" :a])))))
+
+      (testing "node-history"
+        (let [history (node-history layer-name "13")]
+          (is (sorted? history))
+          (is (map? history))
+          (is (= (seq history) [[201 {:edges {"11" {:a "one"}}}]
+                                [202 {:edges {"11" {:a "1"}}}]])))))))
 
 (deftest test-current-revision
   (with-graph (make-graph)
