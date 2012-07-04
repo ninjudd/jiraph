@@ -32,6 +32,11 @@
     (str "_" (base-id id))
     (str id)))
 
+(defn meta-str?
+  "Does the given database key represent a meta id?"
+  [db-key]
+  (.startsWith ^String db-key "_"))
+
 (defn keyseq->str
   "Convert a key sequence to a database key string."
   [[id & keys]]

@@ -1,5 +1,5 @@
 (ns jiraph.layer
-  (:use [useful.utils :only [adjoin]]
+  (:use [useful.utils :only [adjoin map-entry]]
         [clojure.stacktrace :only [print-trace-element]])
   (:require [retro.core :as retro])
   (:import (java.util Map$Entry)))
@@ -18,7 +18,14 @@
   (node-id-seq [layer]
     "A seq of all node ids in this layer")
   (node-seq [layer]
-    "A seq of all nodes in this layer"))
+    "A seq of all [id, node] entries in this layer"))
+
+(defprotocol SortedEnumerate
+  "For layers which can provide indexed access into their Enumerate functions.
+   Operations are versions fo Enumerate functions that take additional arguments
+   in the form accepted by clojure.core/subseq."
+  (node-id-subseq [layer cmp start])
+  (node-subseq [layer cmp start]))
 
 (defprotocol Schema
   (schema [layer id]
@@ -169,12 +176,17 @@
   (node-valid? [layer attrs] true)
 
   Enumerate
-  ;; Fallback behavior is the empty list. Jiraph does *not* automatically
-  ;; track assoc'd and dissoc'd nodes for you in order to provide node-ids,
-  ;; because that would be a huge performance hit.
-  (node-id-seq [layer] ())
+  (node-id-seq [layer]
+    (node-id-subseq layer >= ""))
   (node-seq [layer]
-    (map #(get-node layer % nil) (node-id-seq layer)))
+    (node-subseq layer >= ""))
+
+  SortedEnumerate
+  (node-subseq [layer cmp start]
+    (for [id (node-id-subseq layer cmp start)]
+      (map-entry id (get-node layer id nil))))
+  ;; intentionally unimplemented - this blows up if you don't support it
+  ;; (node-id-subseq [layer cmp start])
 
   Optimized
   ;; can't optimize anything

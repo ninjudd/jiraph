@@ -2,11 +2,11 @@
   (:use [jiraph.layer :as layer
          :only [Enumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
         [jiraph.formats :only [special-codec]]
-        [jiraph.utils :only [meta-id meta-id? base-id id->str]]
+        [jiraph.utils :only [meta-id meta-id? base-id id->str meta-str?]]
         [jiraph.codex :only [encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
-        [useful.utils :only [if-ns adjoin returning]]
+        [useful.utils :only [if-ns adjoin returning map-entry]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
@@ -71,9 +71,10 @@
 
   Enumerate
   (node-id-seq [this]
-    (remove meta-id? (db/key-seq db)))
+    (remove meta-str? (db/key-seq db)))
   (node-seq [this]
-    (map #(graph/get-node this %) (node-id-seq this)))
+    (for [id (node-id-seq this)]
+      (map-entry id (graph/get-node this id))))
 
   Basic
   (get-node [this id not-found]

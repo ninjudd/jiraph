@@ -1,13 +1,13 @@
 (ns jiraph.masai-sorted-layer
   (:use [jiraph.layer :as layer
-         :only [Enumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
-        [jiraph.utils :only [meta-id meta-id? base-id keyseq->str]]
+         :only [SortedEnumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
+        [jiraph.utils :only [meta-id meta-id? meta-str? base-id keyseq->str]]
         [jiraph.codex :only [encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
-        [useful.seq :only [find-with prefix-of? find-first]]
-        [useful.string :only [substring-after]]
+        [useful.seq :only [find-with prefix-of? find-first glue]]
+        [useful.string :only [substring-after substring-before]]
         [useful.map :only [assoc-in* map-vals keyed]]
         [useful.fn :only [as-fn knit any fix to-fix ! validator]]
         [useful.io :only [long->bytes bytes->long]]
@@ -328,15 +328,21 @@
                         (assoc-in {} keyseq arg)
                         false :codec)))))) ;; don't include deletions
 
-
 ;;; TODO pull the three formats into a single field?
 (defrecord MasaiSortedLayer [db revision max-written-revision append-only?
                              node-layout-fn node-meta-layout-fn layer-meta-layout-fn]
-  Enumerate
-  (node-id-seq [this]
-    (remove meta-id? (db/key-seq db)))
-  (node-seq [this]
-    (map #(graph/get-node this %) (node-id-seq this)))
+  SortedEnumerate
+  (node-id-subseq [this cmp start]
+    (let [entries (db/fetch-subseq db cmp start)
+          ids (map first entries)]
+      (glue (fn [old new] new)
+            =
+            (constantly false)
+            (map (substring-before ":")
+                 (remove meta-str? ids)))))
+  (node-subseq [this cmp start]
+    (for [id (layer/node-id-subseq this cmp start)]
+      (map-entry id (graph/get-node this id))))
 
   Basic
   (get-node [this id not-found]
