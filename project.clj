@@ -1,4 +1,4 @@
-(defproject jiraph "0.8.0-beta6"
+(defproject jiraph "0.8.0-beta7"
   :description "embedded graph db library for clojure"
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [useful "0.8.3-alpha6"]
