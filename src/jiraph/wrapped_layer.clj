@@ -26,15 +26,15 @@
        (unwrap [this#] ~layer-sym)
 
        Enumerate
-       (node-id-seq [this#] (filter keep-node?
+       (node-id-seq [this#] (filter #(keep-node? this# %)
                                     (node-id-seq ~layer-sym)))
-       (node-seq    [this#] (filter (comp keep-node? first)
+       (node-seq    [this#] (filter #(keep-node? this# (first %))
                                     (node-seq ~layer-sym)))
 
        SortedEnumerate
-       (node-id-subseq [this# cmp# start#] (filter keep-node?
+       (node-id-subseq [this# cmp# start#] (filter #(keep-node? this# %)
                                                    (node-id-subseq ~layer-sym cmp# start#)))
-       (node-subseq    [this# cmp# start#] (filter (comp keep-node? first)
+       (node-subseq    [this# cmp# start#] (filter #(keep-node? this# (first %))
                                                    (node-subseq ~layer-sym cmp# start#)))
 
        Basic
