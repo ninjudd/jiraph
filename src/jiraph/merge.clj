@@ -2,7 +2,7 @@
   (:use [jiraph.layer :only [Basic Optimized query-fn get-node]]
         [jiraph.core :only [layer]]
         [jiraph.utils :only [meta-keyseq? meta-id? meta-id base-id edges-keyseq]]
-        [jiraph.wrapped-layer :only [defwrapped]]
+        [jiraph.wrapped-layer :only [NodeFilter defwrapped]]
         [useful.map :only [dissoc-in* assoc-in* update-in*]]
         [useful.seq :only [merge-sorted indexed]]
         [useful.fn :only [fix given]]
@@ -218,7 +218,11 @@
               (merge-data nodes)))))
       (let [query (query-fn this keyseq not-found identity)]
         (fn [& args]
-          (apply f (query) args))))))
+          (apply f (query) args)))))
+
+  NodeFilter
+  (keep-node? [this id]
+    (= id (merge-head merge-layer id))))
 
 (defn mergeable-layer [layer merge-layer]
   (MergeableLayer. layer merge-layer))

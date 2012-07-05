@@ -2,7 +2,7 @@
   (:use [jiraph.core :only [layer]]
         [jiraph.layer :only [Basic Optimized get-node]]
         [jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
-        [jiraph.wrapped-layer :only [defwrapped]]
+        [jiraph.wrapped-layer :only [NodeFilter defwrapped]]
         [retro.core :only [dotxn]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
@@ -89,7 +89,11 @@
       (let [node (apply graph/query-in-node* layer keyseq sentinel f args)]
         (if (= node sentinel)
           not-found
-          (mark-deleted delete-layer keyseq node))))))
+          (mark-deleted delete-layer keyseq node)))))
+
+  NodeFilter
+  (keep-node? [this id]
+    (not (node-deleted? delete-layer id))))
 
 (defn deletable-layer [layer delete-layer]
   (DeletableLayer. layer delete-layer))

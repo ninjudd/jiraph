@@ -8,6 +8,7 @@
         (ordered [set :only [ordered-set]]
                  [map :only [ordered-map]]))
   (:require [jiraph.layer :as layer]
+            [jiraph.wrapped-layer :as wrapped]
             [retro.core :as retro]))
 
 (def ^{:dynamic true} *skip-writes* false)
@@ -233,6 +234,21 @@
       "Functional version of assoc-node! for use in a transaction."
       [layer id value]
       (retro/enqueue layer #(assoc-node! % id value))))
+
+(defn unwrap-layer
+  "Return the underlying layer object from a wrapped layer. Throws an exception
+   if the layer is not a wrapping layer."
+  [layer]
+  (wrapped/unwrap layer))
+
+(defn unwrap-all
+  "Return the \"base\" layer from a stack of wrapped layers, unwrapping as many
+   times as necessary (possibly zero) to get to it."
+  [layer]
+  (->> layer
+       (iterate wrapped/unwrap)
+       (drop-while #(satisfies? wrapped/Wrapped %))
+       (first)))
 
 (do (defn assoc-in-node!
       "Set attributes inside of a node."
