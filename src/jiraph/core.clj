@@ -85,7 +85,7 @@
        (fn ~name [layer-name# & args#]
          (apply ~varname (layer layer-name#) args#))))
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
-  node-id-seq fields node-valid? verify-node
+  node-id-seq node-seq node-id-subseq node-subseq fields node-valid? verify-node
   get-node find-node query-in-node get-in-node get-edges get-edge
   get-revisions node-history get-incoming get-incoming-map)
 

@@ -79,9 +79,19 @@
   (layer/node-id-seq layer))
 
 (defn node-seq
-  "Return a lazy sequence of all nodes in the layer."
+  "Return a lazy sequence of all [id node] pairs in the layer."
   [layer]
   (layer/node-seq layer))
+
+(defn node-id-subseq
+  "Return a lazy subsequence of node ids in this layer."
+  [layer cmp start]
+  (layer/node-id-subseq layer cmp start))
+
+(defn node-subseq
+  "Return a lazy subsequence of [node id] pairs in the layer."
+  [layer cmp start]
+  (layer/node-subseq layer cmp start))
 
 (let [sentinel (Object.)]
   (defn ^{:dynamic true} get-node
