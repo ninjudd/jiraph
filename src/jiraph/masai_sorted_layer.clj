@@ -5,7 +5,8 @@
         [jiraph.codex :only [encode decode]]
         [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
         [clojure.stacktrace :only [print-cause-trace]]
-        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch]]
+        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch
+                             verify]]
         [useful.seq :only [find-with prefix-of? find-first glue]]
         [useful.string :only [substring-after substring-before]]
         [useful.map :only [assoc-in* map-vals keyed]]
@@ -333,7 +334,11 @@
                              node-layout-fn node-meta-layout-fn layer-meta-layout-fn]
   SortedEnumerate
   (node-id-subseq [this cmp start]
-    (let [entries (db/fetch-subseq db cmp start)
+    (verify (#{> >=} cmp) "Only > and >= supported")
+    (let [start (if (= cmp >)
+                  (str start ";")
+                  start)
+          entries (db/fetch-subseq db >= start)
           ids (map first entries)]
       (glue (fn [old new] new)
             =
