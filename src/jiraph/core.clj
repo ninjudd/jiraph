@@ -166,10 +166,11 @@
        @ret#)))
 
 (defn current-revision
-  "The maximum revision on all specified layers, or all layers if none are specified."
+  "The minimum revision on all specified layers, or all layers if none are specified."
   [& layers]
-  (apply max 0 (map retro/max-revision
-                    (vals (as-layer-map layers)))))
+  (apply min (or (seq (map retro/max-revision
+                           (vals (as-layer-map layers))))
+                 [0])))
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"
