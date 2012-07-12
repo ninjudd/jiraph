@@ -5,8 +5,8 @@
         [jiraph.formats :only [special-codec]]
         [jiraph.utils :only [meta-id meta-id? base-id id->str meta-str?]]
         [jiraph.codex :only [encode decode]]
-        [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
-        [clojure.stacktrace :only [print-cause-trace]]
+        [retro.core   :only [Transactional Revisioned OrderedRevisions
+                             txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [if-ns adjoin returning map-entry]]
         [useful.seq :only [find-with]]
         [useful.fn :only [as-fn fix given]]
@@ -160,23 +160,16 @@
   (get-changed-ids [this rev]
     #{})
 
-  ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
-  ;; been applied, and refusing to do any more writing to that revision. What is the answer?
-  WrappedTransactional
-  (txn-wrap [this f]
-    ;; todo *skip-writes* for past revisions
-    (fn [^MasaiLayer layer]
-      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
-                                 (fn [_]
-                                   (try
-                                     (returning (f layer)
-                                       (save-maxrev layer))
-                                     (catch Throwable t ; something went wrong, so we need to toss
-                                                        ; out our cached revision and rely on the
-                                                        ; one stored on disk.
-                                       (reset! (.max-written-revision layer) nil)
-                                       (throw t)))))]
-        (db-wrapped (.db layer)))))
+  ;; TODO: avoid all this hacking by implementing start/commit/rollback instead
+  Transactional
+  (txn-begin! [this]
+    (txn-begin! db))
+  (txn-commit! [this]
+    (save-maxrev this)
+    (txn-commit! db))
+  (txn-rollback! [this]
+    (reset! max-written-revision nil)
+    (txn-rollback! db))
 
   Revisioned
   (at-revision [this rev]
