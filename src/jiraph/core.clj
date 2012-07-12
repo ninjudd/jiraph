@@ -1,7 +1,8 @@
 (ns jiraph.core
   (:use     [useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
             [useful.map :only [update into-map]]
-            [useful.macro :only [macro-do]])
+            [useful.macro :only [macro-do]]
+            slingshot.slingshot)
   (:require [jiraph.graph :as graph]
             [jiraph.layer :as layer]
             [clojure.string :as s]
@@ -156,14 +157,18 @@
                  (vec layers))]
     ;; with-transaction always returns a layer object, so we have to use side effects to pass
     ;; back a different return value
-    `(let [ret# (atom nil)]
-       ((reduce (fn [f# layer-name#]
-                  (fn []
-                    (with-transaction layer-name#
-                      (f#))))
-                #(reset! ret# (do ~@forms))
-                ~layers))
-       @ret#)))
+    `(let [abort-key# '~(gensym 'transaction)
+           ~'abort-transaction #(throw+ {:type ::abort-multiple, :name abort-key#})
+           ret# (atom nil)]
+       (try+
+         ((reduce (fn [f# layer-name#]
+                    (fn []
+                      (with-transaction layer-name#
+                        (f#))))
+                  #(reset! ret# (do ~@forms))
+                  ~layers))
+         @ret#
+         (catch [:type ::abort-multiple :name abort-key#] _#)))))
 
 (defn current-revision
   "The minimum revision on all specified layers, or all layers if none are specified."
