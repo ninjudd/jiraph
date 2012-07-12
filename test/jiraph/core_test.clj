@@ -243,6 +243,35 @@
 
     (is (zero? (current-revision)))))
 
+;; TODO this is known to be breaking; retro needs a redesign before this can work
+(deftest multi-layer-transactions
+  (with-graph (make-graph)
+    (letfn [(write [break?]
+              (at-revision 100
+                (with-transaction :masai
+                  (update-in-node! :masai ["x" :edges "y" :times]
+                                   conj 1)
+
+                  (with-transaction :sorted
+                    (update-in-node! :sorted ["x" :edges "y" :times]
+                                     conj 1))
+
+                  (when break?
+                    (throw (Exception. "ZOMG"))))))]
+      (are [layer] (nil? (get-node layer "x"))
+           :masai :sorted)
+
+      (is (thrown? Exception (write true)))
+      (is (zero? (current-revision)))
+      (are [layer] (nil? (at-revision 0 (get-node layer "x")))
+           :masai :sorted)
+
+      (write false)
+      (is (= 100 (current-revision)))
+      (are [layer] (= {:edges {"y" {:times [1]}}}
+                      (get-node layer "x"))
+           :masai :sorted))))
+
 (comment
   (deftest compact-node
     (with-graph (make-graph)
