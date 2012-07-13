@@ -61,13 +61,10 @@
        (get-revisions   [this# id#]  (get-revisions ~layer-sym id#))
        (get-changed-ids [this# rev#] (get-changed-ids ~layer-sym rev#))
 
-       WrappedTransactional
-       (txn-wrap [this# f#]
-                 (fn [layer#] ; stolen from masai-layer: see relevant comments there
-                   (let [wrapped# (txn-wrap ~layer-sym
-                                            (fn [_#]
-                                              (f# layer#)))]
-                     (wrapped# (~layer-key layer#)))))
+       Transactional
+       (txn-begin!    [this#] (txn-begin! ~layer-sym))
+       (txn-commit!   [this#] (txn-commit! ~layer-sym))
+       (txn-rollback! [this#] (txn-rollback! ~layer-sym))
 
        Revisioned
        (at-revision      [this# rev#] (assoc-record this# ~layer-key (at-revision ~layer-sym rev#)))
@@ -75,6 +72,7 @@
 
        OrderedRevisions
        (max-revision [this#] (max-revision ~layer-sym))
+       (touch        [this#] (touch ~layer-sym))
 
        Preferences
        (manage-changelog? [this#] (manage-changelog? ~layer-sym))

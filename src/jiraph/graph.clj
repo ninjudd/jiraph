@@ -53,6 +53,7 @@
            layer#))))
 
 (def abort-transaction retro/abort-transaction)
+(def touch retro/touch)
 
 (defn sync!
   "Flush changes for the specified layers to the storage medium."
@@ -314,6 +315,8 @@
     (get-in-node layer [(meta-id id) "affected-by"]))
   (get-changed-ids [layer rev]
     (get-in-node layer [(meta-id :changed-ids) rev]))
+
+  retro/OrderedRevisions
   (max-revision [layer]
     (-> layer
         (retro/at-revision nil)

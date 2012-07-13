@@ -92,6 +92,8 @@
   OrderedRevisions
   (max-revision [this]
     (-> @store ))
+  (touch [this]
+    nil) ;; hopefully that works?
 
   WrappedTransactional
   (txn-wrap [_ f]

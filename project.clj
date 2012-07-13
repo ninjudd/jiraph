@@ -6,7 +6,7 @@
                  [cereal "0.2.0-alpha3"]
                  [ordered "1.2.2"]
                  [schematic "0.0.6"]
-                 [retro "0.6.0-beta1"]
+                 [retro "0.6.0"]
                  [io "0.2.0-beta2"]
                  [ego "0.1.7"]
                  [slingshot "0.10.3"]
