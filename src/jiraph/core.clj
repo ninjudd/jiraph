@@ -170,12 +170,18 @@
          @ret#
          (catch [:type ::abort-multiple :name abort-key#] _#)))))
 
-(defn current-revision
-  "The minimum revision on all specified layers, or all layers if none are specified."
-  [& layers]
-  (apply min (or (seq (map retro/max-revision
-                           (vals (as-layer-map layers))))
-                 [0])))
+(letfn [(all-revisions [layers]
+          (or (seq (map retro/max-revision
+                        (vals (as-layer-map layers))))
+              [0]))]
+  (defn current-revision
+    "The minimum revision on all specified layers, or all layers if none are specified."
+    [& layers]
+    (apply min (all-revisions layers)))
+  (defn uncommitted-revision
+    "The maximum revision on all specified layers, or all layers if none are specified."
+    [& layers]
+    (apply max (all-revisions layers))))
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"
