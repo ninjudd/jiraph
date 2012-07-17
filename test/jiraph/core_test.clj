@@ -202,7 +202,8 @@
       (testing "update-in, get-in"
         (at-revision 202
           (with-transaction layer-name
-            (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"})))
+            (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"})
+            (is (= 202 (uncommitted-revision)))))
 
         (is (= "1" (get-in-node layer-name ["13" :edges "11" :a])))
         (at-revision 201
@@ -242,6 +243,35 @@
       (is (zero? (current-revision layer-name))))
 
     (is (zero? (current-revision)))))
+
+;; TODO this is known to be breaking; retro needs a redesign before this can work
+(deftest multi-layer-transactions
+  (with-graph (make-graph)
+    (letfn [(write [break?]
+              (at-revision 100
+                (with-transaction :masai
+                  (update-in-node! :masai ["x" :edges "y" :times]
+                                   conj 1)
+
+                  (with-transaction :sorted
+                    (update-in-node! :sorted ["x" :edges "y" :times]
+                                     conj 1))
+
+                  (when break?
+                    (throw (Exception. "ZOMG"))))))]
+      (are [layer] (nil? (get-node layer "x"))
+           :masai :sorted)
+
+      (is (thrown? Exception (write true)))
+      (is (zero? (current-revision)))
+      (are [layer] (nil? (at-revision 0 (get-node layer "x")))
+           :masai :sorted)
+
+      (write false)
+      (is (= 100 (current-revision)))
+      (are [layer] (= {:edges {"y" {:times [1]}}}
+                      (get-node layer "x"))
+           :masai :sorted))))
 
 (comment
   (deftest compact-node

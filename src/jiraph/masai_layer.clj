@@ -5,10 +5,12 @@
         [jiraph.formats :only [special-codec]]
         [jiraph.utils :only [meta-id meta-id? base-id id->str meta-str?]]
         [jiraph.codex :only [encode decode]]
-        [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
-        [clojure.stacktrace :only [print-cause-trace]]
+        [jiraph.masai-common :only [implement-ordered revision-to-read]]
+        [retro.core   :only [Transactional Revisioned OrderedRevisions
+                             txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [if-ns adjoin returning map-entry]]
         [useful.seq :only [find-with]]
+        [useful.state :only [volatile put!]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
         [io.core :only [bufseq->bytes]])
@@ -33,36 +35,6 @@
                                    (meta-id? node-id)           :node-meta-format-fn
                                    :else                        :node-format-fn))]
     (format-fn {:id node-id :revision revision})))
-
-(defn- bytes->long [bytes]
-  (-> bytes (ByteArrayInputStream.) (DataInputStream.) (.readLong)))
-
-(defn- long->bytes [long]
-  (-> (ByteArrayOutputStream. 8)
-      (doto (-> (DataOutputStream.) (.writeLong long)))
-      (.toByteArray)))
-
-(let [revision-key "__revision"]
-  (defn- save-maxrev [layer]
-    (when-let [rev (:revision layer)]
-      (db/put! (:db layer) revision-key (long->bytes rev))
-      (swap! (:max-written-revision layer)
-             (fn [cached-max]
-               (max rev (or cached-max 0))))))
-  (defn- read-maxrev [layer]
-    (swap! (:max-written-revision layer)
-           (fn [cached-max]
-             (or cached-max
-                 (if-let [bytes (db/fetch (:db layer) revision-key)]
-                   (bytes->long bytes)
-                   0))))))
-
-(defn revision-to-read [layer]
-  (let [revision (:revision layer)]
-    (and revision
-         (let [max-written (read-maxrev layer)]
-           (when (< revision max-written)
-             revision)))))
 
 (defn- revision-seq [format revision bytes]
   (when-let [rev-codec (:revisions format)]
@@ -128,7 +100,7 @@
     (db/optimize! db))
   (truncate! [this]
     (db/truncate! db)
-    (reset! (:max-written-revision this) nil))
+    (put! max-written-revision nil))
 
   Schema
   (schema [this id]
@@ -160,23 +132,14 @@
   (get-changed-ids [this rev]
     #{})
 
-  ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
-  ;; been applied, and refusing to do any more writing to that revision. What is the answer?
-  WrappedTransactional
-  (txn-wrap [this f]
-    ;; todo *skip-writes* for past revisions
-    (fn [^MasaiLayer layer]
-      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
-                                 (fn [_]
-                                   (try
-                                     (returning (f layer)
-                                       (save-maxrev layer))
-                                     (catch Throwable t ; something went wrong, so we need to toss
-                                                        ; out our cached revision and rely on the
-                                                        ; one stored on disk.
-                                       (reset! (.max-written-revision layer) nil)
-                                       (throw t)))))]
-        (db-wrapped (.db layer)))))
+  Transactional
+  (txn-begin! [this]
+    (txn-begin! db))
+  (txn-commit! [this]
+    (txn-commit! db))
+  (txn-rollback! [this]
+    (put! max-written-revision nil)
+    (txn-rollback! db))
 
   Revisioned
   (at-revision [this rev]
@@ -184,15 +147,13 @@
   (current-revision [this]
     revision)
 
-  OrderedRevisions
-  (max-revision [this]
-    (read-maxrev this))
-
   Preferences
   (manage-changelog? [this] false) ;; TODO wish this were more granular
   (manage-incoming? [this] true)
   (single-edge? [this] ;; TODO accept option to (make)
     false))
+
+(implement-ordered MasaiLayer)
 
 (if-ns (:require [masai.tokyo :as tokyo])
        (defn- make-db [db]
@@ -211,7 +172,7 @@
     (let [[node-format-fn meta-format-fn layer-meta-format-fn]
           (map #(as-fn (or % default-format-fn))
                [node meta layer-meta])]
-      (MasaiLayer. (make-db db) nil (atom nil)
+      (MasaiLayer. (make-db db) nil (volatile nil)
                    (case assoc-mode
                      :append true
                      :overwrite false)
@@ -236,7 +197,7 @@
        (layer/close layer#)
        (.delete file#))))
 
-
+;; TODO wth is this? Must be some scratch work I committed accidentally?
 (def codex (let [type->num {"profile" 1
                             "union" 2}
                  num->type (into {} (for [[k v] type->num] [v k]))

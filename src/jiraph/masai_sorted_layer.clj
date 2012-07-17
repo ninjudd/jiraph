@@ -3,11 +3,13 @@
          :only [SortedEnumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
         [jiraph.utils :only [meta-id meta-id? meta-str? base-id keyseq->str]]
         [jiraph.codex :only [encode decode]]
-        [retro.core   :only [WrappedTransactional Revisioned OrderedRevisions txn-wrap]]
-        [clojure.stacktrace :only [print-cause-trace]]
+        [jiraph.masai-common :only [implement-ordered revision-to-read]]
+        [retro.core   :only [Transactional Revisioned OrderedRevisions
+                             txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch
                              verify]]
         [useful.seq :only [find-with prefix-of? find-first glue]]
+        [useful.state :only [volatile put!]]
         [useful.string :only [substring-after substring-before]]
         [useful.map :only [assoc-in* map-vals keyed]]
         [useful.fn :only [as-fn knit any fix to-fix ! validator]]
@@ -190,28 +192,6 @@
           (when-let [cur (and (neg? (compare (String. k) stop))
                               (delete cur))]
             (recur cur)))))))
-
-(let [revision-key "__revision"]
-  (defn- save-maxrev [layer]
-    (when-let [rev (:revision layer)]
-      (db/put! (:db layer) revision-key (long->bytes rev))
-      (swap! (:max-written-revision layer)
-             (fn [cached-max]
-               (max rev (or cached-max 0))))))
-  (defn- read-maxrev [layer]
-    (swap! (:max-written-revision layer)
-           (fn [cached-max]
-             (or cached-max
-                 (if-let [bytes (db/fetch (:db layer) revision-key)]
-                   (bytes->long bytes)
-                   0))))))
-
-(defn revision-to-read [layer]
-  (let [revision (:revision layer)]
-    (and revision
-         (let [max-written (read-maxrev layer)]
-           (when (< revision max-written)
-             revision)))))
 
 (defn- node-chunks [layout db id]
   (for [[path {:keys [codec]}] layout
@@ -397,8 +377,8 @@
   (optimize! [this]
     (db/optimize! db))
   (truncate! [this]
-    (db/truncate! db)
-    (reset! (:max-written-revision this) nil))
+    (put! max-written-revision nil)
+    (db/truncate! db))
 
   Schema
   (schema [this id]
@@ -442,23 +422,14 @@
   (get-changed-ids [this rev]
     #{})
 
-  ;; TODO: Problems with implicit transaction-wrapping: we end up writing that the revision has
-  ;; been applied, and refusing to do any more writing to that revision. What is the answer?
-  WrappedTransactional
-  (txn-wrap [this f]
-    ;; todo *skip-writes* for past revisions
-    (fn [^MasaiSortedLayer layer]
-      (let [db-wrapped (txn-wrap db ; let db wrap transaction, but call f with layer
-                                 (fn [_]
-                                   (try
-                                     (returning (f layer)
-                                       (save-maxrev layer))
-                                     (catch Throwable t ; something went wrong, so we need to toss
-                                                        ; out our cached revision and rely on the
-                                                        ; one stored on disk.
-                                       (reset! (.max-written-revision layer) nil)
-                                       (throw t)))))]
-        (db-wrapped (.db layer)))))
+  Transactional
+  (txn-begin! [this]
+    (txn-begin! db))
+  (txn-commit! [this]
+    (txn-commit! db))
+  (txn-rollback! [this]
+    (put! max-written-revision nil)
+    (txn-rollback! db))
 
   Revisioned
   (at-revision [this rev]
@@ -466,15 +437,13 @@
   (current-revision [this]
     revision)
 
-  OrderedRevisions
-  (max-revision [this]
-    (read-maxrev this))
-
   Preferences
   (manage-changelog? [this] false) ;; TODO wish this were more granular
   (manage-incoming? [this] true)
   (single-edge? [this] ;; TODO accept option to (make)
     false))
+
+(implement-ordered MasaiSortedLayer)
 
 (def default-format {:codec (cereal/clojure-codec :repeated true)
                      :reduce-fn adjoin})
@@ -510,7 +479,7 @@
                                                [         [] default-format]]))
             (! fn?) (constantly layout-fn)
             layout-fn))]
-    (MasaiSortedLayer. (make-db db) nil (atom nil)
+    (MasaiSortedLayer. (make-db db) nil (volatile nil)
                        (case assoc-mode
                          :append true
                          :overwrite false)
