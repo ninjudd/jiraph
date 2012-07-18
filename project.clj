@@ -23,5 +23,4 @@
   :repositories {"sonatype-snapshots" {:url "http://oss.sonatype.org/content/repositories/snapshots"
                                        :snapshots true
                                        :releases {:checksum :fail :update :always}}}
-  :checksum-deps true ;; Tired of accidentally running with old deps
   :hooks [leiningen.protobuf])
