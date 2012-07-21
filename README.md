@@ -1,3 +1,5 @@
+[![Build Status](https://secure.travis-ci.org/flatland/jiraph.png)](http://travis-ci.org/flatland/jiraph)
+
 Jiraph is an embedded graph database for Clojure. It is extremely fast and can walk
 100,000 edges in about 3 seconds on my laptop. It uses Tokyo Cabinet for backend storage.
 
