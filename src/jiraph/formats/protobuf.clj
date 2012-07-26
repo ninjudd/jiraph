@@ -67,17 +67,17 @@
              proto-format
              (update proto-format :codec
                      (fn [codec]
-                       {:read (fn [bytes]
+                       {:read (fn [^bytes bytes]
                                 (let [full-node (decode codec bytes)
                                       goal-length (length-for-revision full-node
                                                                        revision header-len)]
-                                  (if (= goal-length (count bytes))
+                                  (if (= goal-length (alength bytes))
                                     full-node
                                     (let [read-target (byte-array goal-length)]
                                       (System/arraycopy bytes 0 read-target 0 goal-length)
                                       (decode codec read-target)))))
                         :write (fn [node]
                                  (let [node (assoc node :revisions revision)
-                                       encoded (encode codec node)]
-                                   (catbytes (encode codec {len-key (count encoded)})
+                                       ^bytes encoded (encode codec node)]
+                                   (catbytes (encode codec {len-key (alength encoded)})
                                              encoded)))})))))))))
