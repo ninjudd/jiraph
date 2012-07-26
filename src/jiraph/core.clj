@@ -171,8 +171,9 @@
          (catch [:type ::abort-multiple :name abort-key#] _#)))))
 
 (letfn [(all-revisions [layers]
-          (or (seq (map retro/max-revision
-                        (vals (as-layer-map layers))))
+          (or (seq (remove #{Double/POSITIVE_INFINITY}
+                           (map retro/max-revision
+                                (vals (as-layer-map layers)))))
               [0]))]
   (defn current-revision
     "The minimum revision on all specified layers, or all layers if none are specified."

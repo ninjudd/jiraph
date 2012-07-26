@@ -4,6 +4,7 @@
         [retro.core :as retro :only [dotxn]])
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
+            [jiraph.null-layer :as null]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
 
@@ -272,6 +273,22 @@
       (are [layer] (= {:edges {"y" {:times [1]}}}
                       (get-node layer "x"))
            :masai :sorted))))
+
+(deftest null-layer-revisions
+  (with-graph (assoc (make-graph)
+                :null (null/make))
+    (is (= 0 (current-revision) (uncommitted-revision)))
+
+    (at-revision 100
+      (with-each-layer []
+        (assoc-node! layer-name :foo {:blah 1})))
+
+    (is (= 100 (current-revision) (uncommitted-revision)))
+
+    (with-each-layer [:masai :sorted]
+      (is (= {:blah 1} (get-node layer-name :foo))))
+
+    (is (= 432 (get-node :null :foo 432)))))
 
 (comment
   (deftest compact-node
