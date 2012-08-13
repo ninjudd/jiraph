@@ -39,7 +39,7 @@
                        (adjoin edges {id edge})))
                    {})))))
 
-(defn merge-nodes [merge-layer keyseq nodes]
+(defn- merge-nodes [merge-layer keyseq nodes]
   (if-let [ks (edges-keyseq keyseq)]
     (let [edges (merge-edges merge-layer
                              keyseq
