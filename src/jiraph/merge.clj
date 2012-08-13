@@ -114,7 +114,7 @@
            (get-in node [:edges head :position]))))))
 
 (defn merge-node
-  "Functional version of merge-node!"
+  "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
   [merge-layer head-id tail-id]
   (verify (not= head-id tail-id)
           (format "cannot merge %s into itself" tail-id))
@@ -146,7 +146,7 @@
                   (indexed tail-ids)))))))
 
 (defn merge-node!
-  "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
+  "Mutable version of merge-node."
   ([head-id tail-id]
      (merge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
@@ -165,7 +165,7 @@
                                  [to-id {:deleted true}]))}))
 
 (defn unmerge-node
-  "Functional version of unmerge-node!"
+  "Unmerge tail node from head node, taking all nodes that were previously merged into tail with it."
   [merge-layer head-id tail-id]
   (let [tail      (graph/get-node merge-layer tail-id)
         merge-rev (get-in tail [:edges head-id :revision])
@@ -185,7 +185,7 @@
             tail-ids)))
 
 (defn unmerge-node!
-  "Unmerge tail node from head node, taking all nodes that were previously merged into tail with it."
+  "Mutable version of unmerge-node."
   ([head-id tail-id]
      (unmerge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
