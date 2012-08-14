@@ -14,8 +14,8 @@
                  [ego "0.1.7"]
                  [slingshot "0.10.3"]
                  [org.clojure/core.match "0.2.0-alpha9"]
-                 [protobuf "0.6.0-beta18"]]
-  :plugins [[lein-protobuf "0.2.0-beta5"]]
+                 [protobuf "0.6.1-beta3"]]
+  :plugins [[lein-protobuf "0.2.0-beta7"]]
   :profiles {:1.5 {:dependencies [[org.clojure/clojure "1.5.0-master-SNAPSHOT"]]}
              :dev {:dependencies [[tokyocabinet "1.24.4"]
                                   [unk "0.9.3"]]}}
