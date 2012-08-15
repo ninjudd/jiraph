@@ -1,8 +1,9 @@
 (ns jiraph.graph
   (:use [jiraph.utils :only [meta-id meta-id?]]
-        [useful.map :only [filter-keys-by-val assoc-in* update-in*]]
+        [useful.map :only [filter-keys-by-val assoc-in* update-in* keyed]]
         [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [useful.fn :only [fix]]
+        [useful.state :only [volatile put!]]
         [clojure.string :only [split join]]
         [ego.core :only [type-key]]
         (ordered [set :only [ordered-set]]
@@ -175,44 +176,48 @@
 (defn update-in-node!
   "Update the subnode at keyseq by calling function f with the old value and any supplied args."
   [layer keyseq f & args]
-  (refuse-readonly [layer])
-  (with-transaction layer
-    (when-not *skip-writes*
-      (let [update-meta! (if (meta-id? (first keyseq))
-                           (constantly nil)
-                           (fn [keyseq old new]
-                             (update-edges! layer keyseq old new)
-                             (update-changelog! layer (first keyseq))))]
-        (let [updater (partial layer/update-fn layer)
-              keyseq  (seq keyseq)]
-          (if-let [update! (updater keyseq f)]
-            ;; maximally-optimized; the layer can do this exact thing well
-            (let [{:keys [old new]} (apply update! args)]
-              (update-meta! keyseq old new))
-            (if-let [update! (and keyseq ;; don't look for assoc-in of empty keys
-                                  (updater (butlast keyseq) assoc))]
-              ;; they can replace this sub-node efficiently, at least
-              (let [old (get-in-node layer keyseq)
-                    new (apply f old args)]
-                (update! (last keyseq) new)
-                (update-meta! keyseq old new))
+  (let [ret (volatile nil)]
+    (with-transaction layer
+      (when-not *skip-writes*
+        (let [update-meta! (if (meta-id? (first keyseq))
+                             (constantly nil)
+                             (fn [keyseq old new]
+                               (update-edges! layer keyseq old new)
+                               (update-changelog! layer (first keyseq))))
+              return (fn [keyseq old new]
+                       (update-meta! keyseq old new)
+                       (put! ret (keyed [keyseq old new])))]
+          (let [updater (partial layer/update-fn layer)
+                keyseq  (seq keyseq)]
+            (if-let [update! (updater keyseq f)]
+              ;; maximally-optimized; the layer can do this exact thing well
+              (let [{:keys [old new]} (apply update! args)]
+                (return keyseq old new))
+              (if-let [update! (and keyseq ;; don't look for assoc-in of empty keys
+                                    (updater (butlast keyseq) assoc))]
+                ;; they can replace this sub-node efficiently, at least
+                (let [old (get-in-node layer keyseq)
+                      new (apply f old args)]
+                  (update! (last keyseq) new)
+                  (return keyseq old new))
 
-              ;; need some special logic for unoptimized top-level assoc/dissoc
-              (if-let [update! (and (not keyseq) ({assoc  layer/assoc-node!
-                                                   dissoc layer/dissoc-node!} f))]
-                (let [[id new] args
-                      old (when (layer/manage-incoming? layer)
-                            (get-node layer id))]
-                  (apply update! layer args)
-                  (update-meta! [id] old new))
-                (let [[id & keyseq] keyseq
-                      old (get-node layer id)
-                      new (if keyseq
-                            (apply update-in* old keyseq f args)
-                            (apply f old args))]
-                  (layer/assoc-node! layer id new)
-                  (update-meta! [id] old new))))))
-        (swap! write-count inc)))))
+                ;; need some special logic for unoptimized top-level assoc/dissoc
+                (if-let [update! (and (not keyseq) ({assoc  layer/assoc-node!
+                                                     dissoc layer/dissoc-node!} f))]
+                  (let [[id new] args
+                        old (when (layer/manage-incoming? layer)
+                              (get-node layer id))]
+                    (apply update! layer args)
+                    (return [id] old new))
+                  (let [[id & keyseq] keyseq
+                        old (get-node layer id)
+                        new (if keyseq
+                              (apply update-in* old keyseq f args)
+                              (apply f old args))]
+                    (layer/assoc-node! layer id new)
+                    (return [id] old new))))))
+          (swap! write-count inc))))
+    @ret))
 
 (defn update-in-node
   "Functional version of update-in-node! for use in a transaction."
