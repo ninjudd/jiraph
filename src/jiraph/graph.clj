@@ -216,7 +216,7 @@
 (defn update-in-node
   "Functional version of update-in-node! for use in a transaction."
   [layer keyseq f & args]
-  (retro/enqueue layer #(apply update-in-node! % keyseq f args)))
+  {layer [#(apply update-in-node! % keyseq f args)]})
 
 (do (defn update-node!
       "Update a node by calling function f with the old value and any supplied args."
@@ -225,7 +225,7 @@
     (defn update-node
       "Functional version of update-node! for use in a transaction."
       [layer id f & args]
-      (retro/enqueue layer #(apply update-node! % id f args))))
+      {layer [#(apply update-node! % id f args)]}))
 
 (do (defn dissoc-node!
       "Remove a node from a layer (incoming links remain)."
@@ -234,7 +234,7 @@
     (defn dissoc-node
       "Functional version of update-node! for use in a transaction."
       [layer id]
-      (retro/enqueue layer #(dissoc-node! % id))))
+      {layer [#(dissoc-node! % id)]}))
 
 (do (defn assoc-node!
       "Create or set a node with the given id and value."
@@ -243,7 +243,7 @@
     (defn assoc-node
       "Functional version of assoc-node! for use in a transaction."
       [layer id value]
-      (retro/enqueue layer #(assoc-node! % id value))))
+      {layer [#(assoc-node! % id value)]}))
 
 (defn unwrap-layer
   "Return the underlying layer object from a wrapped layer. Throws an exception
@@ -267,7 +267,7 @@
     (defn assoc-in-node
       "Functional version of assoc-in-node! for use in a transaction."
       [layer keyseq value]
-      (retro/enqueue layer #(assoc-in-node! % keyseq value))))
+      {layer #(assoc-in-node! % keyseq value)}))
 
 (defn schema
   [layer id-or-type]
