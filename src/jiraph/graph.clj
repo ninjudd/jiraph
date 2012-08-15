@@ -12,8 +12,6 @@
             [retro.core :as retro]))
 
 (def ^{:dynamic true} *skip-writes* false)
-(def ^{:dynamic true, :doc "All layers that are currently in read-only mode. You should probably not modify this directly; prefer using with-readonly instead."}
-  *read-only* #{})
 
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
@@ -30,19 +28,9 @@
 (defn filter-edges [pred node]
   (select-keys (edges node) (filter-edge-ids pred node)))
 
-(defn read-only? [layer]
-  (*read-only* layer))
-
-(defmacro with-readonly [layers & body]
-  `(binding [*read-only* (into *read-only* ~layers)]
-     ~@body))
-
 (defn- refuse-readonly [layers]
   (doseq [layer layers]
-    (if (read-only? layer)
-      (throw (IllegalStateException.
-              (format "Can't write to %s in read-only mode" layer)))
-      (retro/modify! layer))))
+    (retro/modify! layer)))
 
 (defmacro with-transaction
   "Execute forms within a transaction on the specified layers."
