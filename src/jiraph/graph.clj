@@ -52,7 +52,6 @@
        (do ~@forms
            layer#))))
 
-(def abort-transaction retro/abort-transaction)
 (def touch retro/touch)
 
 (defn sync!
