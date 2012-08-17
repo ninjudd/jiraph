@@ -32,15 +32,11 @@
   (doseq [layer layers]
     (retro/modify! layer)))
 
-(defmacro with-transaction
-  "Execute forms within a transaction on the specified layers."
-  [layer & forms]
-  `(let [layer# ~layer]
-     (retro/with-transaction layer#
-       (do ~@forms
-           layer#))))
-
 (def touch retro/touch)
+(defmacro txn [layers actions]
+  `(retro/txn ~layers ~actions))
+(defmacro dotxn [layers & body]
+  `(retro/txn ~layers ~@body))
 
 (defn sync!
   "Flush changes for the specified layers to the storage medium."
@@ -163,7 +159,7 @@
   "Update the subnode at keyseq by calling function f with the old value and any supplied args."
   [layer keyseq f & args]
   (refuse-readonly [layer])
-  (with-transaction layer
+  (retro/dotxn [layer]
     (when-not *skip-writes*
       (let [update-meta! (if (meta-id? (first keyseq))
                            (constantly nil)

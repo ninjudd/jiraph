@@ -189,14 +189,6 @@
   [layer-name]
   (contains? *graph* layer-name))
 
-(defmacro txn-> [layer-name & actions]
-  `(let [layer-name# ~layer-name
-         layer# (layer layer-name#)]
-     (retro/dotxn layer#
-                  (-> layer#
-                      ~@actions))
-     layer-name#))
-
 (defn schema-by-layer
   "Get the schema for a node-type across all layers, indexed by layer.
 
