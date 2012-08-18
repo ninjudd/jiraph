@@ -1,9 +1,9 @@
 (ns jiraph.core-test
   (:use clojure.test jiraph.core
-        [useful.utils :only [adjoin]]
-        [retro.core :as retro :only [dotxn]])
+        [useful.utils :only [adjoin]])
   (:require [jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
+            [retro.core :as retro]
             [jiraph.null-layer :as null]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
@@ -62,8 +62,8 @@
       (testing "with-caching"
         (with-caching true
           (do
-            (at-revision 100
-              (txn-> layer-name
+            (at-revision 99
+              (txn-> layer-name ;;read 99, write 100
                      (assoc-node "3" {:bar "cat" :baz [5]})
                      (update-node "3" adjoin {:baz [8]})))
 
@@ -71,8 +71,8 @@
               (at-revision 100
                 (is (= {:bar "cat" :baz [5 8]} (get-node layer-name "3")))))
 
-            (at-revision 101
-              (txn-> layer-name
+            (at-revision 100
+              (txn-> layer-name ;; read 100, write 101
                      (update-node "3" adjoin {:baz [9]})))
 
             (at-revision 101
@@ -83,20 +83,15 @@
     (test-each-layer []
       (truncate! layer-name)
       (let [node {:foo 7 :bar "seven"}]
-        (with-transaction layer-name
-          (assoc-node! layer-name "7" node)
-          (is (= node (get-node layer-name "7"))
-              "Should see past writes in with-transaction")
-          (retro/abort-transaction))
+        (is (thrown? Error
+                     (dotxn layer-name
+                       (assoc-node! layer-name "7" node)
+                       (is (= node (get-node layer-name "7"))
+                           "Should see past writes in with-transaction")
+                       (throw (Error.)))))
         (is (not (get-node layer-name "7"))
             "Aborted transaction shouldn't apply")
-        (is (thrown? Error
-                     (with-transaction layer-name
-                       (assoc-node! layer-name "7" node)
-                       (is (= node (get-node layer-name "7")))
-                       (throw (Error.)))))
-        (is (not (get-node layer-name "7")))
-        (with-transaction layer-name
+        (dotxn layer-name
           (assoc-node! layer-name "7" node))
         (is (= node (get-node layer-name "7")))))))
 
@@ -177,7 +172,7 @@
     (test-each-layer []
       (truncate! layer-name)
       (at-revision 100 (is (empty? (get-incoming layer-name "11"))))
-      (at-revision 100
+      (at-revision 99 ;; txn-> writes the next revision (ie, 100)
         (txn-> layer-name
                (assoc-node "10" {:edges {"11" {:a "one"}}})))
 
@@ -185,14 +180,14 @@
       (is (empty?    (at-revision  99 (get-incoming layer-name "11"))))
       (is (= #{"10"} (at-revision 100 (get-incoming layer-name "11"))))
 
-      (at-revision 200
+      (at-revision 200 ;; assoc-node! writes its at-revision directly
         (assoc-node! layer-name "12" {:edges {"11" {:a "one"}}}))
 
       (is (= #{"10" "12"} (get-incoming layer-name "11")))
       (is (= #{"10"}      (at-revision 199 (get-incoming layer-name "11"))))
       (is (= #{"10" "12"} (at-revision 200 (get-incoming layer-name "11"))))
 
-      (at-revision 201
+      (at-revision 200
         (txn-> layer-name
                (assoc-node "13" {:edges {"11" {:a "one"}}})))
 
@@ -202,7 +197,7 @@
 
       (testing "update-in, get-in"
         (at-revision 202
-          (with-transaction layer-name
+          (dotxn layer-name
             (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"})
             (is (= 202 (uncommitted-revision)))))
 
@@ -250,11 +245,11 @@
   (with-graph (make-graph)
     (letfn [(write [break?]
               (at-revision 100
-                (with-transaction :masai
+                (dotxn :masai
                   (update-in-node! :masai ["x" :edges "y" :times]
                                    conj 1)
 
-                  (with-transaction :sorted
+                  (dotxn :sorted
                     (update-in-node! :sorted ["x" :edges "y" :times]
                                      conj 1))
 
