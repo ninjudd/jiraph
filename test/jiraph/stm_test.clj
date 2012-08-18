@@ -1,6 +1,6 @@
 (ns jiraph.stm-test
   (:use clojure.test jiraph.graph jiraph.stm-layer
-        [retro.core :as retro :only [dotxn at-revision current-revision]]
+        [retro.core :as retro :only [at-revision current-revision]]
         [useful.map :only [keyed]])
   (:require [jiraph.layer :as layer]))
 
@@ -25,9 +25,8 @@
 (deftest persist-test
   (let [filename "./stm.layer"
         master (make filename)]
-    (dotxn master
-      (-> master
-          (assoc-node "test" {:name "mindy"})))
+    (txn [master]
+      (assoc-node master "test" {:name "mindy"}))
     (layer/close master)
     (is (= {:name "mindy"}
            (get-node (doto (make filename) layer/open)
@@ -37,9 +36,8 @@
 (deftest queryfn-test
   (let [master (make)
         counter (atom 0)]
-    (dotxn master
-      (-> master
-          (assoc-node "mikey" {:height {:feet 5 :inches 4}
-                               :edges {"jennifer" {:rel :child}}})))
+    (txn [master]
+      (assoc-node master "mikey" {:height {:feet 5 :inches 4}
+                                  :edges {"jennifer" {:rel :child}}}))
     (is (= 2 (query-in-node master ["mikey" :height] 'specialized-count counter)))
     (is (= 1 @counter))))

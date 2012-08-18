@@ -9,7 +9,7 @@
 (defmacro actions [layer & forms]
   (let [layer-sym (gensym 'layer)]
     `(let [~layer-sym ~layer]
-       (retro/combine ~@(for [form forms]
+       (retro/compose ~@(for [form forms]
                           `(-> ~layer-sym ~form))))))
 
 (defmacro layer-txn [layer & forms]
