@@ -64,6 +64,21 @@
                         (s/join " " (map pr-str '~forms)))))
      ~@forms))
 
+(defmacro dotxn [layer-name & forms]
+  (let [layer (gensym 'layer)]
+    `(let [name# ~layer-name]
+       (retro/dotxn [(layer name#)]
+         (do ~@forms)))))
+
+(defmacro txn-> [layer-name & forms]
+  (let [layer (gensym 'layer)]
+    `(let [name# ~layer-name
+           ~layer (layer name#)]
+       (do (retro/txn [~layer]
+             (retro/compose ~@(for [form forms]
+                                `(-> ~layer ~form))))
+           name#))))
+
 (letfn [(symbol [& args]
           (apply clojure.core/symbol (map name args)))]
   (defn- graph-impl [name]
@@ -139,36 +154,6 @@
           ~@forms
           (finally (close!)
                    (set-graph! graph#)))))
-
-(defmacro with-transaction
-  "Execute forms within a transaction on the named layer/layers."
-  [layer & forms]
-  `(graph/with-transaction (layer ~layer)
-     ~@forms))
-
-(defmacro with-transactions
-  "Open a transaction on each listed layer, or all layers if none are specified.
-   Note that the transactions are not all atomic - one may commit and others abort -
-   so this should be used mainly for improving performance by reducing number of commits."
-  [layers & forms]
-  (let [layers (condp invoke layers
-                 keyword? `[~layers]
-                 empty? `(layer-names)
-                 (vec layers))]
-    ;; with-transaction always returns a layer object, so we have to use side effects to pass
-    ;; back a different return value
-    `(let [abort-key# '~(gensym 'transaction)
-           ~'abort-transaction #(throw+ {:type ::abort-multiple, :name abort-key#})
-           ret# (atom nil)]
-       (try+
-         ((reduce (fn [f# layer-name#]
-                    (fn []
-                      (with-transaction layer-name#
-                        (f#))))
-                  #(reset! ret# (do ~@forms))
-                  ~layers))
-         @ret#
-         (catch [:type ::abort-multiple :name abort-key#] _#)))))
 
 (letfn [(all-revisions [layers]
           (or (seq (remove #{Double/POSITIVE_INFINITY}
