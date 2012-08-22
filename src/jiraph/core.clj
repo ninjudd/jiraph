@@ -70,6 +70,10 @@
        (retro/dotxn [(layer name#)]
          (do ~@forms)))))
 
+(defmacro txn [layer-name actions]
+  `(retro/txn [(layer ~layer-name)]
+     ~actions))
+
 (defmacro txn-> [layer-name & forms]
   (let [layer (gensym 'layer)]
     `(let [name# ~layer-name
