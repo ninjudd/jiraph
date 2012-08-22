@@ -74,10 +74,11 @@
   (let [layer (gensym 'layer)]
     `(let [name# ~layer-name
            ~layer (layer name#)]
-       (do (retro/txn [~layer]
-             (retro/compose ~@(for [form forms]
-                                `(-> ~layer ~form))))
-           name#))))
+       (:value
+        (retro/txn [~layer]
+          (retro/compose ~@(for [form forms]
+                             `(-> ~layer ~form))
+                         (retro/with-actions name# nil)))))))
 
 (letfn [(symbol [& args]
           (apply clojure.core/symbol (map name args)))]
