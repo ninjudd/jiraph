@@ -38,7 +38,7 @@
   ([type] (map key (layer-entries type))))
 (defn layers
   "Return all layers in the current graph."
-  ([]     (vals *graph*))
+  ([]     (map layer (layer-names)))
   ([type] (map val (layer-entries type))))
 
 (defn as-layer-map
