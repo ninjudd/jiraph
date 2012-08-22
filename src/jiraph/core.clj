@@ -75,14 +75,14 @@
      ~actions))
 
 (defmacro txn-> [layer-name & forms]
-  (let [layer (gensym 'layer)]
-    `(let [name# ~layer-name
-           ~layer (layer name#)]
+  (let [name (gensym 'name)]
+    `(let [~name ~layer-name
+           layer# (layer ~name)]
        (:value
-        (retro/txn [~layer]
+        (retro/txn [layer#]
           (retro/compose ~@(for [form forms]
-                             `(-> ~layer ~form))
-                         (retro/with-actions name# nil)))))))
+                             `(-> ~name ~form))
+                         (retro/with-actions ~name nil)))))))
 
 (letfn [(symbol [& args]
           (apply clojure.core/symbol (map name args)))]
