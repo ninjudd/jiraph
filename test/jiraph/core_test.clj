@@ -245,29 +245,37 @@
   (with-graph (make-graph)
     (letfn [(write [break?]
               (at-revision 100
-                (dotxn :masai
-                  (update-in-node! :masai ["x" :edges "y" :times]
-                                   conj 1)
-
-                  (dotxn :sorted
-                    (update-in-node! :sorted ["x" :edges "y" :times]
-                                     conj 1))
-
-                  (when break?
-                    (throw (Exception. "ZOMG"))))))]
+                (let [actions (retro/compose (update-in-node :masai ["x" :edges "y" :times]
+                                                             conj 1)
+                                             (update-in-node :sorted ["x" :edges "y" :times]
+                                                             conj 1))]
+                  (let [remaining-actions (txn :sorted actions)]
+                    (is (= [(layer :masai)] (keys (:actions remaining-actions))))
+                    (when break?
+                      (throw (Exception. "ZOMG")))
+                    (let [leftover-actions (txn :masai remaining-actions)]
+                      (is (empty? (:actions leftover-actions))))))))]
       (are [layer] (nil? (get-node layer "x"))
            :masai :sorted)
 
-      (is (thrown? Exception (write true)))
-      (is (zero? (current-revision)))
-      (are [layer] (nil? (at-revision 0 (get-node layer "x")))
-           :masai :sorted)
+      (let [expected {:edges {"y" {:times [1]}}}]
+        (is (thrown? Exception (write true)))
 
-      (write false)
-      (is (= 100 (current-revision)))
-      (are [layer] (= {:edges {"y" {:times [1]}}}
-                      (get-node layer "x"))
-           :masai :sorted))))
+        (is (zero? (current-revision)))
+        (are [layer-name revision-id] (= revision-id (retro/max-revision (layer layer-name)))
+             :sorted 101, :masai 0)
+        (are [layer] (nil? (at-revision 0 (get-node layer "x")))
+             :masai :sorted)
+
+        (is (= expected (at-revision 101 (get-node :sorted "x"))))
+        (is (nil? (at-revision 101 (get-node :masai "x"))))
+
+        (write false)
+        (is (= 101 (current-revision)))
+        (are [layer] (= expected (get-node layer "x"))
+             :masai :sorted)
+        (are [layer] (= expected (at-revision 101 (get-node layer "x")))
+             :masai :sorted)))))
 
 (deftest null-layer-revisions
   (with-graph (assoc (make-graph)
