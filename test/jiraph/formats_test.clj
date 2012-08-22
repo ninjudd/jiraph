@@ -36,16 +36,16 @@
   (let [base (revisioned-clojure-format adjoin)
         id "person-1"]
     (masai/with-temp-layer [base-layer :format-fns {:node base}]
-      (let [l (at-revision base-layer 1)]
-        (dotxn l
-          (-> l
-              (graph/assoc-node id {:foo :blah})))
+      (let [rev (vec (for [r (range 10)]
+                       (at-revision base-layer r)))]
+        (txn [(rev 0)]  ;; read 0, write 1
+          (graph/assoc-node (rev 0) id {:foo :blah}))
         (is (= {:foo :blah}
-               (graph/get-node l id)))
-        (is (= [1] (graph/get-revisions l id))))
+               (graph/get-node (rev 1) id)))
+        (is (= [1] (graph/get-revisions (rev 1) id))))
       (let [wrapped-layer (typing/typed-layer base-layer {:profile #{:photo :biography}})
-            rev (memoize (fn [rev]
-                           (at-revision wrapped-layer rev)))]
+            rev (vec (for [r (range 10)]
+                       (at-revision wrapped-layer r)))]
         (is (thrown? Exception ;; refuses to write "person"s
                      (graph/assoc-node! (rev 2) id {:foo :blah})))
 
@@ -71,16 +71,14 @@
             (is (= [3] (graph/get-revisions l id)))))
 
         (testing "Should work with functional interface"
-          (let [l (rev 4)]
+          (let [l (rev 3)] ;; read 3, write 4
             (is (thrown? Exception
-                         (dotxn l
-                           (-> l
-                               (graph/assoc-node "person-4" {:foo :bar})))))
+                         (txn [l]
+                           (graph/assoc-node l "person-4" {:foo :bar}))))
             (let [id "profile-7"]
-              (dotxn l
-                (-> l
-                    (graph/assoc-node id {:foo :bar})))
-              (is (= {:foo :bar} (graph/get-node l id))))))
+              (txn [l]
+                (graph/assoc-node l id {:foo :bar}))
+              (is (= {:foo :bar} (graph/get-node (rev 4) id))))))
 
         (testing "Can disable type-checking"
           (let [l (typing/without-typing (rev 5))]
@@ -108,19 +106,18 @@
 
         (is (= after (real-adjoin before change)))
 
-        (dotxn (rev 1) ;; adjoin function should be optimized away for reads and writes
-          (-> (rev 1)
-              (graph/update-node "1" adjoin before)))
+        (txn [(rev 0)] ;; adjoin function should be optimized away for reads and writes
+          (graph/update-node (rev 0) "1" adjoin before))
         (is (= before
                (graph/get-node (rev 1) "1")))
 
         ;; here the function can't be optimized, so we should read, adjoin, write
         (is (thrown? Exception
-                     (dotxn (rev 2)
-                       (-> (rev 2) (graph/update-node "1" (comp identity adjoin) change)))))
+                     (txn [(rev 1)]
+                       (graph/update-node (rev 1) "1" (comp identity adjoin) change))))
 
-        (dotxn (rev 2) ;; now make the change for real, without the breaking adjoin
-          (-> (rev 2) (graph/update-node "1" adjoin change)))
+        (txn [(rev 1)] ;; now make the change for real, without the breaking adjoin
+          (graph/update-node (rev 1) "1" adjoin change))
 
         (is (= after
                (graph/get-node (rev 2) "1")))

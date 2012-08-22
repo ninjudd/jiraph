@@ -10,7 +10,7 @@
         [useful.datatypes :only [assoc-record]]
         [ego.core :only [type-key]])
   (:require [jiraph.graph :as graph]
-            [retro.core :as retro]))
+            [retro.core :as retro :refer [compose]]))
 
 (declare merge-ids merge-head merge-position)
 
@@ -135,15 +135,15 @@
                         tail-id head-id tail-merged))
         (let [revision (retro/current-revision merge-layer)
               tail-ids (cons tail-id (merged-into merge-layer tail-id))]
-          (reduce (fn [layer [pos id]]
-                    (graph/update-node layer id adjoin
-                                       {:head head-id
-                                        :edges {head-id {:revision revision
-                                                   :position (+ 1 pos merge-count)}}}))
-                  (graph/update-node merge-layer head-id adjoin
-                                     {:head head-id
-                                      :merge-count (+ merge-count (count tail-ids))})
-                  (indexed tail-ids)))))))
+          (apply compose
+                 (graph/update-node merge-layer head-id adjoin
+                                    {:head head-id
+                                     :merge-count (+ merge-count (count tail-ids))})
+                 (for [[pos id] (indexed tail-ids)]
+                   (graph/update-node merge-layer id adjoin
+                                      {:head head-id
+                                       :edges {head-id {:revision revision
+                                                        :position (+ 1 pos merge-count)}}}))))))))
 
 (defn merge-node!
   "Mutable version of merge-node."
@@ -151,7 +151,7 @@
      (merge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (retro/dotxn merge-layer
+       (retro/unsafe-txn [merge-layer]
          (merge-node merge-layer head-id tail-id)))))
 
 (defn- delete-merges-after
@@ -172,17 +172,16 @@
         tail-ids  (merged-into merge-layer tail-id)
         head-ids  (merged-into merge-layer head-id)]
     (verify merge-rev ;; revision of the original merge of tail into head
-            (format "cannot unmerge %s from %s because they aren't merged" tail-id head-id))
-    (reduce (fn [layer id]
-              (-> layer
-                  (delete-merges-after merge-rev id (graph/get-node merge-layer id))
-                  (graph/update-node id adjoin {:head tail-id})))
-            (-> merge-layer
-                (delete-merges-after merge-rev tail-id tail)
-                (graph/update-node tail-id adjoin {:head nil})
-                (given (= (count head-ids) (inc (count tail-ids)))
-                       (graph/update-node head-id adjoin {:head nil})))
-            tail-ids)))
+            (format "cannot unmerge %s from %s because they aren't merged"
+                    tail-id head-id))
+    (apply compose
+           (delete-merges-after merge-layer merge-rev tail-id tail)
+           (graph/update-node merge-layer tail-id adjoin {:head nil})
+           (when (= (count head-ids) (inc (count tail-ids)))
+             (graph/update-node merge-layer head-id adjoin {:head nil}))
+           (for [id tail-ids]
+             (compose (delete-merges-after merge-layer merge-rev id (graph/get-node merge-layer id))
+                      (graph/update-node merge-layer id adjoin {:head tail-id}))))))
 
 (defn unmerge-node!
   "Mutable version of unmerge-node."
@@ -190,7 +189,7 @@
      (unmerge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (retro/dotxn merge-layer
+       (retro/unsafe-txn [merge-layer]
          (unmerge-node merge-layer head-id tail-id)))))
 
 (def ^{:private true} sentinel (Object.))

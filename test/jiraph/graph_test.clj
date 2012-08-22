@@ -1,10 +1,21 @@
 (ns jiraph.graph-test
   (:use clojure.test jiraph.graph
-        [retro.core :as retro :only [dotxn at-revision]])
-  (:require [jiraph.stm-layer :as stm]
+        [retro.core :as retro :only [at-revision]])
+  (:require ;[jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
+
+(defmacro actions [layer & forms]
+  (let [layer-sym (gensym 'layer)]
+    `(let [~layer-sym ~layer]
+       (retro/compose ~@(for [form forms]
+                          `(-> ~layer-sym ~form))))))
+
+(defmacro layer-txn [layer & forms]
+  `(let [layer# ~layer]
+     (txn [layer#]
+       (actions layer# ~@forms))))
 
 (defn test-layer [master]
   (testing (str (class master))
@@ -13,10 +24,9 @@
                      (at-revision master r)))
           mike-node {:age 21 :edges {"carla" {:rel :mom}}}
           carla-node {:age 48}]
-      (dotxn (rev 1)
-        (-> (rev 1)
-            (assoc-node "mike" mike-node)
-            (assoc-node "carla" carla-node)))
+      (layer-txn (rev 0)
+                 (assoc-node "mike" mike-node)
+                 (assoc-node "carla" carla-node))
       (testing "Old revisions are untouched"
         (is (= nil (get-node (rev 0) "mike"))))
       (testing "Node data is written"
@@ -31,19 +41,19 @@
                (get-incoming (rev 1) "carla")))
         (is (empty? (get-incoming (rev 1) "mike"))))
 
-      (dotxn (rev 2)
-        (let [actions (-> (rev 2)
-                          (assoc-node "charles" {:edges {"carla" {:rel :mom}}})
-                          (update-node "charles" assoc :age 18)
-                          (update-in-node ["mike" :age] inc))]
-          (testing "Writes can't be seen while queueing"
-            (is (nil? (get-node actions "charles")))
-            (is (nil? (get-node (rev 2) "charles")))
-            (is (nil? (get-node master "charles"))))
-          actions))
+      (let [action-map (actions (rev 1)
+                                (assoc-node "charles" {:edges {"carla" {:rel :mom}}})
+                                (update-node "charles" assoc :age 18)
+                                (update-in-node ["mike" :age] inc))]
+        (testing "Writes can't be seen while queueing"
+          (is (nil? (get-node (rev 1) "charles")))
+          (is (nil? (get-node (rev 2) "charles")))
+          (is (nil? (get-node master "charles"))))
+        (txn [(rev 1)]
+          action-map))
       (testing "Previous revisions still exist on unmodified nodes"
-          (is (= carla-node (get-node (rev 1) "carla")))
-          (is (= carla-node (get-node (rev 2) "carla"))))
+        (is (= carla-node (get-node (rev 1) "carla")))
+        (is (= carla-node (get-node (rev 2) "carla"))))
       (testing "Previous revisions exist on modified nodes"
         (is (= mike-node (get-node (rev 1) "mike")))
         (is (= (update-in mike-node [:age] inc)
@@ -75,24 +85,17 @@
           (is (= 2 (retro/max-revision (rev 1))))))
 
       (testing "Can't rewrite history"
-        (dotxn (rev 1)
-          (-> (rev 1)
-              (assoc-node "donald" {:age 72})))
+        (layer-txn (rev 0)
+                   (assoc-node "donald" {:age 72}))
         (doseq [r rev]
           (is (nil? (get-node r "donald")))))
 
       (testing "Transaction safety"
         (testing "Can't mutate active layer while building a transaction"
           (is (thrown? Exception
-                       (dotxn (rev 3)
-                         (doto (rev 3)
-                           (assoc-node! "stevie" {:age 2}))))))
-        (testing "Can't mutate other layer while committing a transaction"
-          (is (thrown? Exception
-                       (dotxn (rev 3)
-                         (-> (rev 3)
-                             (retro/enqueue (fn [_]
-                                              (assoc-node! (rev 4) "stevie" {:age 2})))))))))
+                       (txn [(rev 3)]
+                         (do (assoc-node! (rev 3) "stevie" {:age 2})
+                             {}))))))
 
       (testing "Reporting of revision views"
         (is (= 2 (retro/current-revision (rev 2))))

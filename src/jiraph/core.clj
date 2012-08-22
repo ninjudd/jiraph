@@ -38,7 +38,7 @@
   ([type] (map key (layer-entries type))))
 (defn layers
   "Return all layers in the current graph."
-  ([]     (vals *graph*))
+  ([]     (map layer (layer-names)))
   ([type] (map val (layer-entries type))))
 
 (defn as-layer-map
@@ -64,6 +64,26 @@
                         (s/join " " (map pr-str '~forms)))))
      ~@forms))
 
+(defmacro dotxn [layer-name & forms]
+  (let [layer (gensym 'layer)]
+    `(let [name# ~layer-name]
+       (retro/dotxn [(layer name#)]
+         (do ~@forms)))))
+
+(defmacro txn [layer-name actions]
+  `(retro/txn [(layer ~layer-name)]
+     ~actions))
+
+(defmacro txn-> [layer-name & forms]
+  (let [name (gensym 'name)]
+    `(let [~name ~layer-name
+           layer# (layer ~name)]
+       (:value
+        (retro/txn [layer#]
+          (retro/compose ~@(for [form forms]
+                             `(-> ~name ~form))
+                         (retro/with-actions ~name nil)))))))
+
 (letfn [(symbol [& args]
           (apply clojure.core/symbol (map name args)))]
   (defn- graph-impl [name]
@@ -85,6 +105,7 @@
     `(def ~(with-meta name (fix-meta meta))
        (fn ~name [layer-name# & args#]
          (apply ~varname (layer layer-name#) args#))))
+  update-in-node  update-node  dissoc-node  assoc-node  assoc-in-node
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   node-id-seq node-seq node-id-subseq node-subseq fields node-valid? verify-node
   get-node find-node query-in-node get-in-node get-edges get-edge
@@ -94,8 +115,7 @@
 ;; or any indirection, because they can't meaningfully work with layer names but
 ;; we don't want to make the "simple" uses of jiraph.core have to mention
 ;; jiraph.graph at all
-(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node
-               wrap-caching with-caching]]
+(doseq [name '[wrap-caching with-caching]]
   (let [{:keys [func meta]} (graph-impl name)]
     (intern *ns* (with-meta name meta) func)))
 
@@ -140,36 +160,6 @@
           (finally (close!)
                    (set-graph! graph#)))))
 
-(defmacro with-transaction
-  "Execute forms within a transaction on the named layer/layers."
-  [layer & forms]
-  `(graph/with-transaction (layer ~layer)
-     ~@forms))
-
-(defmacro with-transactions
-  "Open a transaction on each listed layer, or all layers if none are specified.
-   Note that the transactions are not all atomic - one may commit and others abort -
-   so this should be used mainly for improving performance by reducing number of commits."
-  [layers & forms]
-  (let [layers (condp invoke layers
-                 keyword? `[~layers]
-                 empty? `(layer-names)
-                 (vec layers))]
-    ;; with-transaction always returns a layer object, so we have to use side effects to pass
-    ;; back a different return value
-    `(let [abort-key# '~(gensym 'transaction)
-           ~'abort-transaction #(throw+ {:type ::abort-multiple, :name abort-key#})
-           ret# (atom nil)]
-       (try+
-         ((reduce (fn [f# layer-name#]
-                    (fn []
-                      (with-transaction layer-name#
-                        (f#))))
-                  #(reset! ret# (do ~@forms))
-                  ~layers))
-         @ret#
-         (catch [:type ::abort-multiple :name abort-key#] _#)))))
-
 (letfn [(all-revisions [layers]
           (or (seq (remove #{Double/POSITIVE_INFINITY}
                            (map retro/max-revision
@@ -188,14 +178,6 @@
   "Does the named layer exist in the current graph?"
   [layer-name]
   (contains? *graph* layer-name))
-
-(defmacro txn-> [layer-name & actions]
-  `(let [layer-name# ~layer-name
-         layer# (layer layer-name#)]
-     (retro/dotxn layer#
-                  (-> layer#
-                      ~@actions))
-     layer-name#))
 
 (defn schema-by-layer
   "Get the schema for a node-type across all layers, indexed by layer.

@@ -12,8 +12,6 @@
             [retro.core :as retro]))
 
 (def ^{:dynamic true} *skip-writes* false)
-(def ^{:dynamic true, :doc "All layers that are currently in read-only mode. You should probably not modify this directly; prefer using with-readonly instead."}
-  *read-only* #{})
 
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
@@ -30,30 +28,15 @@
 (defn filter-edges [pred node]
   (select-keys (edges node) (filter-edge-ids pred node)))
 
-(defn read-only? [layer]
-  (*read-only* layer))
-
-(defmacro with-readonly [layers & body]
-  `(binding [*read-only* (into *read-only* ~layers)]
-     ~@body))
-
 (defn- refuse-readonly [layers]
   (doseq [layer layers]
-    (if (read-only? layer)
-      (throw (IllegalStateException.
-              (format "Can't write to %s in read-only mode" layer)))
-      (retro/modify! layer))))
+    (retro/modify! layer)))
 
-(defmacro with-transaction
-  "Execute forms within a transaction on the specified layers."
-  [layer & forms]
-  `(let [layer# ~layer]
-     (retro/with-transaction layer#
-       (do ~@forms
-           layer#))))
-
-(def abort-transaction retro/abort-transaction)
 (def touch retro/touch)
+(defmacro txn [layers actions]
+  `(retro/txn ~layers ~actions))
+(defmacro dotxn [layers & body]
+  `(retro/txn ~layers ~@body))
 
 (defn sync!
   "Flush changes for the specified layers to the storage medium."
@@ -176,7 +159,7 @@
   "Update the subnode at keyseq by calling function f with the old value and any supplied args."
   [layer keyseq f & args]
   (refuse-readonly [layer])
-  (with-transaction layer
+  (retro/dotxn [layer]
     (when-not *skip-writes*
       (let [update-meta! (if (meta-id? (first keyseq))
                            (constantly nil)
@@ -217,7 +200,8 @@
 (defn update-in-node
   "Functional version of update-in-node! for use in a transaction."
   [layer keyseq f & args]
-  (retro/enqueue layer #(apply update-in-node! % keyseq f args)))
+  (retro/with-actions layer
+    {layer [#(apply update-in-node! % keyseq f args)]}))
 
 (do (defn update-node!
       "Update a node by calling function f with the old value and any supplied args."
@@ -226,7 +210,8 @@
     (defn update-node
       "Functional version of update-node! for use in a transaction."
       [layer id f & args]
-      (retro/enqueue layer #(apply update-node! % id f args))))
+      (retro/with-actions layer
+        {layer [#(apply update-node! % id f args)]})))
 
 (do (defn dissoc-node!
       "Remove a node from a layer (incoming links remain)."
@@ -235,7 +220,8 @@
     (defn dissoc-node
       "Functional version of update-node! for use in a transaction."
       [layer id]
-      (retro/enqueue layer #(dissoc-node! % id))))
+      (retro/with-actions layer
+        {layer [#(dissoc-node! % id)]})))
 
 (do (defn assoc-node!
       "Create or set a node with the given id and value."
@@ -244,7 +230,8 @@
     (defn assoc-node
       "Functional version of assoc-node! for use in a transaction."
       [layer id value]
-      (retro/enqueue layer #(assoc-node! % id value))))
+      (retro/with-actions layer
+        {layer [#(assoc-node! % id value)]})))
 
 (defn unwrap-layer
   "Return the underlying layer object from a wrapped layer. Throws an exception
@@ -268,7 +255,8 @@
     (defn assoc-in-node
       "Functional version of assoc-in-node! for use in a transaction."
       [layer keyseq value]
-      (retro/enqueue layer #(assoc-in-node! % keyseq value))))
+      (retro/with-actions layer
+        {layer #(assoc-in-node! % keyseq value)})))
 
 (defn schema
   [layer id-or-type]

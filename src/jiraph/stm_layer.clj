@@ -4,7 +4,7 @@
         [jiraph.graph :only [*skip-writes*]]
         [jiraph.utils :only [meta-id meta-id? base-id]]
         [retro.core :only [WrappedTransactional Revisioned OrderedRevisions
-                           max-revision get-queue at-revision current-revision empty-queue]]
+                           max-revision at-revision current-revision]]
         [useful.fn :only [given fix]]
         [useful.utils :only [returning or-min]]
         [useful.datatypes :only [assoc-record]])
@@ -97,22 +97,8 @@
 
   WrappedTransactional
   (txn-wrap [_ f]
-    (fn [^STMLayer layer]
-      (dosync
-       (let [rev (.revision layer)
-             max-rev (max-revision layer)]
-         (cond (nil? rev) (f layer)
-               (< rev max-rev) (binding [*skip-writes* true] (f (empty-queue layer)))
-               :else
-               (let [store (.store layer)
-                     prev (get @store max-rev)]
-                 (alter store fix
-                        #(not (contains? % rev))
-                        #(assoc % rev prev))
-                 (returning (f (at-revision layer rev))
-                   (alter store fix
-                          #(identical? prev (get % rev))
-                          #(dissoc % rev)))))))))
+    (fn []
+      (dosync (f))))
 
   Layer
   (open [this]
