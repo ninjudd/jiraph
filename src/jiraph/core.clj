@@ -105,6 +105,7 @@
     `(def ~(with-meta name (fix-meta meta))
        (fn ~name [layer-name# & args#]
          (apply ~varname (layer layer-name#) args#))))
+  update-in-node  update-node  dissoc-node  assoc-node  assoc-in-node
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   node-id-seq node-seq node-id-subseq node-subseq fields node-valid? verify-node
   get-node find-node query-in-node get-in-node get-edges get-edge
@@ -114,8 +115,7 @@
 ;; or any indirection, because they can't meaningfully work with layer names but
 ;; we don't want to make the "simple" uses of jiraph.core have to mention
 ;; jiraph.graph at all
-(doseq [name '[update-in-node update-node dissoc-node assoc-node assoc-in-node
-               wrap-caching with-caching]]
+(doseq [name '[wrap-caching with-caching]]
   (let [{:keys [func meta]} (graph-impl name)]
     (intern *ns* (with-meta name meta) func)))
 
