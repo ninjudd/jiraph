@@ -32,6 +32,10 @@
   (txn-commit!   [this] nil)
   (txn-rollback! [this] nil)
 
+  Optimized
+  (query-fn [this keyseq not-found f] (constantly not-found))
+  (update-fn [this keyseq f] (constantly nil))
+
   OrderedRevisions
   (max-revision [this] Double/POSITIVE_INFINITY)
   (touch        [this] nil)
