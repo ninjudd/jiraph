@@ -11,11 +11,8 @@
             [jiraph.wrapped-layer :as wrapped]
             [retro.core :as retro]))
 
-(def ^{:dynamic true} *skip-writes* false)
-
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
-(def ^{:private true}               write-count (atom 0))
 
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
@@ -38,24 +35,37 @@
 (defmacro dotxn [layers & body]
   `(retro/txn ~layers ~@body))
 
-(defn sync!
-  "Flush changes for the specified layers to the storage medium."
-  [& layers]
-  (doseq [layer layers]
-    (layer/sync! layer)))
+(defmacro with-action
+  "Construct a simple retro IOValue that touches exactly one layer.
 
-(defn optimize!
-  "Optimize the underlying storage for the specified layers."
-  [& layers]
-  (doseq [layer layers]
-    (layer/optimize! layer)))
+   The IOValue's :value will be the one you specify, and its :actions will
+   evaluate body with layer-name bound to (an appropriately-revisioned view of)
+   layer-value."
+  [[layer-name layer-value] value & body]
+  `(retro/with-actions ~value
+     {~layer-value [(fn [~layer-name]
+                      ~@body)]}))
 
-(defn truncate!
-  "Remove all nodes from the specified layers."
-  [& layers]
-  (refuse-readonly layers)
-  (doseq [layer layers]
-    (layer/truncate! layer)))
+(letfn [(layers-op [layers f]
+          (retro/unsafe-txn [layers]
+            (for [layer layers]
+              (f layer))))]
+
+  (defn sync!
+    "Flush changes for the specified layers to the storage medium."
+    [& layers]
+    (layers-op layers layer/sync))
+
+  (defn optimize!
+    "Optimize the underlying storage for the specified layers."
+    [& layers]
+    (layers-op layers layer/optimize))
+
+  (defn truncate!
+    "Remove all nodes from the specified layers."
+    [& layers]
+    (refuse-readonly layers)
+    (layers-op layers layer/truncate)))
 
 (defn node-id-seq
   "Return a lazy sequence of all node ids in this layer."
@@ -127,111 +137,97 @@
   [layer id to-id & [not-found]]
   (get-in-edge layer [id to-id] not-found))
 
-(declare update-in-node!)
+(defn update-in-node
+  "Return an IOValue that will update the subnode at keyseq by calling function
+  f with the old value and any supplied args.
 
-(defn- changed-edges [old-edges new-edges]
-  (reduce (fn [edges [edge-id edge]]
-            (let [was-present (not (:deleted edge))
-                  is-present  (when-let [e (get edges edge-id)] (not (:deleted e)))]
-              (if (= was-present is-present)
-                (dissoc edges edge-id)
-                (assoc-in* edges [edge-id :deleted] was-present))))
-          new-edges old-edges))
+   Its :value will be a hash with keys :old and :new, indicating content on the
+  layer before and after the update, and a :path key indicating where on the
+  layer those changes were made. For example, the value of (update-in-node
+  some-layer [\"the-id\" :some-key :other-key] inc) might be {:path
+  [\"the-id\" :some-key] :old {:other-key 5} :new {:other-key 6}}."
+  [layer keyseq f & args]
+  (let [updater (partial layer/update-fn layer)
+        keyseq  (seq keyseq)]
+    (or (when-let [update (updater keyseq f)]
+          ;; maximally-optimized; the layer can do this exact thing well
+          (-> (apply update args)
+              (assoc-in [:value :path] keyseq)))
+        (let [assoc-path (butlast keyseq)]
+          (when-let [update (and keyseq (updater assoc-path assoc))]
+            ;; they can replace this sub-node efficiently, at least
+            (let [old (get-in-node layer keyseq)
+                  new (apply f old args)]
+              (-> (update (last keyseq) new)
+                  (assoc-in [:value :path] assoc-path)))))
 
-(defn- update-edges! [layer [id & keys] old new]
-  (when (layer/manage-incoming? layer)
-    (doseq [[edge-id {:keys [deleted]}]
-            (apply changed-edges
-                   (map (comp :edges (partial assoc-in* {} keys))
-                        [old new]))]
-      ((if deleted layer/drop-incoming! layer/add-incoming!)
-       layer edge-id id))))
-
-(defn- update-changelog! [layer node-id]
-  (when (layer/manage-changelog? layer)
-    (when-let [rev-id (retro/current-revision layer)]
-      (update-in-node! layer [(meta-id :revision-id)] (constantly rev-id))
-      (when node-id
-        (update-in-node! layer [(meta-id node-id) "affected-by"] conj rev-id)
-        (update-in-node! layer [(meta-id :changed-ids) rev-id] conj node-id)))))
+        ;; need some special logic for unoptimized top-level assoc/dissoc
+        (when-let [update (and (not keyseq) (get {assoc  layer/assoc-node
+                                                  dissoc layer/dissoc-node}
+                                                 f))]
+          (let [node-id (first args)]
+            (assert (not (next args))
+                    "Can't assoc or dissoc multiple nodes at once")
+            (-> (update layer node-id)
+                (assoc-in [:value :path] [node-id]))))
+        (let [[id & keyseq] keyseq
+              old (get-node layer id)
+              new (apply update-in* old keyseq f args)]
+          (retro/compose (layer/assoc-node layer id new)
+                         (retro/with-actions {:path [id], :old old, :new new}
+                           nil))))))
 
 (defn update-in-node!
-  "Update the subnode at keyseq by calling function f with the old value and any supplied args."
+  "Mutable version of update-in-node: applies changes immediately, at current
+  revision."
   [layer keyseq f & args]
-  (refuse-readonly [layer])
-  (retro/dotxn [layer]
-    (when-not *skip-writes*
-      (let [update-meta! (if (meta-id? (first keyseq))
-                           (constantly nil)
-                           (fn [keyseq old new]
-                             (update-edges! layer keyseq old new)
-                             (update-changelog! layer (first keyseq))))]
-        (let [updater (partial layer/update-fn layer)
-              keyseq  (seq keyseq)]
-          (if-let [update! (updater keyseq f)]
-            ;; maximally-optimized; the layer can do this exact thing well
-            (let [{:keys [old new]} (apply update! args)]
-              (update-meta! keyseq old new))
-            (if-let [update! (and keyseq ;; don't look for assoc-in of empty keys
-                                  (updater (butlast keyseq) assoc))]
-              ;; they can replace this sub-node efficiently, at least
-              (let [old (get-in-node layer keyseq)
-                    new (apply f old args)]
-                (update! (last keyseq) new)
-                (update-meta! keyseq old new))
+  (:value
+   (retro/unsafe-txn [layer]
+     (apply update-in-node layer keyseq f args))))
 
-              ;; need some special logic for unoptimized top-level assoc/dissoc
-              (if-let [update! (and (not keyseq) ({assoc  layer/assoc-node!
-                                                   dissoc layer/dissoc-node!} f))]
-                (let [[id new] args
-                      old (when (layer/manage-incoming? layer)
-                            (get-node layer id))]
-                  (apply update! layer args)
-                  (update-meta! [id] old new))
-                (let [[id & keyseq] keyseq
-                      old (get-node layer id)
-                      new (if keyseq
-                            (apply update-in* old keyseq f args)
-                            (apply f old args))]
-                  (layer/assoc-node! layer id new)
-                  (update-meta! [id] old new))))))
-        (swap! write-count inc)))))
-
-(defn update-in-node
-  "Functional version of update-in-node! for use in a transaction."
-  [layer keyseq f & args]
-  (retro/with-actions layer
-    {layer [#(apply update-in-node! % keyseq f args)]}))
-
-(do (defn update-node!
+(do (defn update-node
       "Update a node by calling function f with the old value and any supplied args."
       [layer id f & args]
-      (apply update-in-node! layer [id] f args))
-    (defn update-node
-      "Functional version of update-node! for use in a transaction."
+      (apply update-in-node layer [id] f args))
+    (defn update-node!
+      "Mutable version of update-node: applies changes immediately, at current revision."
       [layer id f & args]
-      (retro/with-actions layer
-        {layer [#(apply update-node! % id f args)]})))
+      (:value
+       (retro/unsafe-txn [layer]
+         (apply update-node layer id f args)))))
 
-(do (defn dissoc-node!
-      "Remove a node from a layer (incoming links remain)."
+(do (defn dissoc-node
+      "Remove a node from a layer."
       [layer id]
-      (update-in-node! layer [] dissoc id))
-    (defn dissoc-node
-      "Functional version of update-node! for use in a transaction."
+      (update-in-node layer [] dissoc id))
+    (defn dissoc-node!
+      "Mutable version of dissoc-node: changes are applied immediately, at the current revision."
       [layer id]
-      (retro/with-actions layer
-        {layer [#(dissoc-node! % id)]})))
+      (:value
+       (retro/unsafe-txn [layer]
+         (dissoc-node layer id)))))
 
-(do (defn assoc-node!
+(do (defn assoc-node
       "Create or set a node with the given id and value."
       [layer id value]
-      (update-in-node! layer [] assoc id value))
-    (defn assoc-node
-      "Functional version of assoc-node! for use in a transaction."
+      (update-in-node layer [] assoc id value))
+    (defn assoc-node!
+      "Mutable version of assoc-node: changes are applied immediately, at the current revision."
       [layer id value]
-      (retro/with-actions layer
-        {layer [#(assoc-node! % id value)]})))
+      (:value
+       (retro/unsafe-txn [layer]
+         (assoc-node layer id value)))))
+
+(do (defn assoc-in-node
+      "Set attributes inside of a node."
+      [layer keyseq value]
+      (update-in-node layer (butlast keyseq) assoc (last keyseq) value))
+    (defn assoc-in-node!
+      "Mutable version of assoc-in-node: changes are applied immediately, at the current revision."
+      [layer keyseq value]
+      (:value
+       (retro/unsafe-txn [layer]
+         (assoc-in-node layer keyseq value)))))
 
 (defn unwrap-layer
   "Return the underlying layer object from a wrapped layer. Throws an exception
@@ -248,16 +244,6 @@
        (drop-while #(satisfies? wrapped/Wrapped %))
        (first)))
 
-(do (defn assoc-in-node!
-      "Set attributes inside of a node."
-      [layer keyseq value]
-      (update-in-node! layer (butlast keyseq) assoc (last keyseq) value))
-    (defn assoc-in-node
-      "Functional version of assoc-in-node! for use in a transaction."
-      [layer keyseq value]
-      (retro/with-actions layer
-        {layer #(assoc-in-node! % keyseq value)})))
-
 (defn schema
   [layer id-or-type]
   (let [id (fix id-or-type
@@ -269,20 +255,14 @@
   ([layer id-or-type]
      (keys (:fields (schema layer id-or-type)))))
 
-(defn edges-valid? [layer edges]
-  (or (not (layer/single-edge? layer))
-      (> 2 (count edges))))
-
 (defn node-valid?
   "Check if the given node is valid for the specified layer."
   [layer id attrs]
-  (and (edges-valid? layer attrs)
-       (layer/node-valid? layer attrs)))
+  (layer/node-valid? layer attrs))
 
 (defn verify-node
   "Assert that the given node is valid for the specified layer."
   [layer id attrs]
-  (assert (edges-valid? layer attrs))
   (layer/verify-node layer id attrs)
   nil)
 
@@ -309,16 +289,7 @@
     (-> layer
         (retro/at-revision nil)
         (get-in-node [(meta-id :revision-id)])
-        (or 0)))
-
-  layer/Incoming
-  ;; default behavior: use node meta with special prefix to track incoming edges
-  (get-incoming [layer id]
-    (get-in-node layer [(meta-id id) :incoming]))
-  (add-incoming! [layer id from-id]
-    (update-in-node! layer [(meta-id id) :incoming] adjoin (ordered-map from-id true)))
-  (drop-incoming! [layer id from-id]
-    (update-in-node! layer [(meta-id id) :incoming] adjoin (ordered-map from-id false))))
+        (or 0))))
 
 (defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
@@ -355,9 +326,9 @@
     (if *use-outer-cache*
       (f)
       (binding [*use-outer-cache* true
-                get-node          (memoize-deref [write-count] get-node)
-                get-incoming      (memoize-deref [write-count] get-incoming)
-                get-revisions     (memoize-deref [write-count] get-revisions)]
+                get-node          (memoize get-node)
+                get-incoming      (memoize get-incoming)
+                get-revisions     (memoize get-revisions)]
         (f)))))
 
 (defmacro with-caching

@@ -1,13 +1,12 @@
 (ns jiraph.masai-sorted-layer
   (:use [jiraph.layer :as layer
-         :only [SortedEnumerate Optimized Basic Layer ChangeLog Preferences Schema node-id-seq]]
-        [jiraph.utils :only [meta-id meta-id? meta-str? base-id keyseq->str]]
+         :only [SortedEnumerate Optimized Basic Layer ChangeLog Schema node-id-seq]]
+        [jiraph.utils :only [keyseq->str meta-str?]]
         [jiraph.codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read]]
-        [retro.core   :only [Transactional Revisioned OrderedRevisions
-                             txn-begin! txn-commit! txn-rollback!]]
-        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? copy-meta switch
-                             verify]]
+        [retro.core :only [Transactional Revisioned OrderedRevisions
+                           txn-begin! txn-commit! txn-rollback!]]
+        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? switch verify]]
         [useful.seq :only [find-with prefix-of? find-first glue]]
         [useful.state :only [volatile put!]]
         [useful.string :only [substring-after substring-before]]
@@ -18,7 +17,7 @@
         [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
             [masai.cursor :as cursor]
-            [jiraph.graph :as graph]
+            [jiraph.graph :as graph :refer [with-action]]
             [cereal.core :as cereal]
             [jiraph.formats :as formats]
             [schematic.core :as schema]
@@ -165,13 +164,11 @@
                            (decode codec v)))
               (apply f not-found args))))))))
 
-(defn- layout-for
-  "Look up the layout and formats to use based on node id and revision."
-  [layer node-id revision]
-  (let [layout-fn (get layer (cond (= node-id (meta-id :layer)) :layer-meta-layout-fn
-                                   (meta-id? node-id)          :node-meta-layout-fn
-                                   :else                        :node-layout-fn))]
-    (layout-fn {:id node-id, :revision revision})))
+(defn- write-layout [layer node-id]
+  ((:layout-fn layer) node-id (:revision layer)))
+
+(defn- read-layout [layer node-id]
+  ((:layout-fn layer) node-id (revision-to-read layer)))
 
 (defn- delete-ranges!
   "Given a layer and a sequence of [start, end) intervals, delete every key in range. If the
@@ -205,24 +202,11 @@
     (assoc-in* {} parent
                (into {} kvs))))
 
-(letfn [(fix-incoming [val-fn nodes]
-          (into {}
-                (for [[id attrs] nodes]
-                  [id (if (and id (meta-id? id) ;; is there anything under the :incoming key?
-                               (seq (:incoming attrs)))
-                        (update-in attrs [:incoming] map-vals val-fn)
-                        attrs)])))]
-  (def ^:private mapify-incoming    (partial fix-incoming (complement :deleted)))
-  (def ^:private structify-incoming (partial fix-incoming (fn [exists]
-                                                            {:deleted (not exists)}))))
-
 (defn- read-node [layout db id not-found]
-  (-> (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
-                ([] not-found)
-                ([a b] (adjoin a b)))
-              (node-chunks layout db id))
-      (fix #(not (identical? not-found %))
-           mapify-incoming)))
+  (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
+            ([] not-found)
+            ([a b] (adjoin a b)))
+          (node-chunks layout db id)))
 
 (defn- optimized-writer
   "Return a writer iff the keyseq corresponds exactly to one path in path-formats, and the
@@ -237,9 +221,11 @@
             (let [db  (:db layer)
                   key (keyseq->str keyseq)] ;; great, we can optimize it
               (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
-                (db/append! db key (encode (:codec format) arg))
-                ;; we didn't read the old data, so we don't know the new data
-                {:old nil, :new nil}))))))))
+                (with-action [layer layer] {:old nil, :new nil}
+                  ;; we didn't read the old data, so we don't know the new data
+                  (let [[_ format] (first (write-layout layer id))]
+                    (db/append! db key
+                                (encode (:codec format) arg))))))))))))
 
 (defn- write-paths! [layer write-fn layout id node include-deletions? codec-type]
   (reduce (fn [node [path format]]
@@ -254,8 +240,7 @@
                           (when (seq path)
                             (no-nil-update node (pop path) dissoc (peek path)))))
                       node (matching-subpaths node path include-deletions?))))
-          (-> (structify-incoming node)
-              (get id))
+          (get node id)
           layout))
 
 (defn- simple-writer [layer layout keyseq f]
@@ -272,9 +257,11 @@
     (fn [& args]
       (let [old (read-node layout db id nil)
             new (apply update-in old keyseq f args)]
-        (returning {:old (get-in old keyseq), :new (get-in new keyseq)}
-          (delete-ranges! layer deletion-ranges)
-          (write-paths! layer writer layout id new true codec-type))))))
+        (with-action [layer layer] {:old (get-in old keyseq),
+                                    :new (get-in new keyseq)}
+          (let [revisioned-layout (subnode-formats (write-layout layer id) keys)]
+            (delete-ranges! layer deletion-ranges)
+            (write-paths! layer writer revisioned-layout id new true codec-type)))))))
 
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
@@ -282,9 +269,9 @@
    each format, you can implement a method for specialized-writer. For example, useful.utils/adjoin
    can be split up by matching up the paths in the adjoin-arg and in the layout.
 
-   layout is a sequence of [path, format] pairs, which are computed for your convenience:
-   if you preferred, you could recalculate them from layer and keyseq.
-   You should return a function of one argument, which writes to the layer the result of
+   layout is a sequence of [path, format] pairs, which are computed for your convenience: if you
+   preferred, you could recalculate them from layer and keyseq.  You should return a function of one
+   argument, which produces a retro IOValue for writing to the layer the result of
    (update-in layer keyseq f arg). See the contract for jiraph.layer/update-fn - you are
    effectively implementing an update-fn for a particular function rather than a layer.
 
@@ -304,14 +291,13 @@
           [id & keys] keyseq
           writer (partial db/append! db)]
       (fn [arg]
-        (returning {:old nil, :new arg}
-          (write-paths! layer writer layout id
+        (with-action [layer layer] {:old nil, :new arg}
+          (write-paths! layer writer (subnode-formats (write-layout layer id) keys) id
                         (assoc-in {} keyseq arg)
                         false :codec)))))) ;; don't include deletions
 
 ;;; TODO pull the three formats into a single field?
-(defrecord MasaiSortedLayer [db revision max-written-revision append-only?
-                             node-layout-fn node-meta-layout-fn layer-meta-layout-fn]
+(defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn]
   SortedEnumerate
   (node-id-subseq [this cmp start]
     (verify (#{> >=} cmp) "Only > and >= supported")
@@ -331,20 +317,20 @@
 
   Basic
   (get-node [this id not-found]
-    (let [node (read-node (layout-for this id (revision-to-read this)) db id not-found)]
+    (let [node (read-node (read-layout this id) db id not-found)]
       (if (identical? node not-found)
         not-found
         (get node id))))
-  (assoc-node! [this id attrs]
-    ((layer/update-fn this [id] (constantly attrs)))
-    true)
-  (dissoc-node! [this id]
-    (db/delete! db id))
+  (assoc-node [this id attrs]
+    ((layer/update-fn this [id] (constantly attrs))))
+  (dissoc-node [this id]
+    (with-action [_ this] nil
+      (db/delete! db id)))
 
   Optimized
   (query-fn [this keyseq not-found f]
     (let [[id & keys] keyseq
-          layout (subnode-formats (layout-for this id (revision-to-read this)) keys)]
+          layout (subnode-formats (read-layout this id) keys)]
       (or (seq-fn this keyseq layout not-found f)
           (if (seq layout)
             (fn [& args]
@@ -362,7 +348,7 @@
             (fn [& args] (apply f not-found args))))))
   (update-fn [this keyseq f]
     (when-let [[id & keys] (seq keyseq)]
-      (let [layout (subnode-formats (layout-for this id revision) keys)]
+      (let [layout (subnode-formats (read-layout this id) keys)]
         (assert (seq layout) "No codecs to write with")
         (some #(% this layout keyseq f)
               [specialized-writer, optimized-writer, simple-writer]))))
@@ -372,15 +358,19 @@
     (db/open db))
   (close [this]
     (db/close db))
-  (sync! [this]
-    (db/sync! db))
-  (optimize! [this]
-    (db/optimize! db))
-  (truncate! [this]
-    (put! max-written-revision nil)
-    (db/truncate! db))
+  (sync [this]
+    (with-action [_ this] nil
+      (db/sync! db)))
+  (optimize [this]
+    (with-action [_ this] nil
+      (db/optimize! db)))
+  (truncate [this]
+    (with-action [_ this] nil
+      (put! max-written-revision nil)
+      (db/truncate! db)))
 
   Schema
+
   (schema [this id]
     (reduce (fn [acc [path format]]
               (let [path (vec path)
@@ -392,22 +382,22 @@
                                     [path schema])]
                 (schema/assoc-in acc path schema)))
             {},
-            (reverse (layout-for this id nil)))) ;; start with shortest path for schema
+            (reverse (read-layout this id)))) ;; start with shortest path for schema
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (do (write-paths! this (constantly nil), (layout-for this id revision),
+      (do (write-paths! this (constantly nil), (write-layout this id),
                         id, attrs, false, :codec)
           true)
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
-    (let [layout (layout-for this id (revision-to-read this))
+    (let [layout (read-layout this id)
           revisioned-layout (for [[path format] layout
                                   :let [codec (:revisions format)]
                                   :when codec] ; pretend :revisions is the normal codec, so that
-                                               ; node-chunks will read using it
+                                        ; node-chunks will read using it
                               [path {:codec codec}])
           revs (->> (node-chunks revisioned-layout db id)
                     (tree-seq (any map? sequential?) (to-fix map? vals,
@@ -435,13 +425,7 @@
   (at-revision [this rev]
     (assoc-record this :revision rev))
   (current-revision [this]
-    revision)
-
-  Preferences
-  (manage-changelog? [this] false) ;; TODO wish this were more granular
-  (manage-incoming? [this] true)
-  (single-edge? [this] ;; TODO accept option to (make)
-    false))
+    revision))
 
 (implement-ordered MasaiSortedLayer)
 
@@ -469,21 +453,17 @@
        (defn- make-db [db]
          db))
 
-(defn make [db & {{:keys [node meta layer-meta]} :layout-fns,
-                  :keys [assoc-mode] :or {assoc-mode :append}}]
-  (let [[node-fn meta-fn layer-meta-fn]
-        (for [layout-fn [node meta layer-meta]]
-          (condp invoke layout-fn
-            ;; this is not the correct default for meta and layer-meta
-            nil? (wrap-revisioned (constantly [[[:edges :*] default-format]
-                                               [         [] default-format]]))
-            (! fn?) (constantly layout-fn)
-            layout-fn))]
+(defn make [db & {:keys [assoc-mode layout-fn] :or {assoc-mode :append}}]
+  (let [layout-fn (condp invoke layout-fn
+                    nil? (wrap-revisioned (constantly [[[:edges :*] default-format]
+                                                       [         [] default-format]]))
+                    (! fn?) (constantly layout-fn)
+                    layout-fn)]
     (MasaiSortedLayer. (make-db db) nil (volatile nil)
                        (case assoc-mode
                          :append true
                          :overwrite false)
-                       node-fn, meta-fn, layer-meta-fn)))
+                       layout-fn)))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.
