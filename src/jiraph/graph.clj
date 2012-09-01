@@ -54,7 +54,7 @@
   (defn sync!
     "Flush changes for the specified layers to the storage medium."
     [& layers]
-    (layers-op layers layer/sync))
+    (layers-op layers layer/fsync))
 
   (defn optimize!
     "Optimize the underlying storage for the specified layers."

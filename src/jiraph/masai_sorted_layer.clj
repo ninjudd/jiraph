@@ -358,7 +358,7 @@
     (db/open db))
   (close [this]
     (db/close db))
-  (sync [this]
+  (fsync [this]
     (with-action [_ this] nil
       (db/sync! db)))
   (optimize [this]

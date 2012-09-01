@@ -94,7 +94,7 @@
     (db/open db))
   (close [this]
     (db/close db))
-  (sync [this]
+  (fsync [this]
     (with-action [layer this] nil
       (db/sync! db)))
   (optimize [this]

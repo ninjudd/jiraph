@@ -98,7 +98,7 @@
     "Open the layer file.")
   (close [layer]
     "Close the layer file.")
-  (sync [layer]
+  (fsync [layer]
     "Return a retro IOValue that will flush all layer changes to the storage medium.")
   (optimize [layer]
     "Return a retro IOValue that will optimize underlying layer storage.")
@@ -124,7 +124,7 @@
     ;; automatically at reasonable times, or don't need it done at all
     (open     [layer] nil)
     (close    [layer] nil)
-    (sync     [layer] nil)
+    (fsync    [layer] nil)
     (optimize [layer] nil)
 
     ;; we can simulate this for you, pretty inefficiently
