@@ -1,6 +1,6 @@
 (ns jiraph.typed
   (:use [jiraph.core :only [layer]]
-        [jiraph.layer :only [Basic Optimized Schema get-node schema update-fn assoc-node!]]
+        [jiraph.layer :only [Basic Optimized Schema get-node schema update-fn assoc-node]]
         [jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [jiraph.wrapped-layer :only [defwrapped]]
         [retro.core :only [dotxn]]
@@ -30,9 +30,9 @@
 ;; destination node for an edge from the first node-id.
 (defwrapped TypedLayer [layer type-multimap type-lookup]
   Basic
-  (assoc-node! [this id attrs]
+  (assoc-node [this id attrs]
     (validate-edges this id (keys (:edges attrs)) (edge-validator this id))
-    (assoc-node! layer id attrs))
+    (assoc-node layer id attrs))
 
   Optimized
   (update-fn [this keyseq f]
