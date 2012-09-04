@@ -75,12 +75,7 @@
 
        OrderedRevisions
        (max-revision [this#] (max-revision ~layer-sym))
-       (touch        [this#] (touch ~layer-sym))
-
-       Preferences
-       (manage-changelog? [this#] (manage-changelog? ~layer-sym))
-       (manage-incoming?  [this#] (manage-incoming?  ~layer-sym))
-       (single-edge?      [this#] (single-edge?      ~layer-sym))))))
+       (touch        [this#] (touch ~layer-sym))))))
 
 (defmacro defwrapped [name [wrapped-layer-fieldname :as fields] & specs]
   `(defrecord ~name [~@fields]
