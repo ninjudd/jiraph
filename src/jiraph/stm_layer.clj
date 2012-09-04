@@ -1,7 +1,7 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Basic Layer Optimized ChangeLog get-revisions close]]
-        [jiraph.graph :only [*skip-writes*]]
+        [jiraph.graph :only [with-action get-node]]
         [jiraph.utils :only [meta-id meta-id? base-id]]
         [retro.core :only [WrappedTransactional Revisioned OrderedRevisions
                            max-revision at-revision current-revision]]
@@ -76,12 +76,14 @@
                                          touched-revisions))
                                 0)]
             (-> @store (get-in [most-recent :nodes k] not-found)))))))
-  (assoc-node! [this k v]
-    (alter store
-           assoc-in [(current-rev this) (storage-area k) (storage-name k)] v))
-  (dissoc-node! [this k]
-    (alter store
-           update-in [(current-rev this) (storage-area k)] dissoc (storage-name k)))
+  (assoc-node [this k v]
+    (with-action [layer this] {:old (get-node this k) :new v}
+      (alter store
+             assoc-in [(current-rev layer) (storage-area k) (storage-name k)] v)))
+  (dissoc-node [this k]
+    (with-action [layer this] {:old (get-node this k) :new nil}
+      (alter store
+             update-in [(current-rev layer) (storage-area k)] dissoc (storage-name k))))
 
   Revisioned
   (at-revision [this rev]
