@@ -47,7 +47,7 @@
                       ~@body)]}))
 
 (letfn [(layers-op [layers f]
-          (retro/unsafe-txn [layers]
+          (retro/unsafe-txn layers
             (apply retro/compose
                    (map f layers))))]
 
