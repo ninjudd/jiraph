@@ -3,7 +3,7 @@
         [jiraph.layer :only [Basic Optimized get-node]]
         [jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [jiraph.wrapped-layer :only [NodeFilter defwrapped]]
-        [retro.core :only [txn]]
+        [retro.core :only [unsafe-txn]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
         [useful.utils :only [adjoin]]
@@ -56,7 +56,7 @@
      (delete-node! *default-delete-layer-name* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
-       (txn [delete-layer]
+       (unsafe-txn [delete-layer]
          (delete-node delete-layer id)))))
 
 (defn undelete-node
@@ -70,7 +70,7 @@
      (undelete-node! *default-delete-layer-name* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
-       (txn [delete-layer]
+       (unsafe-txn [delete-layer]
          (undelete-node delete-layer id)))))
 
 (def ^{:private true} sentinel (Object.))
