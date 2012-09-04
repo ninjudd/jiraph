@@ -111,12 +111,13 @@
   (close [this]
     (when filename
       (spit filename @store)))
-  (sync! [this]
-    (close this))
-  (optimize! [this] nil)
-  (truncate! [this]
-    (dosync ;; since this should only be called outside a retro transaction
-     (ref-set (:store this) empty-store))))
+  (fsync [this]
+    (with-action [_ this]
+      (close this)))
+  (truncate [this]
+    (with-action [_ this]
+      (ref-set store empty-store)))
+  (optimize [this] nil))
 
 (defn make
   ([] (make nil))
