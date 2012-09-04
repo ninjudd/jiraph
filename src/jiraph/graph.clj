@@ -48,8 +48,8 @@
 
 (letfn [(layers-op [layers f]
           (retro/unsafe-txn [layers]
-            (for [layer layers]
-              (f layer))))]
+            (apply retro/compose
+                   (map f layers))))]
 
   (defn sync!
     "Flush changes for the specified layers to the storage medium."
