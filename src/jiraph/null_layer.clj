@@ -8,16 +8,16 @@
   (node-subseq    [this cmp start] ())
 
   Basic
-  (get-node     [this id not-found] not-found)
-  (assoc-node!      [this id attrs] nil)
-  (dissoc-node!           [this id] nil)
+  (get-node    [this id not-found] not-found)
+  (assoc-node      [this id attrs] nil)
+  (dissoc-node           [this id] nil)
 
   Layer
   (open      [this] nil)
   (close     [this] nil)
-  (sync!     [this] nil)
-  (optimize! [this] nil)
-  (truncate! [this] nil)
+  (fsync     [this] nil)
+  (optimize  [this] nil)
+  (truncate  [this] nil)
 
   Schema
   (schema            [this id] nil)
@@ -38,12 +38,7 @@
 
   OrderedRevisions
   (max-revision [this] Double/POSITIVE_INFINITY)
-  (touch        [this] nil)
-
-  Preferences
-  (manage-changelog? [this] false)
-  (manage-incoming?  [this] false)
-  (single-edge?      [this] false))
+  (touch        [this] nil))
 
 (defn make []
   (NullLayer.))

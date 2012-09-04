@@ -38,9 +38,9 @@
                                                    (node-subseq ~layer-sym cmp# start#)))
 
        Basic
-       (get-node     [this# id# not-found#] (get-node ~layer-sym id# not-found#))
-       (assoc-node!  [this# id# attrs#]     (assoc-node! ~layer-sym id# attrs#))
-       (dissoc-node! [this# id#]            (dissoc-node! ~layer-sym id#))
+       (get-node    [this# id# not-found#] (get-node ~layer-sym id# not-found#))
+       (assoc-node  [this# id# attrs#]     (assoc-node ~layer-sym id# attrs#))
+       (dissoc-node [this# id#]            (dissoc-node ~layer-sym id#))
 
        Optimized
        (query-fn  [this# keyseq# not-found# f#] (query-fn ~layer-sym keyseq# not-found# f#))
@@ -49,9 +49,9 @@
        Layer
        (open      [this#] (open  ~layer-sym))
        (close     [this#] (close ~layer-sym))
-       (sync!     [this#] (sync! ~layer-sym))
-       (optimize! [this#] (optimize! ~layer-sym))
-       (truncate! [this#] (truncate! ~layer-sym))
+       (fsync     [this#] (fsync ~layer-sym))
+       (optimize  [this#] (optimize ~layer-sym))
+       (truncate  [this#] (truncate ~layer-sym))
 
        Schema
        (schema      [this# id#]        (schema ~layer-sym id#))
