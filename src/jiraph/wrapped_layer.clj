@@ -50,11 +50,11 @@
        (update-fn [this# keyseq# f#]            (update-fn ~layer-sym keyseq# f#))
 
        Layer
-       (open      [this#] (open  ~layer-sym))
-       (close     [this#] (close ~layer-sym))
-       (fsync     [this#] (fsync ~layer-sym))
-       (optimize  [this#] (optimize ~layer-sym))
-       (truncate  [this#] (truncate ~layer-sym))
+       (open       [this#] (open  ~layer-sym))
+       (close      [this#] (close ~layer-sym))
+       (sync!      [this#] (sync! ~layer-sym))
+       (optimize!  [this#] (optimize! ~layer-sym))
+       (truncate!  [this#] (truncate! ~layer-sym))
 
        Schema
        (schema      [this# id#]        (schema ~layer-sym id#))

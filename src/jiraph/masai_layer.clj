@@ -94,16 +94,13 @@
     (db/open db))
   (close [this]
     (db/close db))
-  (fsync [this]
-    (with-action [layer this] nil
-      (db/sync! db)))
-  (optimize [this]
-    (with-action [layer this] nil
-      (db/optimize! db)))
-  (truncate [this]
-    (with-action [layer this] nil
-      (db/truncate! db)
-      (put! max-written-revision nil)))
+  (sync! [this]
+    (db/sync! db))
+  (optimize! [this]
+    (db/optimize! db))
+  (truncate! [this]
+    (db/truncate! db)
+    (put! max-written-revision nil))
 
   Schema
   (schema [this id]

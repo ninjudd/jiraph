@@ -113,13 +113,12 @@
   (close [this]
     (when filename
       (spit filename @store)))
-  (fsync [this]
-    (with-action [_ this]
-      (close this)))
-  (truncate [this]
-    (with-action [_ this]
-      (ref-set store empty-store)))
-  (optimize [this] nil))
+  (sync! [this]
+    (close this))
+  (truncate! [this]
+    (dosync
+     (ref-set store empty-store)))
+  (optimize! [this] nil))
 
 (defn make
   ([] (make nil))

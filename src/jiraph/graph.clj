@@ -47,25 +47,23 @@
                       ~@body)]}))
 
 (letfn [(layers-op [layers f]
-          (retro/unsafe-txn layers
-            (apply retro/compose
-                   (map f layers))))]
+          (dorun (map f layers)))]
 
   (defn sync!
     "Flush changes for the specified layers to the storage medium."
     [& layers]
-    (layers-op layers layer/fsync))
+    (layers-op layers layer/sync!))
 
   (defn optimize!
     "Optimize the underlying storage for the specified layers."
     [& layers]
-    (layers-op layers layer/optimize))
+    (layers-op layers layer/optimize!))
 
   (defn truncate!
     "Remove all nodes from the specified layers."
     [& layers]
     (refuse-readonly layers)
-    (layers-op layers layer/truncate)))
+    (layers-op layers layer/truncate!)))
 
 (defn node-id-seq
   "Return a lazy sequence of all node ids in this layer."

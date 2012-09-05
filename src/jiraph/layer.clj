@@ -98,12 +98,12 @@
     "Open the layer file.")
   (close [layer]
     "Close the layer file.")
-  (fsync [layer]
-    "Return a retro IOValue that will flush all layer changes to the storage medium.")
-  (optimize [layer]
-    "Return a retro IOValue that will optimize underlying layer storage.")
-  (truncate [layer]
-    "Return a retro IOValue that removes all node data from the layer."))
+  (sync! [layer]
+    "Flush all layer changes to the storage medium.")
+  (optimize! [layer]
+    "Optimize underlying layer storage.")
+  (truncate! [layer]
+    "Removes all node data from the layer."))
 
 (defprotocol ChangeLog
   (get-revisions [layer id]
@@ -122,16 +122,17 @@
     Layer
     ;; default implementation is to not do anything, hoping you do it
     ;; automatically at reasonable times, or don't need it done at all
-    (open     [layer] nil)
-    (close    [layer] nil)
-    (fsync    [layer] nil)
-    (optimize [layer] nil)
+    (open      [layer] nil)
+    (close     [layer] nil)
+    (sync!     [layer] nil)
+    (optimize! [layer] nil)
 
     ;; we can simulate this for you, pretty inefficiently
-    (truncate [layer]
-      (apply retro/compose
-             (for [id (node-id-seq layer)]
-               (dissoc-node layer id))))))
+    (truncate! [layer]
+      (retro/unsafe-txn [layer]
+        (apply retro/compose
+               (for [id (node-id-seq layer)]
+                 (dissoc-node layer id)))))))
 
 (def ^{:doc "A default schema describing a map which contains edges and possibly other keys."}
   edges-schema {:schema {:type :map

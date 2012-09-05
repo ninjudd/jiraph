@@ -13,11 +13,11 @@
   (dissoc-node           [this id] nil)
 
   Layer
-  (open      [this] nil)
-  (close     [this] nil)
-  (fsync     [this] nil)
-  (optimize  [this] nil)
-  (truncate  [this] nil)
+  (open       [this] nil)
+  (close      [this] nil)
+  (sync!      [this] nil)
+  (optimize!  [this] nil)
+  (truncate!  [this] nil)
 
   Schema
   (schema            [this id] nil)

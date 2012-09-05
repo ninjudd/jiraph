@@ -358,16 +358,13 @@
     (db/open db))
   (close [this]
     (db/close db))
-  (fsync [this]
-    (with-action [_ this] nil
-      (db/sync! db)))
-  (optimize [this]
-    (with-action [_ this] nil
-      (db/optimize! db)))
-  (truncate [this]
-    (with-action [_ this] nil
-      (put! max-written-revision nil)
-      (db/truncate! db)))
+  (sync! [this]
+    (db/sync! db))
+  (optimize! [this]
+    (db/optimize! db))
+  (truncate! [this]
+    (put! max-written-revision nil)
+    (db/truncate! db))
 
   Schema
 
