@@ -165,10 +165,10 @@
               (apply f not-found args))))))))
 
 (defn- write-layout [layer node-id]
-  ((:layout-fn layer) node-id (:revision layer)))
+  ((:layout-fn layer) {:id node-id :revision (:revision layer)}))
 
 (defn- read-layout [layer node-id]
-  ((:layout-fn layer) node-id (revision-to-read layer)))
+  ((:layout-fn layer) {:id node-id :revision (revision-to-read layer)}))
 
 (defn- delete-ranges!
   "Given a layer and a sequence of [start, end) intervals, delete every key in range. If the

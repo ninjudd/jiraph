@@ -31,10 +31,10 @@
 ;;; - a :revisions codec, for reading the list of revisions at which a node has been touched.
 
 (defn write-format [layer node-id]
-  ((:format-fn layer) node-id (:revision layer)))
+  ((:format-fn layer) {:id node-id :revision (:revision layer)}))
 
 (defn read-format [layer node-id]
-  ((:format-fn layer) node-id (revision-to-read layer)))
+  ((:format-fn layer) {:id node-id :revision (revision-to-read layer)}))
 
 (defn- revision-seq [format revision bytes]
   (when-let [rev-codec (:revisions format)]
