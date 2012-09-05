@@ -164,9 +164,7 @@
                                                   dissoc layer/dissoc-node}
                                                  f))]
           (let [node-id (first args)]
-            (assert (not (next args))
-                    "Can't assoc or dissoc multiple nodes at once")
-            (-> (update layer node-id)
+            (-> (apply update layer args)
                 (assoc-in [:value :path] [node-id]))))
         (let [[id & keyseq] keyseq
               old (get-node layer id)
