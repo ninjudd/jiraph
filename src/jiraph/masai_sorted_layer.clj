@@ -216,20 +216,21 @@
   "Return a writer iff the keyseq corresponds exactly to one path in path-formats, and the
    corresponding format has f as its reduce-fn (that is, we can apply the change to f by merely
    appending something to a single database value)."
-  [layer layout keyseq f]
+  [layer layout keyseq f args]
   (when-not (next layout) ;; can only optimize a single codec
     (let [[path format] (first layout)]
-      (when (= f (:reduce-fn format)) ;; performing optimized function
+      (when (and (= f (:reduce-fn format)) ;; performing optimized function
+                 (single? args)) ;; with just one arg
         (let [[id & keys] keyseq]
           (when (= (count keys) (count path)) ;; at exactly this level
             (let [db  (:db layer)
-                  key (keyseq->str keyseq)] ;; great, we can optimize it
-              (fn [arg] ;; TODO can we handle multiple args here? not sure how to encode that
-                (with-action [layer layer] {:old nil, :new nil}
-                  ;; we didn't read the old data, so we don't know the new data
-                  (let [[_ format] (first (write-layout layer id))]
-                    (db/append! db key
-                                (encode (:codec format) arg))))))))))))
+                  key (keyseq->str keyseq)
+                  arg (first args)] ;; great, we can optimize it
+              (with-action [layer' layer] nil
+                ;; we didn't read the old data, so we don't know the new data
+                (let [[_ format] (first (write-layout layer' id))]
+                  (db/append! db key
+                              (encode (:codec format) arg)))))))))))
 
 (defn- write-paths! [layer write-fn layout id node include-deletions? codec-type]
   (reduce (fn [node [path format]]
@@ -247,25 +248,26 @@
           (get node id)
           layout))
 
-(defn- simple-writer [layer layout keyseq f]
+(defn- simple-writer [layer layout keyseq f args]
   (let [{:keys [db append-only?]} layer
         [id & keys] keyseq
         [write-mode codec-type] (if append-only?
                                   [db/append! :reset]
                                   [db/put! :codec])
-        writer (partial write-mode db)
-        deletion-ranges (for [[path format] layout
-                              :let [{:keys [start stop multi]} (bounds (cons id path))]
-                              :when (and multi (prefix-of? (butlast path) keys))]
-                          (keyed [start stop format]))]
-    (fn [& args]
-      (let [old (read-node layout db id nil)
-            new (apply update-in old keyseq f args)]
-        (with-action [layer layer] {:old (get-in old keyseq),
-                                    :new (get-in new keyseq)}
-          (let [revisioned-layout (subnode-formats (write-layout layer id) keys)]
-            (delete-ranges! layer deletion-ranges)
-            (write-paths! layer writer revisioned-layout id new true codec-type)))))))
+        writer (partial write-mode db)]
+    (with-action [layer' layer] nil
+      (letfn [(sublayout [kind]
+                (subnode-formats (kind layer' id) keys))]
+        (let [read (sublayout read-layout)
+              write (sublayout write-layout)
+              old (read-node read db id nil)
+              new (apply update-in old keyseq f args)
+              deletion-ranges (for [[path format] write
+                                    :let [{:keys [start stop multi]} (bounds (cons id path))]
+                                    :when (and multi (prefix-of? (butlast path) keys))]
+                                (keyed [start stop format]))]
+          (delete-ranges! layer' deletion-ranges)
+          (write-paths! layer' writer write id new true codec-type))))))
 
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
@@ -274,31 +276,32 @@
    can be split up by matching up the paths in the adjoin-arg and in the layout.
 
    layout is a sequence of [path, format] pairs, which are computed for your convenience: if you
-   preferred, you could recalculate them from layer and keyseq.  You should return a function of one
-   argument, which produces a retro IOValue for writing to the layer the result of
-   (update-in layer keyseq f arg). See the contract for jiraph.layer/update-fn - you are
-   effectively implementing an update-fn for a particular function rather than a layer.
+   preferred, you could recalculate them from layer and keyseq.  You should return a retro IOValue
+   for writing to the layer the result of (apply update-in layer keyseq f args). See the contract
+   for jiraph.layer/update-in-node - you are effectively implementing an updater for a particular
+   function rather than a layer.
 
    Note that it is acceptable to return nil instead of a function, if you find the keyseq or
    layout means you cannot do any optimization."
-  (fn [layer layout keyseq f]
+  (fn [layer layout keyseq f args]
     f))
 
 (defmethod specialized-writer :default [& args]
   nil)
 
-(defmethod specialized-writer adjoin [layer layout keyseq _]
-  (when (every? (fn [[path format]] ;; TODO support any reduce-fn
-                  (= adjoin (:reduce-fn format)))
-                layout)
+(defmethod specialized-writer adjoin [layer layout keyseq _ args]
+  (when (and (every? (fn [[path format]] ;; TODO support any reduce-fn
+                       (= adjoin (:reduce-fn format)))
+                     layout)
+             (single? args)) ;; can only adjoin with exactly one arg
     (let [db (:db layer)
           [id & keys] keyseq
-          writer (partial db/append! db)]
-      (fn [arg]
-        (with-action [layer layer] {:old nil, :new arg}
-          (write-paths! layer writer (subnode-formats (write-layout layer id) keys) id
-                        (assoc-in {} keyseq arg)
-                        false :codec)))))) ;; don't include deletions
+          writer (partial db/append! db)
+          arg (first args)]
+      (with-action [layer' layer] nil
+        (write-paths! layer' writer (subnode-formats (write-layout layer' id) keys) id
+                      (assoc-in {} keyseq arg)
+                      false :codec))))) ;; don't include deletions
 
 ;;; TODO pull the three formats into a single field?
 (defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn]
@@ -325,11 +328,20 @@
       (if (identical? node not-found)
         not-found
         (get node id))))
-  (assoc-node [this id attrs]
-    ((layer/update-fn this [id] (constantly attrs))))
-  (dissoc-node [this id]
-    (with-action [_ this] nil
-      (db/delete! db id)))
+  (update-in-node [this keyseq f args]
+    (if-let [[id & keys] (seq keyseq)]
+      (let [layout (subnode-formats (read-layout this id) keys)]
+        (assert (seq layout) "No codecs to write with")
+        (some #(% this layout keyseq f args)
+              [specialized-writer, optimized-writer, simple-writer]))
+      (condp = f
+        dissoc (with-action [layer' layer] nil
+                 (let [node-id (first args)] ;; TODO don't think this is right, but copying from old
+                                             ;; version for now.
+                   (db/delete! node-id)))
+        assoc (recur [(first args)] (constantly (second args)) nil)
+        (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
+                                                  f))))))
 
   Optimized
   (query-fn [this keyseq not-found f]
@@ -350,12 +362,6 @@
                        args)))
             ;; if no codecs apply, every read will be nil
             (fn [& args] (apply f not-found args))))))
-  (update-fn [this keyseq f]
-    (when-let [[id & keys] (seq keyseq)]
-      (let [layout (subnode-formats (read-layout this id) keys)]
-        (assert (seq layout) "No codecs to write with")
-        (some #(% this layout keyseq f)
-              [specialized-writer, optimized-writer, simple-writer]))))
 
   Layer
   (open [this]
@@ -371,7 +377,6 @@
     (db/truncate! db))
 
   Schema
-
   (schema [this id]
     (reduce (fn [acc [path format]]
               (let [path (vec path)
