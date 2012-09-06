@@ -190,36 +190,3 @@
      (returning ~@body
        (layer/close layer#)
        (.delete file#))))
-
-;; TODO wth is this? Must be some scratch work I committed accidentally?
-(def codex (let [type->num {"profile" 1
-                            "union" 2}
-                 num->type (into {} (for [[k v] type->num] [v k]))
-                 write-id (fn [^DataOutputStream out ^String node-id inc?]
-                            (let [[node-type id-str] (clojure.string/split node-id #"-")
-                                  type-abbrev (get type->num node-type)
-                                  id-num (Long/parseLong id-str)]
-                              (.writeByte out type-abbrev)
-                              (.writeLong out (fix id-num inc? inc))))]
-             {:read (fn [bytes]
-                      )
-              :write (let [key-len 9] ;; one-byte type, 8-byte long for id
-                       (fn [keyseq]
-                         (let [[head & tail] keyseq
-                               edge? (= :edges (first tail))]
-                           (if (and edge? (not (next tail)))
-                             nil ;; Don't know how to handle [id :edge] with no futher tail
-                             (let [edge-to (and edge? (second tail))
-                                   range? (keyword? edge-to)
-                                   len (cond range? (inc key-len)
-                                             edge? (* 2 key-len)
-                                             :else key-len)
-                                   buf (ByteArrayOutputStream. len)
-                                   writer (DataOutputStream. buf)]
-                               (write-id writer head (and range? (= :max edge-to)))
-                               (when edge?
-                                 (case edge-to
-                                   :min (.writeByte writer (byte 0))
-                                   :max nil
-                                   (write-id writer edge-to)))
-                               (.toByteArray buf))))))}))
