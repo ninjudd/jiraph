@@ -24,6 +24,10 @@
             [clojure.string :as s])
   (:import [java.nio ByteBuffer]))
 
+(defn- single? [coll]
+  (and (seq coll)
+       (not (next coll))))
+
 (defn- no-nil-update
   "Update-in, but any value that would have become nil (or empty) is dissoc'ed entirely,
    recursively up to the root."
