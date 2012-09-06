@@ -43,10 +43,12 @@
 (defprotocol Basic
   (get-node [layer id not-found]
     "Fetch a node from the graph.")
-  (assoc-node [layer id attrs]
-    "Return a retro IOValue that will add a node to the graph.")
-  (dissoc-node [layer id]
-    "Return a retro IOValue that will remove a node from the graph."))
+
+  (update-in-node [layer keyseq f args]
+    "Return an IOValue that will update the layer under the given keyseq by calling
+     (apply f current-value args). If keyseq is empty, f must be either assoc or dissoc, in which
+     case an entire node will be either destroyed (in the case of dissoc) or added/overwritten (in
+     the case of assoc)."))
 
 (defprotocol Optimized
   "Describe to Jiraph how to perform a more-optimized version of some subset of operations on a
@@ -66,21 +68,6 @@
   assoc), and call the returned function as (the-fn :rel :child), thus achieving basically the
   same effect as (update-in layer [from-id :edges to-id] assoc :rel :child), or (assoc-in layer
   [from-id :edges to-id :rel] child)."
-
-  (update-fn [layer keyseq f]
-    "Get a function for performing an optimized update/mutation on the layer at a specified
-    node. See documentation of Optimized for the general contract of Optimized functions. In
-    addition, the function returned by update-fn should, when called, return a retro IOValue
-    whose :actions perform the operation specified, and whose :value is a hash containing
-    information about the change to be made, if possible.
-
-    The hash should contain keys :old and :new, describing the contents of the sub-node (that is,
-    the one in the layer under keyseq) before and after the update is applied. It is legal for
-    these to both be nil (eg, returning an empty hash), but in that case Jiraph will be unable to
-    provide some services, such as managing incoming edges for you.
-
-    Jiraph's behavior in the case of return values of any type other than hash (including nil) is
-    unspecified; these may receive special handling in some future version.")
 
   (query-fn [layer keyseq not-found f]
     "Get a function for performing an optimized read on the layer at a specified node. See
@@ -168,7 +155,6 @@
   Optimized
   ;; can't optimize anything
   (query-fn  [layer keyseq not-found f] nil)
-  (update-fn [layer keyseq f] nil)
 
   Incoming
   (get-incoming [layer id]
