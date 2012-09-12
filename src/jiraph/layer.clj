@@ -119,7 +119,7 @@
       (retro/unsafe-txn [layer]
         (apply retro/compose
                (for [id (node-id-seq layer)]
-                 (dissoc-node layer id)))))))
+                 (update-in-node layer [] dissoc id)))))))
 
 (def ^{:doc "A default schema describing a map which contains edges and possibly other keys."}
   edges-schema {:schema {:type :map

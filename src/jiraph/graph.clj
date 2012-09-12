@@ -137,41 +137,9 @@
 
 (defn update-in-node
   "Return an IOValue that will update the subnode at keyseq by calling function
-  f with the old value and any supplied args.
-
-   Its :value will be a hash with keys :old and :new, indicating content on the
-  layer before and after the update, and a :path key indicating where on the
-  layer those changes were made. For example, the value of (update-in-node
-  some-layer [\"the-id\" :some-key :other-key] inc) might be {:path
-  [\"the-id\" :some-key] :old {:other-key 5} :new {:other-key 6}}."
+  f with the old value and any supplied args."
   [layer keyseq f & args]
-  (let [updater (partial layer/update-fn layer)
-        keyseq  (seq keyseq)]
-    (or (when-let [update (updater keyseq f)]
-          ;; maximally-optimized; the layer can do this exact thing well
-          (-> (apply update args)
-              (assoc-in [:value :path] keyseq)))
-        (let [assoc-path (butlast keyseq)]
-          (when-let [update (and keyseq (updater assoc-path assoc))]
-            ;; they can replace this sub-node efficiently, at least
-            (let [old (get-in-node layer keyseq)
-                  new (apply f old args)]
-              (-> (update (last keyseq) new)
-                  (assoc-in [:value :path] assoc-path)))))
-
-        ;; need some special logic for unoptimized top-level assoc/dissoc
-        (when-let [update (and (not keyseq) (get {assoc  layer/assoc-node
-                                                  dissoc layer/dissoc-node}
-                                                 f))]
-          (let [node-id (first args)]
-            (-> (apply update layer args)
-                (assoc-in [:value :path] [node-id]))))
-        (let [[id & keyseq] keyseq
-              old (get-node layer id)
-              new (apply update-in* old keyseq f args)]
-          (retro/compose (layer/assoc-node layer id new)
-                         (retro/with-actions {:path [id], :old old, :new new}
-                           nil))))))
+  (layer/update-in-node layer keyseq f args))
 
 (defn update-in-node!
   "Mutable version of update-in-node: applies changes immediately, at current

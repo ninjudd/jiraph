@@ -44,6 +44,25 @@
          revs
          (take-while #(<= % revision) revs)))))  )
 
+(defn- overwrite [layer id attrs]
+  (let [{:keys [db append-only?]} layer]
+    (letfn [(bytes [data]
+              (let [format (write-format layer id)
+                    codec (or (and append-only?
+                                   (:reset format))
+                              (:codec format))]
+                (encode codec data)))]
+      ((if append-only? db/append! db/put!)
+       db (id->str id) (bytes attrs)))))
+
+(defn- assert-length [len coll]
+  (if (zero? len)
+    (assert (empty? coll) "Too many elements")
+    (let [last-expected (nthnext coll (dec len))]
+      (assert last-expected "Too few elements")
+      (assert (not (next last-expected)) "Too many elements")))
+  coll)
+
 (defrecord MasaiLayer [db revision max-written-revision append-only? format-fn]
   Object
   (toString [this]
@@ -62,32 +81,31 @@
       (decode (:codec (read-format this id))
               data)
       not-found))
-  (assoc-node [this id attrs]
-    (letfn [(bytes [layer data]
-              (let [format (write-format layer id)
-                    codec (or (and append-only?
-                                   (:reset format))
-                              (:codec format))]
-                (encode codec data)))]
-      (with-action [layer this] {:old nil, :new attrs}
-        ((if append-only? db/append! db/put!)
-         db (id->str id) (bytes layer attrs)))))
-  (dissoc-node [this id]
-    (with-action [layer this] nil
-      (db/delete! db (id->str id))))
+  (update-in-node [this keyseq f args]
+    (if-let [[id & keys] (seq keyseq)]
+      (if (= f (:reduce-fn (write-format this id)))
+        (with-action [layer this] nil
+          (->> (if keys
+                 (assoc-in {} keys attrs)
+                 attrs)
+               (encode (:codec (write-format layer id)))
+               (db/append! db (id->str id))))
+        (with-action [layer this] nil
+          (let [old (graph/get-node layer id)
+                new (apply update-in* old keys f args)]
+            (overwrite layer id new))))
+      (condp = f
+        assoc (let [[id attrs] (assert-length 2 args)]
+                (with-action [layer this] nil
+                  (overwrite layer id attrs)))
+        dissoc (let [[id] (assert-length 1 args)]
+                 (with-action [layer this] nil
+                   (db/delete! db (id->str))))
+        (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
+                                                  f))))))
 
   Optimized
   (query-fn [this keyseq not-found f] nil)
-  (update-fn [this keyseq f]
-    (when-let [[id & keys] (seq keyseq)]
-      (when (= f (:reduce-fn (write-format this id)))
-        (fn [attrs]
-          (with-action [layer this] {:old nil :new attrs}
-            (->> (if keys
-                   (assoc-in {} keys attrs)
-                   attrs)
-                 (encode (:codec (write-format layer id)))
-                 (db/append! db (id->str id))))))))
 
   Layer
   (open [this]
