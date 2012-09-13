@@ -2,7 +2,8 @@
   (:use jiraph.layer retro.core
         [useful.map :only [merge-in]]
         [useful.datatypes :only [assoc-record]]
-        [useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
+        [useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]])
+  (:require [jiraph.graph :as graph]))
 
 (defprotocol Wrapped
   "For layers which provide additional functionality by wrapping other layers."
@@ -55,6 +56,8 @@
        (sync!      [this#] (sync! ~layer-sym))
        (optimize!  [this#] (optimize! ~layer-sym))
        (truncate!  [this#] (truncate! ~layer-sym))
+       (same? [this# other#]
+         (graph/same? ~layer-sym (~layer-key other#)))
 
        Schema
        (schema      [this# id#]        (schema ~layer-sym id#))

@@ -90,7 +90,11 @@
   (optimize! [layer]
     "Optimize underlying layer storage.")
   (truncate! [layer]
-    "Removes all node data from the layer."))
+    "Removes all node data from the layer.")
+  (same? [layer other]
+    "Given two layer objects (which must be of the same class), tell whether they refer to the same
+    storage backend. Useful because = will compare incidentals such as current revision, but you may
+    wish to ignore those."))
 
 (defprotocol ChangeLog
   (get-revisions [layer id]

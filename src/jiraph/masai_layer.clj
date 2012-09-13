@@ -119,6 +119,9 @@
   (truncate! [this]
     (db/truncate! db)
     (put! max-written-revision nil))
+  (same? [this other]
+    (apply = (for [layer [this other]]
+               (get-in layer [:db :opts :path]))))
 
   Schema
   (schema [this id]
