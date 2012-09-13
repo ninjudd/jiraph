@@ -29,6 +29,25 @@
   (doseq [layer layers]
     (retro/modify! layer)))
 
+(defmacro with-action
+  "Construct a simple retro IOValue that touches exactly one layer.
+
+   The IOValue's :value will be the one you specify, and its :actions will
+   evaluate body with layer-name bound to (an appropriately-revisioned view of)
+   layer-value."
+  [[layer-name layer-value] value & body]
+  `(retro/with-actions ~value
+     {~layer-value [(fn [~layer-name]
+                      ~@body)]}))
+
+(defn advance-reader
+  "Given a vector of actualized jiraph IOValues and a read function, return a new read function by
+  calling the :wrap-read function of each action."
+  [read actions]
+  (reduce (fn [read wrapper]
+            (wrapper read))
+          read, (map :wrap-read actions)))
+
 (defn compose
   "Compose a number of jiraph IOValues (functions of read) into a single action."
   [& fs]
@@ -40,31 +59,39 @@
                    [[] read]
                    fs))))
 
-(defn ->retro-ioval
-  "Convert a jiraph IOValue to a retro IOValue."
-  [ioval]
-  (let [actions (ioval jiraph.graph/get-in-node)]
-    (with-actions nil
-      (reduce (fn [retro-ioval {:keys [layer write]}]
-                (update-in retro-ioval [layer] (fnil conj []) write))
-              {}, actions))))
+(defn same?
+  "Determine whether two objects are layers using the same storage backend. Useful because = will
+   compare incidentals such as current revision, but you may wish to ignore those."
+  [x y]
+  (and (= (class x) (class y))
+       (layer/same? x y)))
 
-(def touch retro/touch)
-(defmacro txn [layers actions]
-  `(retro/txn ~layers (->retro-ioval ~actions)))
-(defmacro dotxn [layers & body]
-  `(retro/dotxn ~layers ~@body))
+(defn path-parts
+  "Given two paths, return a triple of [shared, read, write]. If neither path is a prefix of the
+  other, then nil is returned; otherwise, shared will be the shorter of the two, and whatever is
+  remaining from the longer path will be returned under either read or write (according to whichever
+  of the input arguments was longer)."
+  [read-path write-path]
+  (loop [shared [], read-path read-path, write-path write-path]
+    (cond (empty? read-path) [shared write-path []]
+          (empty? write-path) [shared [] read-path]
+          (not= (first read-path) (first write-path)) nil
+          :else (recur (conj shared (first read-path))
+                       (rest read-path), (rest write-path)))))
 
-(defmacro with-action
-  "Construct a simple retro IOValue that touches exactly one layer.
-
-   The IOValue's :value will be the one you specify, and its :actions will
-   evaluate body with layer-name bound to (an appropriately-revisioned view of)
-   layer-value."
-  [[layer-name layer-value] value & body]
-  `(retro/with-actions ~value
-     {~layer-value [(fn [~layer-name]
-                      ~@body)]}))
+(defn read-wrapper
+  "Create a simple wrap-read function representing a single update to the specified layer, at the
+  specified keyseq, to become (apply f current-value args)."
+  [layer write-keyseq f args]
+  (fn [read]
+    (fn [layer' read-keyseq]
+      (if-let [[read-path update-path get-path]
+               (and (same? layer layer')
+                    (path-parts read-keyseq write-keyseq))]
+        (-> (read layer' read-path)
+            (apply update-in* update-path f args)
+            (get-in get-path))
+        (read layer' read-keyseq)))))
 
 (letfn [(layers-op [layers f]
           (dorun (map f layers)))]
@@ -84,13 +111,6 @@
     [& layers]
     (refuse-readonly layers)
     (layers-op layers layer/truncate!)))
-
-(defn same?
-  "Determine whether two objects are layers using the same storage backend. Useful because = will
-   compare incidentals such as current revision, but you may wish to ignore those."
-  [x y]
-  (and (= (class x) (class y))
-       (layer/same? x y)))
 
 (defn node-id-seq
   "Return a lazy sequence of all node ids in this layer."
@@ -219,6 +239,21 @@
       (:value
        (retro/unsafe-txn [layer]
          (assoc-in-node layer keyseq value)))))
+
+(defn ->retro-ioval
+  "Convert a jiraph IOValue to a retro IOValue."
+  [ioval]
+  (let [actions (ioval get-in-node)]
+    (retro/with-actions nil
+      (reduce (fn [retro-ioval {:keys [layer write]}]
+                (update-in retro-ioval [layer] (fnil conj []) write))
+              {}, actions))))
+
+(def touch retro/touch)
+(defmacro txn [layers actions]
+  `(retro/txn ~layers (->retro-ioval ~actions)))
+(defmacro dotxn [layers & body]
+  `(retro/dotxn ~layers ~@body))
 
 (defn unwrap-layer
   "Return the underlying layer object from a wrapped layer. Throws an exception
