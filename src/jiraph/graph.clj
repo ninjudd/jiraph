@@ -51,9 +51,9 @@
 
 (def touch retro/touch)
 (defmacro txn [layers actions]
-  `(retro/txn ~layers ~actions))
+  `(retro/txn ~layers (->retro-ioval ~actions)))
 (defmacro dotxn [layers & body]
-  `(retro/txn ~layers ~@body))
+  `(retro/dotxn ~layers ~@body))
 
 (defmacro with-action
   "Construct a simple retro IOValue that touches exactly one layer.
