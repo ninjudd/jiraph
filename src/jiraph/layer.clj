@@ -45,7 +45,7 @@
     "Fetch a node from the graph.")
 
   (update-in-node [layer keyseq f args]
-    "Return an IOValue that will update the layer under the given keyseq by calling
+    "Return a jiraph IOValue that will update the layer under the given keyseq by calling
      (apply f current-value args). If keyseq is empty, f must be either assoc or dissoc, in which
      case an entire node will be either destroyed (in the case of dissoc) or added/overwritten (in
      the case of assoc)."))
@@ -178,3 +178,25 @@
   (try (verify-node layer id attrs)
        true
        (catch AssertionError e nil)))
+
+(defn advance-reader
+  "Given a vector of actualized jiraph IOValues and a read function, return a new read function by
+  calling the :wrap-read function of each action."
+  [read actions]
+  (reduce (fn [read wrapper]
+            (wrapper read))
+          read, (map :wrap-read actions)))
+
+(defn read-wrapper
+  "Create a simple wrap-read function representing a single update to the specified layer, at the
+  specified keyseq, to become (apply f current-value args)."
+  [layer write-keyseq f args]
+  (fn [read]
+    (fn [layer' read-keyseq]
+      (if-let [[read-path update-path get-path]
+               (and (same? layer layer')
+                    (path-parts read-keyseq write-keyseq))]
+        (-> (read layer' read-path)
+            (apply update-in* update-path f args)
+            (get-in get-path))
+        (read layer' read-keyseq)))))

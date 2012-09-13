@@ -29,6 +29,26 @@
   (doseq [layer layers]
     (retro/modify! layer)))
 
+(defn compose
+  "Compose a number of jiraph IOValues (functions of read) into a single action."
+  [& fs]
+  (fn [read]
+    (first (reduce (fn [[actions read] f]
+                     (let [more-actions (f read)]
+                       [(into actions more-actions)
+                        (advance-reader read more-actions)]))
+                   [[] read]
+                   fs))))
+
+(defn ->retro-ioval
+  "Convert a jiraph IOValue to a retro IOValue."
+  [ioval]
+  (let [actions (ioval jiraph.graph/get-in-node)]
+    (with-actions nil
+      (reduce (fn [retro-ioval {:keys [layer write]}]
+                (update-in retro-ioval [layer] (fnil conj []) write))
+              {}, actions))))
+
 (def touch retro/touch)
 (defmacro txn [layers actions]
   `(retro/txn ~layers ~actions))
@@ -64,6 +84,13 @@
     [& layers]
     (refuse-readonly layers)
     (layers-op layers layer/truncate!)))
+
+(defn same?
+  "Determine whether two objects are layers using the same storage backend. Useful because = will
+   compare incidentals such as current revision, but you may wish to ignore those."
+  [x y]
+  (and (= (class x) (class y))
+       (layer/same? x y)))
 
 (defn node-id-seq
   "Return a lazy sequence of all node ids in this layer."
