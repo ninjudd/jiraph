@@ -191,6 +191,19 @@
             (wrapper read))
           read, (map :wrap-read actions)))
 
+(defn path-parts
+  "Given two paths, return a triple of [shared, read, write]. If neither path is a prefix of the
+  other, then nil is returned; otherwise, shared will be the shorter of the two, and whatever is
+  remaining from the longer path will be returned under either read or write (according to whichever
+  of the input arguments was longer)."
+  [read-path write-path]
+  (loop [shared [], read-path read-path, write-path write-path]
+    (cond (empty? read-path) [shared write-path []]
+          (empty? write-path) [shared [] read-path]
+          (not= (first read-path) (first write-path)) nil
+          :else (recur (conj shared (first read-path))
+                       (rest read-path), (rest write-path)))))
+
 (defn read-wrapper
   "Create a simple wrap-read function representing a single update to the specified layer, at the
   specified keyseq, to become (apply f current-value args)."
