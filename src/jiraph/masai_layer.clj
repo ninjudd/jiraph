@@ -9,6 +9,7 @@
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            at-revision txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [if-ns adjoin returning map-entry]]
+        [useful.map :only [update-in*]]
         [useful.seq :only [find-with]]
         [useful.state :only [volatile put!]]
         [useful.fn :only [as-fn fix given]]
@@ -82,27 +83,33 @@
               data)
       not-found))
   (update-in-node [this keyseq f args]
-    (if-let [[id & keys] (seq keyseq)]
-      (if (= f (:reduce-fn (write-format this id)))
-        (with-action [layer this] nil
-          (->> (if keys
-                 (assoc-in {} keys attrs)
-                 attrs)
-               (encode (:codec (write-format layer id)))
-               (db/append! db (id->str id))))
-        (with-action [layer this] nil
-          (let [old (graph/get-node layer id)
-                new (apply update-in* old keys f args)]
-            (overwrite layer id new))))
-      (condp = f
-        assoc (let [[id attrs] (assert-length 2 args)]
-                (with-action [layer this] nil
-                  (overwrite layer id attrs)))
-        dissoc (let [[id] (assert-length 1 args)]
-                 (with-action [layer this] nil
-                   (db/delete! db (id->str))))
-        (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
-                                                  f))))))
+    (letfn [(ioval [write]
+              (fn [read]
+                [{:write (write read) :wrap-read (graph/read-wrapper this keyseq f args)
+                  :layer this :keyseq keyseq :f f :args args}]))]
+      (if-let [[id & keys] (seq keyseq)]
+        (ioval (if (= f (:reduce-fn (write-format this id)))
+                 (let [[attrs] (assert-length 1 args)]
+                   (constantly (fn [layer]
+                                 (->> (if keys
+                                        (assoc-in {} keys attrs)
+                                        attrs)
+                                      (encode (:codec (write-format layer id)))
+                                      (db/append! db (id->str id))))))
+                 (fn write [read]
+                   (fn [layer]
+                     (let [old (read layer id)
+                           new (apply update-in* old keys f args)]
+                       (overwrite layer id new))))))
+        (condp = f
+          assoc (let [[id attrs] (assert-length 2 args)]
+                  (ioval (constantly (fn [layer]
+                                       (overwrite layer id attrs)))))
+          dissoc (let [[id] (assert-length 1 args)]
+                   (ioval (constantly (fn [layer]
+                                        (db/delete! db (id->str))))))
+          (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
+                                                    f)))))))
 
   Optimized
   (query-fn [this keyseq not-found f] nil)
