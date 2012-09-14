@@ -341,7 +341,7 @@
           dissoc (let [node-id (first args)] ;; TODO don't think this is right, but copying from old
                    ;; version for now.
                    (ioval (fn [layer']
-                            (db/delete! node-id))))
+                            (db/delete! db node-id))))
           assoc (recur [(first args)] (constantly (second args)) nil)
           (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
                                                     f)))))))
