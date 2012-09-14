@@ -98,7 +98,7 @@
                                       (db/append! db (id->str id))))))
                  (fn write [read]
                    (fn [layer]
-                     (let [old (read layer id)
+                     (let [old (read layer [id])
                            new (apply update-in* old keys f args)]
                        (overwrite layer id new))))))
         (condp = f

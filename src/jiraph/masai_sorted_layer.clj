@@ -226,8 +226,7 @@
             (let [db  (:db layer)
                   key (keyseq->str keyseq)
                   arg (first args)] ;; great, we can optimize it
-              (with-action [layer' layer] nil
-                ;; we didn't read the old data, so we don't know the new data
+              (fn [layer']
                 (let [[_ format] (first (write-layout layer' id))]
                   (db/append! db key
                               (encode (:codec format) arg)))))))))))
@@ -255,7 +254,7 @@
                                   [db/append! :reset]
                                   [db/put! :codec])
         writer (partial write-mode db)]
-    (with-action [layer' layer] nil
+    (fn [layer']
       (letfn [(sublayout [kind]
                 (subnode-formats (kind layer' id) keys))]
         (let [read (sublayout read-layout)
@@ -298,7 +297,7 @@
           [id & keys] keyseq
           writer (partial db/append! db)
           arg (first args)]
-      (with-action [layer' layer] nil
+      (fn [layer']
         (write-paths! layer' writer (subnode-formats (write-layout layer' id) keys) id
                       (assoc-in {} keyseq arg)
                       false :codec))))) ;; don't include deletions
@@ -329,19 +328,23 @@
         not-found
         (get node id))))
   (update-in-node [this keyseq f args]
-    (if-let [[id & keys] (seq keyseq)]
-      (let [layout (subnode-formats (read-layout this id) keys)]
-        (assert (seq layout) "No codecs to write with")
-        (some #(% this layout keyseq f args)
-              [specialized-writer, optimized-writer, simple-writer]))
-      (condp = f
-        dissoc (with-action [layer' layer] nil
-                 (let [node-id (first args)] ;; TODO don't think this is right, but copying from old
-                                             ;; version for now.
-                   (db/delete! node-id)))
-        assoc (recur [(first args)] (constantly (second args)) nil)
-        (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
-                                                  f))))))
+    (letfn [(ioval [write]
+              (fn [read]
+                [{:write write :wrap-read (graph/read-wrapper this keyseq f args)
+                  :layer this :keyseq keyseq :f f :args args}]))]
+      (if-let [[id & keys] (seq keyseq)]
+        (let [layout (subnode-formats (read-layout this id) keys)]
+          (assert (seq layout) "No codecs to write with")
+          (ioval (some #(% this layout keyseq f args)
+                       [specialized-writer, optimized-writer, simple-writer])))
+        (condp = f
+          dissoc (let [node-id (first args)] ;; TODO don't think this is right, but copying from old
+                   ;; version for now.
+                   (ioval (fn [layer']
+                            (db/delete! node-id))))
+          assoc (recur [(first args)] (constantly (second args)) nil)
+          (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
+                                                    f)))))))
 
   Optimized
   (query-fn [this keyseq not-found f]
