@@ -14,13 +14,12 @@
                  [ego "0.1.7"]
                  [slingshot "0.10.3"]
                  [org.clojure/core.match "0.2.0-alpha9"]
-                 [protobuf "0.6.0-beta18"]]
-  :plugins [[lein-protobuf "0.2.0-beta3"]]
+                 [protobuf "0.6.2-alpha1"]]
+  :plugins [[lein-protobuf "0.2.0"]]
   :profiles {:1.5 {:dependencies [[org.clojure/clojure "1.5.0-master-SNAPSHOT"]]}
              :dev {:dependencies [[tokyocabinet "1.24.4"]
                                   [unk "0.9.3"]]}}
   :aliases {"testall" ["with-profile" "dev,default:dev,1.5,default" "test"]}
   :repositories {"sonatype-snapshots" {:url "http://oss.sonatype.org/content/repositories/snapshots"
                                        :snapshots true
-                                       :releases {:checksum :fail :update :always}}}
-  :hooks [leiningen.protobuf])
+                                       :releases {:checksum :fail :update :always}}})
