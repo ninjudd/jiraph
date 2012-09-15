@@ -3,7 +3,7 @@
          :only [Enumerate Optimized Historical Basic Layer ChangeLog Schema
                 node-id-seq]]
         [jiraph.formats :only [special-codec]]
-        [jiraph.utils :only [meta-id meta-id? base-id id->str meta-str?]]
+        [jiraph.utils :only [id->str meta-str? assert-length]]
         [jiraph.codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
@@ -55,14 +55,6 @@
                 (encode codec data)))]
       ((if append-only? db/append! db/put!)
        db (id->str id) (bytes attrs)))))
-
-(defn- assert-length [len coll]
-  (if (zero? len)
-    (assert (empty? coll) "Too many elements")
-    (let [last-expected (nthnext coll (dec len))]
-      (assert last-expected "Too few elements")
-      (assert (not (next last-expected)) "Too many elements")))
-  coll)
 
 (defrecord MasaiLayer [db revision max-written-revision append-only? format-fn]
   Object

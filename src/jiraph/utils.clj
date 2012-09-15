@@ -66,3 +66,11 @@
     (match keyseq
       [_]          [:deleted]
       [_ :deleted] [])))
+
+(defn assert-length [len coll]
+  (if (zero? len)
+    (assert (empty? coll) "Too many elements")
+    (let [last-expected (nthnext coll (dec len))]
+      (assert last-expected "Too few elements")
+      (assert (not (next last-expected)) "Too many elements")))
+  coll)
