@@ -1,8 +1,8 @@
 (ns jiraph.typed
   (:use [jiraph.core :only [layer]]
-        [jiraph.layer :only [Basic Optimized Schema get-node schema update-fn assoc-node]]
-        [jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
-        [jiraph.wrapped-layer :only [defwrapped]]
+        [jiraph.layer :only [Basic Optimized Schema get-node schema update-in-node]]
+        [jiraph.utils :only [assert-length edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
+        [jiraph.wrapped-layer :only [defwrapped wrap-forwarded-reads]]
         [retro.core :only [dotxn]]
         [clojure.core.match :only [match]]
         [useful.map :only [map-vals-with-keys update update-in*]]
@@ -10,7 +10,7 @@
         [useful.utils :only [adjoin]]
         [useful.experimental :only [prefix-lookup]]
         [useful.datatypes :only [assoc-record]])
-  (:require [jiraph.graph :as graph]))
+  (:require [jiraph.layer :as layer]))
 
 (defn edge-validator [layer id]
   (or ((:type-lookup layer) id)
@@ -18,10 +18,11 @@
                                                 id (pr-str layer))))))
 
 (defn validate-edges [layer from-id to-ids valid?]
-  (when-let [broken-edges (seq (remove valid? to-ids))]
-    (throw (IllegalArgumentException.
-            (format "%s can't have edges to %s on layer %s"
-                    from-id (pr-str broken-edges) (pr-str layer))))))
+  (let [valid? (edge-validator layer from-id)]
+    (when-let [broken-edges (seq (remove valid? to-ids))]
+      (throw (IllegalArgumentException.
+              (format "%s can't have edges to %s on layer %s"
+                      from-id (pr-str broken-edges) (pr-str layer)))))))
 
 ;; the multimap is for bookkeeping/reference only; the type-lookup function is derived from it at
 ;; construction time, and is always used instead because it is much faster. type-lookup is a
@@ -30,28 +31,26 @@
 ;; destination node for an edge from the first node-id.
 (defwrapped TypedLayer [layer type-multimap type-lookup]
   Basic
-  (assoc-node [this id attrs]
-    (validate-edges this id (keys (:edges attrs)) (edge-validator this id))
-    (assoc-node layer id attrs))
-
-  Optimized
-  (update-fn [this keyseq f]
-    (when-let [layer-update-fn (update-fn layer keyseq f)]
-      (if (meta-keyseq? keyseq)
-        layer-update-fn
-        (let [from-id (first keyseq)
-              validate-edge (edge-validator this from-id)]
-          (if-let [get-edge-ids (match (rest keyseq)
-                                  ([] :seq) (comp keys :edges)
-                                  ([:edges] :seq) keys
-                                  ([:edges to-id & _] :seq) (constantly [to-id]))]
-            (if-not (= adjoin f)
-              (throw (IllegalArgumentException.
-                      (format "Can't guarantee typing of %s on typed layer" f)))
-              (fn [arg]
-                (validate-edges this from-id (get-edge-ids arg) validate-edge)
-                (layer-update-fn arg)))
-            layer-update-fn)))))
+  (update-in-node [this keyseq f args]
+    (do (if (empty? keyseq)
+          (condp = f
+            dissoc nil
+            assoc (let [[id attrs] (assert-length 2 args)]
+                    (validate-edges this id (keys (:edges attrs))))
+            (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
+                                                      f))))
+          (if-not (#{assoc adjoin} f)
+            (throw (IllegalArgumentException.
+                    (format "Can't guarantee typing of %s on typed layer" f)))
+            (let [from-id (first keyseq)
+                  [attrs] (assert-length 1 args)]
+              (validate-edges this from-id
+                              (match (rest keyseq)
+                                ([] :seq) (keys (:edges attrs))
+                                ([:edges] :seq) (keys attrs)
+                                ([:edges to-id & _] :seq) [to-id])))))
+        (-> (update-in-node layer keyseq f args)
+            (wrap-forwarded-reads this layer))))
 
   Schema
   (schema [this node-id]

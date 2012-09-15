@@ -8,9 +8,8 @@
   (node-subseq    [this cmp start] ())
 
   Basic
-  (get-node    [this id not-found] not-found)
-  (assoc-node      [this id attrs] nil)
-  (dissoc-node           [this id] nil)
+  (get-node [this id not-found] not-found)
+  (update-in-node [this keyseq f] (constantly nil))
 
   Layer
   (open       [this] nil)
@@ -18,6 +17,7 @@
   (sync!      [this] nil)
   (optimize!  [this] nil)
   (truncate!  [this] nil)
+  (same? [this other] true)
 
   Schema
   (schema            [this id] nil)
@@ -34,7 +34,6 @@
 
   Optimized
   (query-fn [this keyseq not-found f] (constantly not-found))
-  (update-fn [this keyseq f] (constantly nil))
 
   OrderedRevisions
   (max-revision [this] Double/POSITIVE_INFINITY)

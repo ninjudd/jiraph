@@ -204,6 +204,11 @@
           not-found
           (merge-nodes merge-layer [id] nodes))))
 
+  Layer
+  (same? [this other]
+    (and (same? layer (:layer other))
+         (same? merge-layer (:merge-layer other))))
+
   Optimized
   (query-fn [this keyseq not-found f]
     (if-let [merge-data (merge-fn merge-layer keyseq f)]

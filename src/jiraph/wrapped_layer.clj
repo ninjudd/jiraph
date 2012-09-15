@@ -4,6 +4,16 @@
         [useful.datatypes :only [assoc-record]]
         [useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
 
+(defn wrap-forwarded-reads [ioval master slave]
+  (fn [read]
+    (update-in (ioval read) [:wrap-read]
+               (fn [wrapper]
+                 (fn [read]
+                   (fn [layer keyseq]
+                     (read (if (same? master layer)
+                             slave, layer)
+                           keyseq)))))))
+
 (defprotocol Wrapped
   "For layers which provide additional functionality by wrapping other layers."
   (unwrap [layer]
@@ -41,13 +51,13 @@
                                                    (node-subseq ~layer-sym cmp# start#)))
 
        Basic
-       (get-node    [this# id# not-found#] (get-node ~layer-sym id# not-found#))
-       (assoc-node  [this# id# attrs#]     (assoc-node ~layer-sym id# attrs#))
-       (dissoc-node [this# id#]            (dissoc-node ~layer-sym id#))
+       (get-node [this# id# not-found#] (get-node ~layer-sym id# not-found#))
+       (update-in-node [this# keyseq# f# args#]
+                       (-> (update-in-node ~layer-sym keyseq# f# args#)
+                           (wrap-forwarded-reads this# ~layer-sym)))
 
        Optimized
        (query-fn  [this# keyseq# not-found# f#] (query-fn ~layer-sym keyseq# not-found# f#))
-       (update-fn [this# keyseq# f#]            (update-fn ~layer-sym keyseq# f#))
 
        Layer
        (open       [this#] (open  ~layer-sym))
