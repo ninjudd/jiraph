@@ -78,16 +78,17 @@
   Optimized
   (query-fn [this keyseq not-found f] nil)
   (update-fn [this keyseq f]
-    (when-let [[id & keys] (seq keyseq)]
-      (let [{:keys [reduce-fn codec]} (format-for this id revision)]
-        (when (= f reduce-fn)
-          (fn [attrs]
-            (->> (if keys
-                   (assoc-in {} keys attrs)
-                   attrs)
-                 (encode codec)
-                 (db/append! db (id->str id)))
-            {:old nil :new attrs})))))
+    (when append-only?
+      (when-let [[id & keys] (seq keyseq)]
+        (let [{:keys [reduce-fn codec]} (format-for this id revision)]
+          (when (= f reduce-fn)
+            (fn [attrs]
+              (->> (if keys
+                     (assoc-in {} keys attrs)
+                     attrs)
+                   (encode codec)
+                   (db/append! db (id->str id)))
+              {:old nil :new attrs}))))))
 
   Layer
   (open [this]
