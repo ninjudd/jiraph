@@ -9,7 +9,7 @@
 
   Basic
   (get-node [this id not-found] not-found)
-  (update-in-node [this keyseq f] (constantly nil))
+  (update-in-node [this keyseq f args] (constantly nil))
 
   Layer
   (open       [this] nil)

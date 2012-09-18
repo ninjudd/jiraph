@@ -1,5 +1,5 @@
 (ns jiraph.merge
-  (:use [jiraph.layer :only [Basic Optimized query-fn get-node]]
+  (:use [jiraph.layer :only [Layer Basic Optimized query-fn get-node]]
         [jiraph.core :only [layer]]
         [jiraph.utils :only [meta-keyseq? meta-id? meta-id base-id edges-keyseq]]
         [jiraph.wrapped-layer :only [NodeFilter defwrapped]]
@@ -206,8 +206,8 @@
 
   Layer
   (same? [this other]
-    (and (same? layer (:layer other))
-         (same? merge-layer (:merge-layer other))))
+    (and (graph/same? layer (:layer other))
+         (graph/same? merge-layer (:merge-layer other))))
 
   Optimized
   (query-fn [this keyseq not-found f]
