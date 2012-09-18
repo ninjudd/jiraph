@@ -1,7 +1,7 @@
 (ns jiraph.masai-sorted-layer
   (:use [jiraph.layer :as layer
          :only [SortedEnumerate Optimized Basic Layer ChangeLog Schema node-id-seq]]
-        [jiraph.utils :only [keyseq->str meta-str?]]
+        [jiraph.utils :only [keyseq->str meta-str? assert-length]]
         [jiraph.codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
@@ -328,21 +328,19 @@
         not-found
         (get node id))))
   (update-in-node [this keyseq f args]
-    (letfn [(ioval [write]
-              (fn [read]
-                [{:write write :wrap-read (graph/read-wrapper this keyseq f args)
-                  :layer this :keyseq keyseq :f f :args args}]))]
+    (let [ioval (graph/simple-ioval this keyseq f args)]
       (if-let [[id & keys] (seq keyseq)]
         (let [layout (subnode-formats (read-layout this id) keys)]
           (assert (seq layout) "No codecs to write with")
           (ioval (some #(% this layout keyseq f args)
                        [specialized-writer, optimized-writer, simple-writer])))
         (condp = f
-          dissoc (let [node-id (first args)] ;; TODO don't think this is right, but copying from old
+          dissoc (let [[node-id] (assert-length 1 args)] ;; TODO don't think this is right, but copying from old
                    ;; version for now.
                    (ioval (fn [layer']
                             (db/delete! db node-id))))
-          assoc (recur [(first args)] (constantly (second args)) nil)
+          assoc (let [[node-id attrs] (assert-length 2 args)]
+                  (recur [node-id] (constantly attrs) nil))
           (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
                                                     f)))))))
 

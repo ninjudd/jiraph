@@ -93,6 +93,21 @@
             (get-in get-path))
         (read layer' read-keyseq)))))
 
+(defn simple-ioval
+  "Given the arguments to update-in-node, return a function for creating a basic jiraph iovalue.
+   The returned function expects to be passed a write function for use in the real retro iovalue.
+
+   That's a little wordy and hard to keep track of; below is a sort of pseudo type-signature. It's
+   still a bit hard to follow, but is at least clear about what functions are called when and what
+   args they want.
+
+   (Layer -> keyseq -> f -> args -> (write -> (read -> ioval)))"
+  [layer keyseq f args]
+  (fn [write]
+    (fn [read]
+      [{:write write :wrap-read (read-wrapper layer keyseq f args)
+        :layer layer :keyseq keyseq :f f :args args}])))
+
 (letfn [(layers-op [layers f]
           (dorun (map f layers)))]
 
