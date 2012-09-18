@@ -203,6 +203,7 @@
         (if (empty? nodes)
           not-found
           (merge-nodes merge-layer [id] nodes))))
+  ;; TODO needs update-in-node to set a read-wrapper that knows about the merge
 
   Layer
   (same? [this other]

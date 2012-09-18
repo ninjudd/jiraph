@@ -82,6 +82,7 @@
       (if (= node sentinel)
         not-found
         (mark-deleted delete-layer [id] node))))
+  ;; TODO needs update-in-node to set a read-wrapper that knows about the delete
 
   Optimized
   (query-fn [this keyseq not-found f]
