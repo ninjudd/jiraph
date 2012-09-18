@@ -9,10 +9,10 @@
             [jiraph.masai-sorted-layer :as sorted]))
 
 (let [masai  masai/make-temp
-      sorted #(sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]]
-                                                                    [[]]])
-                                                       (sorted/wrap-default-formats)
-                                                       (sorted/wrap-revisioned))})]
+      sorted #(sorted/make-temp :layout-fn (-> (constantly [[[:edges :*]]
+                                                            [[]]])
+                                               (sorted/wrap-default-formats)
+                                               (sorted/wrap-revisioned)))]
   (defn make-graph []
     {:masai  (masai)
      :sorted (sorted)}))

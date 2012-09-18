@@ -35,7 +35,7 @@
 (deftest typed-layers
   (let [base (revisioned-clojure-format adjoin)
         id "person-1"]
-    (masai/with-temp-layer [base-layer :format-fns {:node base}]
+    (masai/with-temp-layer [base-layer :format-fn base]
       (let [rev (vec (for [r (range 10)]
                        (at-revision base-layer r)))]
         (txn [(rev 0)]  ;; read 0, write 1
@@ -94,7 +94,7 @@
                                                      (pr-str b) (pr-str a)))))]
     (with-redefs [adjoin throwing-adjoin]
       (let [master (masai/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                               :format-fns {:node (proto/protobuf-format Test$Foo)})
+                               :format-fn (proto/protobuf-format Test$Foo))
             rev (vec (for [r (range 5)]
                        (at-revision master r)))
             before {:bar 5, :tag-set #{"a" "b"}}
