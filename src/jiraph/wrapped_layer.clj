@@ -6,7 +6,7 @@
 
 (defn wrap-forwarded-reads [ioval master slave]
   (fn [read]
-    (update-in (ioval read) [:wrap-read]
+    (update-in (ioval read) [0 :wrap-read]
                (fn [wrapper]
                  (fn [read]
                    (fn [layer keyseq]
