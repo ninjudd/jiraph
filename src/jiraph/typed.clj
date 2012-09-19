@@ -16,7 +16,7 @@
       (throw (IllegalArgumentException. (format "%s is not a valid node on layer %s"
                                                 id (pr-str layer))))))
 
-(defn validate-edges [layer from-id to-ids valid?]
+(defn validate-edges [layer from-id to-ids]
   (let [valid? (edge-validator layer from-id)]
     (when-let [broken-edges (seq (remove valid? to-ids))]
       (throw (IllegalArgumentException.
