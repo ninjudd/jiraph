@@ -197,64 +197,6 @@
   [layer id to-id & [not-found]]
   (get-in-edge layer [id to-id] not-found))
 
-(defn update-in-node
-  "Return an IOValue that will update the subnode at keyseq by calling function
-  f with the old value and any supplied args."
-  [layer keyseq f & args]
-  (layer/update-in-node layer keyseq f args))
-
-(defn update-in-node!
-  "Mutable version of update-in-node: applies changes immediately, at current
-  revision."
-  [layer keyseq f & args]
-  (:value
-   (retro/unsafe-txn [layer]
-     (apply update-in-node layer keyseq f args))))
-
-(do (defn update-node
-      "Update a node by calling function f with the old value and any supplied args."
-      [layer id f & args]
-      (apply update-in-node layer [id] f args))
-    (defn update-node!
-      "Mutable version of update-node: applies changes immediately, at current revision."
-      [layer id f & args]
-      (:value
-       (retro/unsafe-txn [layer]
-         (apply update-node layer id f args)))))
-
-(do (defn dissoc-node
-      "Remove a node from a layer."
-      [layer id]
-      (update-in-node layer [] dissoc id))
-    (defn dissoc-node!
-      "Mutable version of dissoc-node: changes are applied immediately, at the current revision."
-      [layer id]
-      (:value
-       (retro/unsafe-txn [layer]
-         (dissoc-node layer id)))))
-
-(do (defn assoc-node
-      "Create or set a node with the given id and value."
-      [layer id value]
-      (update-in-node layer [] assoc id value))
-    (defn assoc-node!
-      "Mutable version of assoc-node: changes are applied immediately, at the current revision."
-      [layer id value]
-      (:value
-       (retro/unsafe-txn [layer]
-         (assoc-node layer id value)))))
-
-(do (defn assoc-in-node
-      "Set attributes inside of a node."
-      [layer keyseq value]
-      (update-in-node layer (butlast keyseq) assoc (last keyseq) value))
-    (defn assoc-in-node!
-      "Mutable version of assoc-in-node: changes are applied immediately, at the current revision."
-      [layer keyseq value]
-      (:value
-       (retro/unsafe-txn [layer]
-         (assoc-in-node layer keyseq value)))))
-
 (defn ->retro-ioval
   "Convert a jiraph IOValue to a retro IOValue."
   [ioval]
@@ -265,10 +207,61 @@
               {}, actions))))
 
 (def touch retro/touch)
-(defmacro txn [layers actions]
-  `(retro/txn ~layers (->retro-ioval ~actions)))
+(defmacro txn [actions]
+  `(retro/txn (->retro-ioval ~actions)))
+(defmacro unsafe-txn [actions]
+  `(retro/unsafe-txn (->retro-ioval ~actions)))
 (defmacro dotxn [layers & body]
   `(retro/dotxn ~layers ~@body))
+
+(defn update-in-node
+  "Return an IOValue that will update the subnode at keyseq by calling function
+  f with the old value and any supplied args."
+  [layer keyseq f & args]
+  (layer/update-in-node layer keyseq f args))
+
+(defn update-in-node!
+  "Mutable version of update-in-node: applies changes immediately, at current
+  revision."
+  [layer keyseq f & args]
+  (unsafe-txn
+   (apply update-in-node layer keyseq f args)))
+
+(do (defn update-node
+      "Update a node by calling function f with the old value and any supplied args."
+      [layer id f & args]
+      (apply update-in-node layer [id] f args))
+    (defn update-node!
+      "Mutable version of update-node: applies changes immediately, at current revision."
+      [layer id f & args]
+      (unsafe-txn (apply update-node layer id f args))))
+
+(do (defn dissoc-node
+      "Remove a node from a layer."
+      [layer id]
+      (update-in-node layer [] dissoc id))
+    (defn dissoc-node!
+      "Mutable version of dissoc-node: changes are applied immediately, at the current revision."
+      [layer id]
+      (unsafe-txn (dissoc-node layer id))))
+
+(do (defn assoc-node
+      "Create or set a node with the given id and value."
+      [layer id value]
+      (update-in-node layer [] assoc id value))
+    (defn assoc-node!
+      "Mutable version of assoc-node: changes are applied immediately, at the current revision."
+      [layer id value]
+      (unsafe-txn (assoc-node layer id value))))
+
+(do (defn assoc-in-node
+      "Set attributes inside of a node."
+      [layer keyseq value]
+      (update-in-node layer (butlast keyseq) assoc (last keyseq) value))
+    (defn assoc-in-node!
+      "Mutable version of assoc-in-node: changes are applied immediately, at the current revision."
+      [layer keyseq value]
+      (unsafe-txn (assoc-in-node layer keyseq value))))
 
 (defn unwrap-layer
   "Return the underlying layer object from a wrapped layer. Throws an exception

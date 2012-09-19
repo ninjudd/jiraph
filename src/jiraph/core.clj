@@ -65,24 +65,22 @@
      ~@forms))
 
 (defmacro dotxn [layer-name & forms]
-  (let [layer (gensym 'layer)]
-    `(let [name# ~layer-name]
-       (retro/dotxn [(layer name#)]
-         (do ~@forms)))))
+  `(graph/dotxn [(layer ~layer-name)]
+     (do ~@forms)))
 
-(defmacro txn [layer-name actions]
-  `(retro/txn [(layer ~layer-name)]
-     ~actions))
+(macro-do [fname]
+  (let [impl (symbol "jiraph.graph" (name fname))]
+    `(defmacro ~fname ~'[actions]
+       (list '~impl ~'actions)))
+  txn* txn
+  unsafe-txn* unsafe-txn)
 
 (defmacro txn-> [layer-name & forms]
   (let [name (gensym 'name)]
-    `(let [~name ~layer-name
-           layer# (layer ~name)]
-       (:value
-        (retro/txn [layer#]
-          (retro/compose ~@(for [form forms]
-                             `(-> ~name ~form))
-                         (retro/with-actions ~name nil)))))))
+    `(let [~name ~layer-name]
+       (do (graph/txn (graph/compose ~@(for [form forms]
+                                         `(-> ~name ~form))))
+           ~name))))
 
 (letfn [(symbol [& args]
           (apply clojure.core/symbol (map name args)))]

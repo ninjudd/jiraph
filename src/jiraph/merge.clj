@@ -1,6 +1,6 @@
 (ns jiraph.merge
   (:use [jiraph.layer :only [Layer Basic Optimized query-fn get-node]]
-        [jiraph.core :only [layer]]
+        [jiraph.core :only [layer unsafe-txn]]
         [jiraph.utils :only [meta-keyseq? meta-id? meta-id base-id edges-keyseq]]
         [jiraph.wrapped-layer :only [NodeFilter defwrapped]]
         [useful.map :only [dissoc-in* assoc-in* update-in*]]
@@ -151,7 +151,7 @@
      (merge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (retro/unsafe-txn [merge-layer]
+       (unsafe-txn
          (merge-node merge-layer head-id tail-id)))))
 
 (defn- delete-merges-after
@@ -189,7 +189,7 @@
      (unmerge-node! *default-merge-layer-name* head-id tail-id))
   ([merge-layer head-id tail-id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (retro/unsafe-txn [merge-layer]
+       (unsafe-txn
          (unmerge-node merge-layer head-id tail-id)))))
 
 (def ^{:private true} sentinel (Object.))
