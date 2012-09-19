@@ -12,7 +12,7 @@
 
 (declare node-deleted?)
 
-(def ^{:dynamic true} *default-delete-layer-name* :id)
+(def ^{:dynamic true} *default-delete-layer* :id)
 
 (letfn [(exists?  [delete-layer id exists]  (and exists (not (node-deleted? delete-layer id))))
         (deleted? [delete-layer id deleted] (or deleted (node-deleted? delete-layer id) deleted))]
@@ -40,7 +40,7 @@
 (defn node-deleted?
   "Returns true if the specified node has been deleted."
   ([id]
-     (node-deleted? *default-delete-layer-name* id))
+     (node-deleted? *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (:deleted (graph/get-node delete-layer id)))))
@@ -53,7 +53,7 @@
 (defn delete-node!
   "Mark the specified node as deleted."
   ([id]
-     (delete-node! *default-delete-layer-name* id))
+     (delete-node! *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (unsafe-txn [delete-layer]
@@ -67,7 +67,7 @@
 (defn undelete-node!
   "Mark the specified node as not deleted."
   ([id]
-     (undelete-node! *default-delete-layer-name* id))
+     (undelete-node! *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (unsafe-txn [delete-layer]
