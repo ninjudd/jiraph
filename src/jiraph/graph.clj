@@ -323,7 +323,22 @@
     (-> layer
         (retro/at-revision nil)
         (get-in-node [(meta-id :revision-id)])
-        (or 0))))
+        (or 0))) ;; these guys want a default/permanent sentinel
+
+  layer/Layer
+  ;; default implementation is to not do anything, hoping you do it
+  ;; automatically at reasonable times, or don't need it done at all
+  (open      [layer] nil)
+  (close     [layer] nil)
+  (sync!     [layer] nil)
+  (optimize! [layer] nil)
+
+  ;; we can simulate this for you, pretty inefficiently
+  (truncate! [layer]
+    (unsafe-txn
+     (apply compose
+            (for [id (node-id-seq layer)]
+              (update-in-node layer [] dissoc id))))))
 
 (defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."

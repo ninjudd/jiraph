@@ -107,24 +107,6 @@
     "Return a map from revision number to node data, for each revision that
      affected this node. The map must be sorted, with earliest revisions first."))
 
-;; these guys want a default/permanent sentinel
-(let [sentinel (Object.)]
-  (extend-type Object
-    Layer
-    ;; default implementation is to not do anything, hoping you do it
-    ;; automatically at reasonable times, or don't need it done at all
-    (open      [layer] nil)
-    (close     [layer] nil)
-    (sync!     [layer] nil)
-    (optimize! [layer] nil)
-
-    ;; we can simulate this for you, pretty inefficiently
-    (truncate! [layer]
-      (retro/unsafe-txn [layer]
-        (apply retro/compose
-               (for [id (node-id-seq layer)]
-                 (update-in-node layer [] dissoc id)))))))
-
 (def ^{:doc "A default schema describing a map which contains edges and possibly other keys."}
   edges-schema {:schema {:type :map
                          :fields {:edges {:type :map
