@@ -3,7 +3,6 @@
         [jiraph.layer :only [Basic Optimized Schema get-node schema update-in-node]]
         [jiraph.utils :only [assert-length edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [jiraph.wrapped-layer :only [defwrapped wrap-forwarded-reads]]
-        [retro.core :only [dotxn]]
         [clojure.core.match :only [match]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
