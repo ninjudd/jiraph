@@ -9,8 +9,8 @@
         [useful.utils :only [adjoin verify]]
         [useful.datatypes :only [assoc-record]]
         [ego.core :only [type-key]])
-  (:require [jiraph.graph :as graph]
-            [retro.core :as retro :refer [compose]]))
+  (:require [jiraph.graph :as graph :refer [compose]]
+            [retro.core :as retro]))
 
 (declare merge-ids merge-head merge-position)
 

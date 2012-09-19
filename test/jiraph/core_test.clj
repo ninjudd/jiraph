@@ -2,6 +2,7 @@
   (:use clojure.test jiraph.core
         [useful.utils :only [adjoin]])
   (:require [jiraph.stm-layer :as stm]
+            [jiraph.graph :as graph]
             [jiraph.layer :as layer]
             [retro.core :as retro]
             [jiraph.null-layer :as null]
@@ -240,21 +241,21 @@
 
     (is (zero? (current-revision)))))
 
-;; TODO this is known to be breaking; retro needs a redesign before this can work
 (deftest multi-layer-transactions
   (with-graph (make-graph)
     (letfn [(write [break?]
               (at-revision 100
-                (let [actions (retro/compose (update-in-node :masai ["x" :edges "y" :times]
-                                                             conj 1)
-                                             (update-in-node :sorted ["x" :edges "y" :times]
-                                                             conj 1))]
-                  (let [remaining-actions (txn :sorted actions)]
-                    (is (= [(layer :masai)] (keys (:actions remaining-actions))))
-                    (when break?
-                      (throw (Exception. "ZOMG")))
-                    (let [leftover-actions (txn :masai remaining-actions)]
-                      (is (empty? (:actions leftover-actions))))))))]
+                (let [ioval (graph/->retro-ioval
+                             (graph/compose (update-in-node :masai ["x" :edges "y" :times]
+                                                            conj 1)
+                                            (update-in-node :sorted ["x" :edges "y" :times]
+                                                            conj 1)))]
+                  (retro/txn (update-in ioval [:actions]
+                                  select-keys [(layer :sorted)]))
+                  (when break?
+                    (throw (Exception. "ZOMG")))
+                  (retro/txn (update-in ioval [:actions]
+                                  select-keys [(layer :masai)])))))]
       (are [layer] (nil? (get-node layer "x"))
            :masai :sorted)
 
