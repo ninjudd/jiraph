@@ -46,8 +46,11 @@
 
 (defn delete-node
   "Functional version of delete-node!"
-  [delete-layer id]
-  (graph/update-node delete-layer id adjoin {:deleted true}))
+  ([id]
+     (delete-node *default-delete-layer* id))
+  ([delete-layer id]
+     (let [delete-layer (fix delete-layer keyword? layer)]
+       (graph/update-node delete-layer id adjoin {:deleted true}))))
 
 (defn delete-node!
   "Mark the specified node as deleted."
@@ -60,8 +63,11 @@
 
 (defn undelete-node
   "Functional version of undelete-node!"
-  [delete-layer id]
-  (graph/update-node delete-layer id adjoin {:deleted false}))
+  ([id]
+     (delete-node *default-delete-layer* id))
+  ([delete-layer id]
+     (let [delete-layer (fix delete-layer keyword? layer)]
+       (graph/update-node delete-layer id adjoin {:deleted false}))))
 
 (defn undelete-node!
   "Mark the specified node as not deleted."
