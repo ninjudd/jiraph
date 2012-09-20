@@ -6,41 +6,38 @@
             [jiraph.graph :as graph]
             [retro.core :as retro]))
 
-(defwrapped RuminatingLayer [input-layer output-layers trigger]
+(defwrapped RuminatingLayer [input-layer output-layers write]
   layer/Basic
-  (assoc-node! [this id attrs]
-    (let [old (graph/get-node input-layer id)]
-      (trigger (graph/assoc-node! input-layer id attrs))))
-  (dissoc-node! [this id]
-    (let [old (graph/get-node input-layer id)]
-      (trigger (graph/dissoc-node! input-layer id))))
+  (update-in-node [this keyseq f args]
+    (-> (let [rev (current-revision this)]
+          (write (at-revision input-layer rev)
+                 (for [[name layer] output-layers]
+                   (at-revision layer rev))
+                 keyseq f args))
+        (wrap-forwarded-reads this input-layer)))
 
-  layer/Optimized
-  (update-fn [this keyseq f]
-    (fn [& args]
-      (trigger (apply graph/update-in-node! input-layer keyseq f args))))
-
-  layer/Preferences
-  (manage-incoming? [this] false)
-  (manage-changelog? [this] false)
-  (single-edge? [this] false)
+  Associate
+  (associations [this]
+    (map first output-layers))
+  (associated-layer [this association]
+    (first (for [[name layer] output-layers
+                 :when (= name association)]
+             (at-revision layer (current-revision this)))))
 
   retro/Transactional
   (txn-begin! [this]
     (returning (retro/txn-begin! input-layer)
-      (doseq [layer output-layers]
+      (doseq [[name layer] output-layers]
         (retro/txn-begin! layer))))
   (txn-commit! [this]
-    (doseq [layer (rseq output-layers)]
+    (doseq [[name layer] (rseq output-layers)]
       (retro/txn-commit! layer))
     (retro/txn-commit! input-layer))
   (txn-rollback! [this]
-    (doseq [layer (rseq output-layers)]
+    (doseq [[name layer] (rseq output-layers)]
       (retro/txn-rollback! layer))
     (retro/txn-rollback! input-layer)))
 
 ;; trigger will be called once per write, passed a map with keys :keyseq, :old, and :new
-(defn make [input outputs trigger]
-  (RuminatingLayer. input (vec outputs)
-                    (fn [change]
-                      (doto change (trigger)))))
+(defn make [input outputs write]
+  (RuminatingLayer. input (vec outputs) write))
