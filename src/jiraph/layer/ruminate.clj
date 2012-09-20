@@ -4,7 +4,8 @@
         [useful.utils :only [returning adjoin]])
   (:require [jiraph.layer :as layer]
             [jiraph.graph :as graph]
-            [retro.core :as retro]))
+            [retro.core :as retro :refer [at-revision current-revision]]
+))
 
 (defwrapped RuminatingLayer [input-layer output-layers write]
   layer/Basic
