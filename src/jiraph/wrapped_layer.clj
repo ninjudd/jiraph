@@ -19,9 +19,24 @@
   (unwrap [layer]
     "Provide access to the underlying layer."))
 
+(defprotocol Associate
+  (associations [layer]
+    "Return the names of all the associations that this layer has, ie those for
+    which (associated-layer l name) would return non-nil.")
+  (associated-layer [layer association]
+    "Find a layer which is related in some way to this one. For example, pass :incoming to get the
+    layer (if any) on which incoming edges from this layer are stored."))
+
 (defprotocol NodeFilter
   "Implement this to get automatic filtering of nodes and ids in node-[id-]seq."
   (keep-node? [layer id]))
+
+(extend-type Object
+  Associate
+  (associations [this]
+    nil)
+  (associated-layer [this association]
+    nil))
 
 (defn default-specs [layer-sym]
   (let [layer-key (keyword layer-sym)]
