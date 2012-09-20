@@ -105,7 +105,7 @@
   Associate
   (associations [this]
     [:delete])
-  (associations [this association]
+  (associated-layer [this association]
     ({:delete (at-revision delete-layer (current-revision this))} association)))
 
 (defn deletable-layer [layer delete-layer]
