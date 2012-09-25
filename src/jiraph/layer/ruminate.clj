@@ -4,7 +4,7 @@
         [jiraph.utils :only [assert-length]]
         [useful.utils :only [returning adjoin]]
         [useful.map :only [assoc-in*]])
-  (:require [jiraph.layer :as layer]
+  (:require [jiraph.layer :as layer :refer [dispatch-update]]
             [jiraph.graph :as graph]
             [retro.core :as retro :refer [at-revision current-revision]]))
 
@@ -40,22 +40,11 @@
       (retro/txn-rollback! layer))
     (retro/txn-rollback! input-layer)))
 
-;;  will be called once per write, passed a map with keys :keyseq, :old, and :new
+;; write will be called once per update, passed args like: (write input-layer [output1 output2...]
+;; keyseq f args) It should return a jiraph io-value (a function of read; see update-in-node's
+;; contract)
 (defn make [input outputs write]
   (RuminatingLayer. input (vec outputs) write))
-
-;; TODO needs better name
-(defn dispatch-update [keyseq f args assoc-fn dissoc-fn update-fn]
-  (if (empty? keyseq)
-    (condp = f
-      assoc (let [[id value] (assert-length 2 args)]
-              (assoc-fn id value))
-      dissoc (let [[id] (assert-length 1 args)]
-               (dissoc-fn id))
-      (throw (IllegalArgumentException.
-              (format "Can't perform function %s at top level"
-                      f))))
-    (update-fn (first keyseq) (rest keyseq))))
 
 ;; TODO what to do about edges that have more than just deleted on them? we can't use was-present
 (defn changed-edges [old-edges new-edges]

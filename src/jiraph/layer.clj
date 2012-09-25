@@ -1,6 +1,7 @@
 (ns jiraph.layer
   (:use [useful.utils :only [adjoin map-entry]]
-        [clojure.stacktrace :only [print-trace-element]])
+        [clojure.stacktrace :only [print-trace-element]]
+        [jiraph.utils :only [assert-length]])
   (:require [retro.core :as retro])
   (:import (java.util Map$Entry)))
 
@@ -164,3 +165,15 @@
   (try (verify-node layer id attrs)
        true
        (catch AssertionError e nil)))
+
+(defn dispatch-update [keyseq f args assoc-fn dissoc-fn update-fn]
+  (if (empty? keyseq)
+    (condp = f
+      assoc (let [[id value] (assert-length 2 args)]
+              (assoc-fn id value))
+      dissoc (let [[id] (assert-length 1 args)]
+               (dissoc-fn id))
+      (throw (IllegalArgumentException.
+              (format "Can't perform function %s at top level"
+                      f))))
+    (update-fn (first keyseq) (rest keyseq))))
