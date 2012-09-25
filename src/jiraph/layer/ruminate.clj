@@ -97,6 +97,6 @@ true/false."
                 (into source-actions
                       (for [[to-id edge] (changed-edges old-edges new-edges)
                             :let [update (graph/update-in-node incoming [to-id :edges from-id]
-                                                               adjoin edge)]
+                                                               adjoin (select-keys edge [:deleted]))]
                             action (update read')]
                         action))))))))
