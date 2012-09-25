@@ -1,7 +1,9 @@
 (ns jiraph.layer.ruminate
   (:use jiraph.wrapped-layer
         useful.debug
-        [useful.utils :only [returning adjoin]])
+        [jiraph.utils :only [assert-length]]
+        [useful.utils :only [returning adjoin]]
+        [useful.map :only [assoc-in*]])
   (:require [jiraph.layer :as layer]
             [jiraph.graph :as graph]
             [retro.core :as retro :refer [at-revision current-revision]]))
@@ -75,11 +77,11 @@
 (defn incoming [outgoing-layer incoming-layer]
   (make outgoing-layer {:incoming incoming-layer}
         (fn [outgoing [incoming] keyseq f args]
-          (let [source-update (apply update-in-node outgoing keyseq f args)]
+          (let [source-update (apply graph/update-in-node outgoing keyseq f args)]
             (fn [read]
               (let [ ;; TODO is there an easy/useful way to pull out the first two bindings?
                     source-actions (source-update read)
-                    read' (advance-reader read source-actions)
+                    read' (graph/advance-reader read source-actions)
                     [read-old read-new] (for [read [read read']]
                                           (fn [id]
                                             (read outgoing-layer [id :edges])))
@@ -99,7 +101,7 @@
                 (into source-actions
                       (for [[to-id edge] (changed-edges old-edges new-edges)
                             ;; TODO accept transform function from outgoing->incoming edge
-                            :let [update (update-in-node incoming [to-id :edges from-id]
-                                                         adjoin edge)]
+                            :let [update (graph/update-in-node incoming [to-id :edges from-id]
+                                                               adjoin edge)]
                             action (update read')]
                         action))))))))
