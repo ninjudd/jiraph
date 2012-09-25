@@ -76,8 +76,7 @@ true/false."
         (fn [outgoing [incoming] keyseq f args]
           (let [source-update (apply graph/update-in-node outgoing keyseq f args)]
             (fn [read]
-              (let [ ;; TODO is there an easy/useful way to pull out the first two bindings?
-                    source-actions (source-update read)
+              (let [source-actions (source-update read)
                     read' (graph/advance-reader read source-actions)
                     [read-old read-new] (for [read [read read']]
                                           (fn [id]
@@ -97,7 +96,6 @@ true/false."
                                                [(read-old id) (read-new id)]))))]
                 (into source-actions
                       (for [[to-id edge] (changed-edges old-edges new-edges)
-                            ;; TODO accept transform function from outgoing->incoming edge
                             :let [update (graph/update-in-node incoming [to-id :edges from-id]
                                                                adjoin edge)]
                             action (update read')]
