@@ -58,12 +58,20 @@
                 (assoc-in* edges [edge-id :deleted] was-present))))
           new-edges old-edges))
 
-(defn edges-map [keys val]
+(defn edges-map
+  "Given a keyseq (not including a node-id, and possibly empty) and a value at that keyseq,
+   returns the the :edges attribute of the value, or {} if the keyseq does not match :edges."
+  [keys val]
   (cond (empty? keys)           (get val :edges {})
         (= :edges (first keys)) (assoc-in* {} (rest keys) val)
         :else                   {}))
 
-(defn incoming [outgoing-layer incoming-layer]
+;; TODO accept transform function from outgoing->incoming edge so we can store other data.
+(defn incoming
+  "Wrap outgoing-layer with a ruminating layer that stores incoming edges on
+incoming-layer. Currently does not support storing any data on incoming edges other than :deleted
+true/false."
+  [outgoing-layer incoming-layer]
   (make outgoing-layer [[:incoming incoming-layer]]
         (fn [outgoing [incoming] keyseq f args]
           (let [source-update (apply graph/update-in-node outgoing keyseq f args)]
