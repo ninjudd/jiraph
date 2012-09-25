@@ -64,7 +64,7 @@
         :else                   {}))
 
 (defn incoming [outgoing-layer incoming-layer]
-  (make outgoing-layer {:incoming incoming-layer}
+  (make outgoing-layer [[:incoming incoming-layer]]
         (fn [outgoing [incoming] keyseq f args]
           (let [source-update (apply graph/update-in-node outgoing keyseq f args)]
             (fn [read]
