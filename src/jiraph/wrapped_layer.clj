@@ -19,11 +19,11 @@
   (unwrap [layer]
     "Provide access to the underlying layer."))
 
-(defprotocol Associate
-  (associations [layer]
-    "Return the names of all the associations that this layer has, ie those for
-    which (associated-layer l name) would return non-nil.")
-  (associated-layer [layer association]
+(defprotocol Parent
+  (children [layer]
+    "Return the names of all the children that this layer has, ie those for
+    which (child l name) would return non-nil.")
+  (child [layer name]
     "Find a layer which is related in some way to this one. For example, pass :incoming to get the
     layer (if any) on which incoming edges from this layer are stored."))
 
@@ -32,10 +32,10 @@
   (keep-node? [layer id]))
 
 (extend-type Object
-  Associate
-  (associations [this]
+  Parent
+  (children [this]
     nil)
-  (associated-layer [this association]
+  (child [this name]
     nil))
 
 (defn default-specs [layer-sym]

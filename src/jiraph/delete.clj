@@ -2,7 +2,7 @@
   (:use [jiraph.core :only [layer]]
         [jiraph.layer :only [Basic Optimized get-node]]
         [jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
-        [jiraph.wrapped-layer :only [NodeFilter Associate defwrapped]]
+        [jiraph.wrapped-layer :only [NodeFilter Parent defwrapped]]
         [retro.core :only [at-revision current-revision]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
@@ -102,11 +102,11 @@
   (keep-node? [this id]
     (not (node-deleted? delete-layer id)))
 
-  Associate
-  (associations [this]
+  Parent
+  (children [this]
     [:delete])
-  (associated-layer [this association]
-    ({:delete (at-revision delete-layer (current-revision this))} association)))
+  (child [this name]
+    ({:delete (at-revision delete-layer (current-revision this))} name)))
 
 (defn deletable-layer [layer delete-layer]
   (DeletableLayer. layer delete-layer))

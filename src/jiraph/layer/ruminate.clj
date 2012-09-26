@@ -18,12 +18,12 @@
                     keyseq f args))
         (wrap-forwarded-reads this input-layer)))
 
-  Associate
-  (associations [this]
+  Parent
+  (children [this]
     (map first output-layers))
-  (associated-layer [this association]
+  (child [this child-name]
     (first (for [[name layer] output-layers
-                 :when (= name association)]
+                 :when (= name child-name)]
              (at-revision layer (current-revision this)))))
 
   retro/Transactional

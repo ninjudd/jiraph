@@ -340,27 +340,27 @@
             (for [id (node-id-seq layer)]
               (update-in-node layer [] dissoc id))))))
 
-(defn ^{:dynamic true} get-incoming
-  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+(defn- get-incoming-edges
+  "Get incoming edges from a node, including whatever data is on the edges."
   [layer id]
-  (let [incoming (layer/get-incoming layer id)]
-    (if (set? incoming)
-      incoming
-      (into (ordered-set)
-            (for [[k v] incoming
-                  :when v]
-              k)))))
+  (when-let [incoming-layer (wrapped/child layer :incoming)]
+    (get-in-node incoming-layer [id :edges])))
 
 (defn ^{:dynamic true} get-incoming-map
   "Return a map of incoming edges, where the value for each key indicates whether an edge is
    incoming from that node."
   [layer id]
-  (let [incoming (layer/get-incoming layer id)]
-    (if (map? incoming)
-      incoming
-      (into (ordered-map)
-            (for [node incoming]
-                 [node true])))))
+  (into (ordered-map)
+        (for [[node-id {:keys [deleted]}] (get-incoming-edges layer id)]
+          [node-id (not deleted)])))
+
+(defn ^{:dynamic true} get-incoming
+  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+  [layer id]
+  (into (ordered-set)
+        (for [[node-id {:keys [deleted]}] (get-incoming-edges layer id)
+              :when (not deleted)]
+          node-id)))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."
