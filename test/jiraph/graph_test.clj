@@ -3,6 +3,7 @@
         [retro.core :as retro :only [at-revision]])
   (:require ;[jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
+            [jiraph.layer.ruminate :as ruminate]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
 
@@ -97,12 +98,16 @@
 
 
 (deftest layer-impls
-  (doseq [layer [;(stm/make)
-                 (sorted/make-temp :layout-fn (-> (constantly [[[:edges :*]], [[]]])
-                                                  (sorted/wrap-default-formats)
-                                                  (sorted/wrap-revisioned)))
-                 (masai/make-temp)]] ;; add more layers as they're implemented
-    (layer/open layer)
-    (try
-      (test-layer layer)
-      (finally (layer/close layer)))))
+  (doseq [layer-fn [#(sorted/make-temp :layout-fn (-> (constantly [[[:edges :*]], [[]]])
+                                                      (sorted/wrap-default-formats)
+                                                      (sorted/wrap-revisioned)))
+                    #(masai/make-temp)]] ;; add more layers as they're implemented
+    (let [base-layer (layer-fn)
+          incoming-storage (layer-fn)
+          layer (ruminate/incoming base-layer incoming-storage)]
+      (layer/open layer)
+      (layer/open incoming-storage)
+      (try
+        (test-layer layer)
+        (finally (layer/close layer)
+                 (layer/close incoming-storage))))))
