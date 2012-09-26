@@ -10,7 +10,6 @@
   (:import java.io.IOException))
 
 (def ^{:dynamic true} *graph*    nil)
-(def ^{:dynamic true} *verbose*  nil)
 (def ^{:dynamic true} *revision* nil)
 
 (defn get-layer [layer-name]
@@ -54,16 +53,6 @@
       (into {} (for [name names]
                  [name (layer name)])))))
 
-(defmacro with-each-layer
-  "Execute forms with layer bound to each layer specified or all layers if layers is empty."
-  [layers & forms]
-  `(doseq [[~'layer-name ~'layer] (as-layer-map ~layers)]
-     (when *verbose*
-       (println (format "%-20s %s"
-                        ~'layer-name
-                        (s/join " " (map pr-str '~forms)))))
-     ~@forms))
-
 (letfn [(symbol [& args]
           (apply clojure.core/symbol (map name args)))]
   (defn- graph-impl [name]
@@ -88,7 +77,7 @@
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   node-id-seq node-seq node-id-subseq node-subseq fields node-valid? verify-node
   get-node find-node query-in-node get-in-node get-edges get-edge
-  touch get-revisions node-history get-incoming get-incoming-map)
+  get-revisions node-history get-incoming get-incoming-map)
 
 ;; these point directly at jiraph.graph functions, without layer-name resolution
 ;; or any indirection, because they can't meaningfully work with layer names but
@@ -105,7 +94,7 @@
     `(def ~(with-meta name (fix-meta meta))
        (fn ~name [& layers#]
          (apply ~varname (vals (as-layer-map layers#))))))
-  sync! optimize! truncate!)
+  open close touch sync! optimize! truncate!)
 
 (defmacro at-revision
   "Execute the given forms with the current revision set to rev. Can be used to mark changes with a
@@ -114,30 +103,22 @@
   `(binding [*revision* ~rev]
       ~@forms))
 
-(defn open! []
-  (with-each-layer []
-    (layer/open layer)))
-
-(defn close! []
-  (with-each-layer []
-    (layer/close layer)))
-
 (defn set-graph! [graph]
   (alter-var-root #'*graph* (constantly graph)))
 
 (defmacro with-graph [graph & forms]
   `(let [graph# ~graph]
      (binding [*graph* graph#]
-       (try (open!)
+       (try (open)
             ~@forms
-            (finally (close!))))))
+            (finally (close))))))
 
 (defmacro with-graph! [graph & forms]
   `(let [graph# *graph*]
      (set-graph! ~graph)
-     (try (open!)
+     (try (open)
           ~@forms
-          (finally (close!)
+          (finally (close)
                    (set-graph! graph#)))))
 
 (defmacro with-transaction

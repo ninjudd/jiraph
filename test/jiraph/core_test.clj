@@ -17,6 +17,12 @@
     {:masai  (masai)
      :sorted (sorted)}))
 
+(defmacro with-each-layer
+  "Execute forms with layer bound to each layer specified or all layers if layers is empty."
+  [layers & forms]
+  `(doseq [[~'layer-name ~'layer] (as-layer-map ~layers)]
+     ~@forms))
+
 (defmacro test-each-layer [layer & forms]
   `(with-each-layer ~layer
      (testing ~'layer-name

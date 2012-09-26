@@ -53,7 +53,20 @@
            layer#))))
 
 (def abort-transaction retro/abort-transaction)
-(def touch retro/touch)
+
+(def touch retro/touch) ; should probably rename this to touch!
+
+(defn open
+  "Open the specified layers."
+  [& layers]
+  (doseq [layer layers]
+    (layer/open layer)))
+
+(defn close
+  "Close the specified layers."
+  [& layers]
+  (doseq [layer layers]
+    (layer/close layer)))
 
 (defn sync!
   "Flush changes for the specified layers to the storage medium."
