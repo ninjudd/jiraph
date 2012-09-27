@@ -107,3 +107,22 @@ true/false."
                      (apply concat)
                      (into source-actions))))))))
 
+(defn top-level-indexer [source index field]
+  (make source [[field index]]
+        (fn [source [index] keyseq f args]
+          (fn [read]
+            (let [source-update ((apply update-in-node source keyseq f args) read)
+                  read' (graph/advance-reader read source-update)]
+              (reduce into source-update
+                      (when-let [id (first (if (seq keyseq)
+                                             (when (or (not (next keyseq))
+                                                       (= field (second keyseq)))
+                                               keyseq)
+                                             args))]
+                        (let [[old-idx new-idx] ((juxt read read') source [id field])]
+                          (when (not= old-idx new-idx)
+                            [((update-in-node index [old-idx] disj id) read)
+                             ((update-in-node index [new-idx] conj id) read)])))))))))
+
+;; - eventually, switch from deleted to exists, but not yet
+;; - until then, copy all data to incoming edges, whether using adjoin or not
