@@ -102,12 +102,8 @@
                                                       (sorted/wrap-default-formats)
                                                       (sorted/wrap-revisioned)))
                     #(masai/make-temp)]] ;; add more layers as they're implemented
-    (let [base-layer (layer-fn)
-          incoming-storage (layer-fn)
-          layer (ruminate/incoming base-layer incoming-storage)]
+    (let [layer (ruminate/incoming (layer-fn) (layer-fn))]
       (layer/open layer)
-      (layer/open incoming-storage)
       (try
         (test-layer layer)
-        (finally (layer/close layer)
-                 (layer/close incoming-storage))))))
+        (finally (layer/close layer))))))

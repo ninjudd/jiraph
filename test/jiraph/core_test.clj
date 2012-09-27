@@ -5,6 +5,7 @@
             [jiraph.graph :as graph]
             [jiraph.layer :as layer]
             [retro.core :as retro]
+            [jiraph.layer.ruminate :as ruminate]
             [jiraph.null-layer :as null]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
@@ -15,11 +16,19 @@
                                                (sorted/wrap-default-formats)
                                                (sorted/wrap-revisioned)))]
   (defn make-graph []
-    {:masai  (masai)
-     :sorted (sorted)}))
+    (let [masai-incoming (masai)
+          sorted-incoming (sorted)]
+      {:masai  (ruminate/incoming (masai) (masai))
+       :sorted (ruminate/incoming (sorted) (sorted))})))
+
+(defmacro each-layer [layers & forms]
+  `(with-each-layer ~(vec (if (empty? layers)
+                            (remove #{:masai.incoming :sorted.incoming} (keys *graph*))
+                            layers))
+     ~@forms))
 
 (defmacro test-each-layer [layer & forms]
-  `(with-each-layer ~layer
+  `(each-layer ~layer
      (testing ~'layer-name
        ~@forms)))
 
@@ -251,11 +260,10 @@
                                             (update-in-node :sorted ["x" :edges "y" :times]
                                                             conj 1)))]
                   (retro/txn (update-in ioval [:actions]
-                                  select-keys [(layer :sorted)]))
+                                  select-keys [(graph/unwrap-all (layer :sorted))]))
                   (when break?
                     (throw (Exception. "ZOMG")))
-                  (retro/txn (update-in ioval [:actions]
-                                  select-keys [(layer :masai)])))))]
+                  (retro/txn ioval))))]
       (are [layer] (nil? (get-node layer "x"))
            :masai :sorted)
 
@@ -284,12 +292,12 @@
     (is (= 0 (current-revision) (uncommitted-revision)))
 
     (at-revision 100
-      (with-each-layer []
+      (each-layer []
         (assoc-node! layer-name :foo {:blah 1})))
 
     (is (= 100 (current-revision) (uncommitted-revision)))
 
-    (with-each-layer [:masai :sorted]
+    (each-layer [:masai :sorted]
       (is (= {:blah 1} (get-node layer-name :foo))))
 
     (is (= 432 (get-node :null :foo 432)))))
