@@ -1,8 +1,5 @@
-.cake
 autodoc
 target
-lib
-classes
 *.jar
 *.class
 *.java
@@ -15,3 +12,4 @@ pom.xml
 .DS_Store
 docs
 .lein*
+*.asc
