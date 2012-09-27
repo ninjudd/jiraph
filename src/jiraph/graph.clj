@@ -32,11 +32,24 @@
   (doseq [layer layers]
     (retro/modify! layer)))
 
-(def touch retro/touch)
 (defmacro txn [layers actions]
   `(retro/txn ~layers ~actions))
 (defmacro dotxn [layers & body]
   `(retro/txn ~layers ~@body))
+
+(def touch retro/touch) ; should probably rename this to touch!
+
+(defn open
+  "Open the specified layers."
+  [& layers]
+  (doseq [layer layers]
+    (layer/open layer)))
+
+(defn close
+  "Close the specified layers."
+  [& layers]
+  (doseq [layer layers]
+    (layer/close layer)))
 
 (defn sync!
   "Flush changes for the specified layers to the storage medium."
