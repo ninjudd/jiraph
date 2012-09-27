@@ -54,7 +54,11 @@
 
 (def abort-transaction retro/abort-transaction)
 
-(def touch retro/touch) ; should probably rename this to touch!
+(defn touch ;; should probably rename this to touch!
+  "Touch the specified layers."
+  [& layers]
+  (doseq [layer layers]
+    (retro/touch layer)))
 
 (defn open
   "Open the specified layers."
