@@ -26,6 +26,14 @@
                  :when (= name child-name)]
              (at-revision layer (current-revision this)))))
 
+  layer/Layer
+  (open [this]
+    (doseq [layer (cons input-layer (map second output-layers))]
+      (layer/open layer)))
+  (close [this]
+    (doseq [layer (cons input-layer (map second output-layers))]
+      (layer/close layer)))
+
   retro/Transactional
   (txn-begin! [this]
     (returning (retro/txn-begin! input-layer)
