@@ -5,7 +5,7 @@
         [useful.utils :only [returning adjoin]]
         [useful.map :only [assoc-in*]])
   (:require [jiraph.layer :as layer :refer [dispatch-update]]
-            [jiraph.graph :as graph]
+            [jiraph.graph :as graph :refer [update-in-node]]
             [retro.core :as retro :refer [at-revision current-revision]]))
 
 (defwrapped RuminatingLayer [input-layer output-layers ruminate]
@@ -82,7 +82,7 @@ true/false."
   [outgoing-layer incoming-layer]
   (make outgoing-layer [[:incoming incoming-layer]]
         (fn [outgoing [incoming] keyseq f args]
-          (let [source-update (apply graph/update-in-node outgoing keyseq f args)]
+          (let [source-update (apply update-in-node outgoing keyseq f args)]
             (fn [read]
               (let [source-actions (source-update read)
                     read' (graph/advance-reader read source-actions)
