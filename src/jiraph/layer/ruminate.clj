@@ -8,6 +8,10 @@
             [jiraph.graph :as graph :refer [update-in-node]]
             [retro.core :as retro :refer [at-revision current-revision]]))
 
+;;; TODO make sure wrapping layers like merge and ruminate use correctly-revisioned versions of
+;;; their child layers (eg ruminate's outputs, and the id layer for merges). Add tests verifying
+;;; that this works, as well.
+
 (defwrapped RuminatingLayer [input-layer output-layers ruminate]
   layer/Basic
   (update-in-node [this keyseq f args]
