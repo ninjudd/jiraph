@@ -88,9 +88,10 @@
       (if-let [[read-path update-path get-path]
                (and (same? layer layer')
                     (path-parts read-keyseq write-keyseq))]
-        (-> (read layer' read-path)
-            (apply update-in* update-path f args)
-            (get-in get-path))
+        (let [update (partial apply update-in*)]
+          (-> (read layer' read-path)
+              (update update-path f args)
+              (get-in get-path)))
         (read layer' read-keyseq)))))
 
 (defn simple-ioval
