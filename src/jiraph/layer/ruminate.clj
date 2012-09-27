@@ -58,18 +58,6 @@
 (defn make [input outputs write]
   (RuminatingLayer. input (vec outputs) write))
 
-;; TODO what to do about edges that have more than just deleted on them? we can't use was-present
-(defn changed-edges [old-edges new-edges]
-  (reduce (fn [edges [edge-id edge]]
-            (let [was-present (not (:deleted edge))
-                  is-present  (boolean
-                               (when-let [e (get edges edge-id)]
-                                 (not (:deleted e))))]
-              (if (= was-present is-present)
-                (dissoc edges edge-id)
-                (assoc-in* edges [edge-id :deleted] was-present))))
-          new-edges old-edges))
-
 (defn edges-map
   "Given a keyseq (not including a node-id, and possibly empty) and a value at that keyseq,
    returns the the :edges attribute of the value, or {} if the keyseq does not match :edges."
@@ -92,23 +80,30 @@ true/false."
                     read' (graph/advance-reader read source-actions)
                     [read-old read-new] (for [read [read read']]
                                           (fn [id]
-                                            (read outgoing-layer [id :edges])))
+                                            (read outgoing-layer [id :edges])))]
+                (->> (if (and (seq keyseq) (= f adjoin))
+                       (let [[from-id & keys] keyseq]
+                         (for [[to-id edge] (apply edges-map keys (assert-length 1 args))]
+                           ((update-in-node incoming [to-id :edges from-id]
+                                            adjoin edge)
+                            read')))
+                       (let [[from-id new-edges] (dispatch-update keyseq f args
+                                                                  (fn [id val] ;; top-level assoc
+                                                                    [id (:edges val)])
+                                                                  (fn [id] ;; top-level dissoc
+                                                                    [id {}])
+                                                                  (fn [id keys] ;; anything else
+                                                                    [id (read-new id)]))
+                             old-edges (read-old from-id)]
+                         (concat (for [[to-id edge] new-edges]
+                                   ((update-in-node incoming [to-id :edges from-id]
+                                                    (constantly edge))
+                                    read'))
+                                 (for [to-id (keys old-edges)
+                                       :when (not (contains? new-edges to-id))]
+                                   ((update-in-node incoming [to-id :edges]
+                                                    dissoc from-id)
+                                    read')))))
+                     (apply concat)
+                     (into source-actions))))))))
 
-                    [from-id old-edges new-edges]
-                    (dispatch-update keyseq f args
-                                     (fn [id val] ;; top-level assoc
-                                       [id (read-old id) (:edges val)])
-                                     (fn [id] ;; top-level dissoc
-                                       [id (read-old id) {}])
-                                     (fn [id keys] ;; anything else
-                                       (cons id
-                                             (if (= f adjoin)
-                                               (let [[val] (assert-length 1 args)]
-                                                 [{} (edges-map keys val)])
-                                               [(read-old id) (read-new id)]))))]
-                (into source-actions
-                      (for [[to-id edge] (changed-edges old-edges new-edges)
-                            :let [update (graph/update-in-node incoming [to-id :edges from-id]
-                                                               adjoin (select-keys edge [:deleted]))]
-                            action (update read')]
-                        action))))))))
