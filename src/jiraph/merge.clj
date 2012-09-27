@@ -1,13 +1,14 @@
 (ns jiraph.merge
   (:use [jiraph.layer :only [Layer Basic Optimized query-fn get-node]]
         [jiraph.core :only [layer unsafe-txn]]
-        [jiraph.utils :only [meta-keyseq? meta-id? meta-id base-id edges-keyseq]]
-        [jiraph.wrapped-layer :only [NodeFilter defwrapped]]
+        [jiraph.utils :only [edges-keyseq]]
+        [jiraph.wrapped-layer :only [NodeFilter Parent children child defwrapped]]
         [useful.map :only [dissoc-in* assoc-in* update-in*]]
         [useful.seq :only [merge-sorted indexed]]
         [useful.fn :only [fix given]]
         [useful.utils :only [adjoin verify]]
         [useful.datatypes :only [assoc-record]]
+        [ordered.set :only [ordered-set]]
         [ego.core :only [type-key]])
   (:require [jiraph.graph :as graph :refer [compose]]
             [retro.core :as retro]))
@@ -17,27 +18,21 @@
 (def ^{:dynamic true} *default-merge-layer-name* :id)
 
 (defn- merge-edges [merge-layer keyseq edges-seq]
-  (let [incoming? (meta-keyseq? keyseq)
-        deleted?  (if incoming? not :deleted)]
-    (letfn [(edge-sort-order [i id edge]
-              (let [pos (merge-position merge-layer id)]
-                (into [(deleted? edge)]
-                      (if incoming?
-                        [pos i]
-                        [i pos]))))]
-      (->> (for [[i edges] (indexed (reverse edges-seq))
-                 [id edge] edges]
-             (let [head-id (or (merge-head merge-layer id) id)]
-               [(edge-sort-order i id edge)
-                [head-id edge]]))
-           (sort-by first #(compare %2 %1))
-           (map second)
-           (reduce (fn [edges [id edge]]
-                     (if (and (deleted? edge)
-                              (get edges id))
-                       edges
-                       (adjoin edges {id edge})))
-                   {})))))
+  (letfn [(edge-sort-order [i id edge]
+            [(:deleted edge) i (merge-position merge-layer id)])]
+    (->> (for [[i edges] (indexed (reverse edges-seq))
+               [id edge] edges]
+           (let [head-id (or (merge-head merge-layer id) id)]
+             [(edge-sort-order i id edge)
+              [head-id edge]]))
+         (sort-by first #(compare %2 %1))
+         (map second)
+         (reduce (fn [edges [id edge]]
+                   (if (and (:deleted edge)
+                            (get edges id))
+                     edges
+                     (adjoin edges {id edge})))
+                 {}))))
 
 (defn- merge-nodes [merge-layer keyseq nodes]
   (if-let [ks (edges-keyseq keyseq)]
@@ -52,13 +47,12 @@
 
 (defn- expand-keyseq-merges
   [merge-layer keyseq]
-  (let [edge-key (if (meta-keyseq? keyseq) :incoming :edges)
-        [from-id attr to-id & tail] keyseq
+  (let [[from-id attr to-id & tail] keyseq
         from-ids (reverse (merge-ids merge-layer from-id))]
-    (if (and to-id (= edge-key attr))
+    (if (and to-id (= :edges attr))
       (for [from-id from-ids
             to-id   (reverse (merge-ids merge-layer to-id))]
-        `(~from-id edge-key ~to-id ~@tail))
+        `(~from-id :edges ~to-id ~@tail))
       (for [from-id from-ids]
         (cons from-id (rest keyseq))))))
 
@@ -75,20 +69,20 @@
   ([id]
      (merge-head *default-merge-layer-name* id))
   ([merge-layer id]
-     (if (meta-id? id)
-       (meta-id (merge-head merge-layer (base-id id)))
-       (let [merge-layer (fix merge-layer keyword? layer)]
-         (:head (graph/get-node merge-layer id))))))
+     (let [merge-layer (fix merge-layer keyword? layer)]
+       (:head (graph/get-node merge-layer id)))))
 
 (defn merged-into
-  "Returns the list of node ids that are merged into a specific node."
+  "Returns a vector of the node ids that are merged into a specific node."
   ([id]
      (merged-into *default-merge-layer-name* id))
   ([merge-layer id]
-     (if (meta-id? id)
-       (map meta-id (merged-into merge-layer (base-id id)))
-       (let [merge-layer (fix merge-layer keyword? layer)]
-         (graph/get-incoming merge-layer id)))))
+     (let [merge-layer (fix merge-layer keyword? layer)]
+       (->> (graph/get-in-node (child merge-layer :incoming) [id :edges])
+            (remove (comp :deleted val))
+            (sort-by (comp :position val))
+            (keys)
+            (into (ordered-set))))))
 
 (defn merge-ids
   "Returns a list of node ids in the merge chain of id. Always starts with the head-id,
@@ -224,6 +218,17 @@
       (let [query (query-fn this keyseq not-found identity)]
         (fn [& args]
           (apply f (query) args)))))
+
+  Parent
+  (children [this]
+    (cons :merge (children layer)))
+
+  ;; TODO this will likely need a way to configure whether to wrap certain kinds of children
+  (child [this name]
+    (when-let [child (if (= :merge name)
+                       merge-layer
+                       (MergeableLayer. (child layer name) merge-layer))]
+      (retro/at-revision child (retro/current-revision this))))
 
   NodeFilter
   (keep-node? [this id]
