@@ -352,8 +352,8 @@
    incoming from that node."
   [layer id]
   (into (ordered-map)
-        (for [[node-id {:keys [deleted]}] (get-incoming-edges layer id)]
-          [node-id (not deleted)])))
+        (for [[node-id edge] (get-incoming-edges layer id)]
+          [node-id (not (get edge :deleted false))])))
 
 (defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
