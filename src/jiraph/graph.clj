@@ -57,7 +57,7 @@
                        [(into actions more-actions)
                         (advance-reader read more-actions)]))
                    [[] read]
-                   fs))))
+                   (remove nil? fs)))))
 
 (defn same?
   "Determine whether two objects are layers using the same storage backend. Useful because = will
