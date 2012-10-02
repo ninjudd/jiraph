@@ -302,7 +302,6 @@
                       (assoc-in {} keyseq arg)
                       false :codec))))) ;; don't include deletions
 
-;;; TODO pull the three formats into a single field?
 (defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn]
   SortedEnumerate
   (node-id-subseq [this cmp start]
