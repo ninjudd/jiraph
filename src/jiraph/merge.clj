@@ -95,6 +95,7 @@
          `[~head-id ~@(merged-into merge-layer head-id)]
          [id]))))
 
+;; TODO figure out how to use read function here rather than graph/get-node
 (defn merge-position
   "Returns the position in the merge chain for a given id, 0 for the head."
   ([id]
@@ -107,6 +108,7 @@
            0
            (get-in node [:edges head :position]))))))
 
+;; TODO this needs to use read function, not graph/get-node
 (defn merge-node
   "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
   [merge-layer head-id tail-id]
@@ -158,6 +160,7 @@
                                                 (<= revision (:revision edge)))]
                                  [to-id {:deleted true}]))}))
 
+;; TODO this needs to use read function, not get-node
 (defn unmerge-node
   "Unmerge tail node from head node, taking all nodes that were previously merged into tail with it."
   [merge-layer head-id tail-id]
