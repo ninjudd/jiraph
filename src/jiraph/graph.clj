@@ -148,12 +148,26 @@
   [layer cmp start]
   (layer/node-subseq layer cmp start))
 
-(let [sentinel (Object.)]
-  (defn ^{:dynamic true} get-node
+(defn get-node-raw
+  [layer id & [not-found]]
+  (apply layer/get-node [layer id not-found]))
+
+(def ^{:dynamic true} *read* nil)
+
+(defmacro with-global-read [read & body]
+  `(binding [*read* ~read]
+     ~@body))
+
+(defn ^{:dynamic true} get-node
     "Fetch a node's data from this layer."
     [layer id & [not-found]]
-    (layer/get-node layer id not-found))
+    (if-let [read *read*]
+      (or (binding [*read* nil]
+            (read layer [id]))
+          not-found)
+      (get-node-raw layer id not-found)))
 
+(let [sentinel (Object.)]
   (defn find-node
     "Get a node's data along with its id."
     [layer id]
@@ -161,16 +175,21 @@
       (when-not (identical? node sentinel)
         (map-entry id node)))))
 
+(defn- ^:dynamic query-fn [layer keyseq not-found f]
+  (when (or (not *read*)
+            (= f identity))
+    (layer/query-fn layer keyseq not-found f)))
+
 (defn query-in-node*
   "Fetch data from inside a node, replacing it with not-found if it is missing,
    and immediately call a function on it."
   [layer keyseq not-found f & args]
-  (if-let [query-fn (layer/query-fn layer keyseq not-found f)]
+  (if-let [query-fn (query-fn layer keyseq not-found f)]
     (apply query-fn args)
-    (if-let [query-fn (layer/query-fn layer keyseq not-found identity)]
+    (if-let [query-fn (query-fn layer keyseq not-found identity)]
       (apply f (query-fn) args)
       (let [[id & keys] keyseq
-            node (layer/get-node layer id nil)]
+            node (get-node layer id nil)]
         (apply f (get-in node keys) args)))))
 
 (defn query-in-node
