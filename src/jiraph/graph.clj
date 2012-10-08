@@ -4,6 +4,7 @@
         [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [useful.fn :only [fix]]
         [clojure.string :only [split join]]
+        useful.debug
         [ego.core :only [type-key]]
         (ordered [set :only [ordered-set]]
                  [map :only [ordered-map]]))
@@ -217,10 +218,31 @@
   [layer id to-id & [not-found]]
   (get-in-edge layer [id to-id] not-found))
 
+(declare unwrap-all)
+
 (defn ->retro-ioval
   "Convert a jiraph IOValue to a retro IOValue."
   [ioval]
-  (let [actions (ioval get-in-node)]
+  (let [debug false
+        actions (ioval get-in-node)
+        actions (if-not debug
+                  actions
+                  (let [info (for [action actions]
+                               (-> action
+                                   (select-keys (rseq [:revision :layer :keyseq :f :args]))
+                                   (update-in [:layer] (comp :path :opts :db unwrap-all))))]
+                    (? info)
+                    (for [{:keys [keyseq f args] :as action} actions]
+                      (update-in action [:write]
+                                 (fn [write]
+                                   (fn debug [layer]
+                                     (printf "Before %s: %s\n"
+                                             (list 'update-in-node
+                                                   (:path (:opts (:db (unwrap-all layer))))
+                                                   keyseq f args)
+                                             (get-in-node layer keyseq f args))
+                                     (write layer)
+                                     (printf "After: %s\n" (get-in-node layer keyseq f args))))))))]
     (retro/with-actions nil
       (reduce (fn [retro-ioval {:keys [layer write]}]
                 (update-in retro-ioval [layer] (fnil conj []) write))
