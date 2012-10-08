@@ -94,8 +94,12 @@
                          (fn [layer]
                            (overwrite layer id attrs)))
                  dissoc (let [[id] (assert-length 1 args)]
-                          (fn [layer]
-                            (db/delete! db (id->str))))
+                          (if append-only?
+                            (throw (IllegalArgumentException.
+                                    (format "Can't destroy history of %s on append-only layer"
+                                            id)))
+                            (fn [layer]
+                              (db/delete! db (id->str id)))))
                  (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
                                                            f))))))))
 
