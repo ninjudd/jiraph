@@ -50,6 +50,10 @@
        Wrapped
        (unwrap [this#] ~layer-sym)
 
+       Parent
+       (children [this#] (children ~layer-sym))
+       (child    [this# kind#] (child ~layer-sym kind#))
+
        Enumerate
        (node-id-seq [this#] (filter #(keep-node? this# %)
                                     (node-id-seq ~layer-sym)))
