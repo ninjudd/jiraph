@@ -43,7 +43,7 @@
       (distinct
        (if-not revision
          revs
-         (take-while #(<= % revision) revs)))))  )
+         (take-while #(<= % revision) revs))))))
 
 (defn- overwrite [layer id attrs]
   (let [{:keys [db append-only?]} layer]
