@@ -22,6 +22,11 @@
                     keyseq f args))
         (wrap-forwarded-reads this input-layer)))
 
+  layer/Layer
+  (truncate! [this]
+    (doseq [layer (cons input-layer (map second output-layers))]
+      (layer/truncate! layer)))
+
   Parent
   (children [this]
     (map first output-layers))
