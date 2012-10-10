@@ -2,7 +2,7 @@
   (:use [jiraph.formats :only [revisioned-format tidy-node add-revisioning-modes]]
         [jiraph.codex :only [encode decode] :as codex]
         [useful.utils :only [adjoin]]
-        [useful.map :only [keyed update update-each]]
+        [useful.map :only [keyed update]]
         [io.core :only [catbytes]]
         [protobuf.core :only [protodef protobuf-dump]])
   (:require [gloss.core :as gloss]
@@ -13,11 +13,13 @@
 
 (defn- wrap-tidying [f]
   (fn [opts]
-    (update-each (f opts) [:codec] codex/wrap identity tidy-node)))
+    (-> (f opts)
+        (update :codec codex/wrap identity tidy-node))))
 
 (defn- wrap-revisioning-modes [f]
   (fn [opts]
-    (add-revisioning-modes (f opts))))
+    (-> (f opts)
+        (add-revisioning-modes))))
 
 (defn- num-bytes-to-encode-length [proto]
   (let [proto (protodef proto)
@@ -48,6 +50,31 @@
       (recur (+ len target-len header-len)
              (next pairs)))))
 
+(defn- proto-format*
+  [proto]
+  (let [schema (-> (protobuf/codec-schema proto)
+                   (schema/dissoc-fields :revisions))
+        codec (protobuf/protobuf-codec proto)]
+    (keyed [codec schema])))
+
+(defn basic-protobuf-format
+  "This is a format that can be used for :assoc-mode :overwrite while still keeping track of
+  revisions."
+  [proto]
+  (let [proto-format (proto-format* proto)]
+    (wrap-revisioning-modes
+     (wrap-tidying
+      (fn [{:keys [revision]}]
+        (if (nil? revision)
+          proto-format
+          (-> proto-format
+              (update :codec codex/wrap
+                (fn [node]
+                  (assoc node :revisions
+                         (conj (:revisions (meta node))
+                               revision)))
+                identity))))))))
+
 ;; TODO temporarily threw away code for handling non-adjoin reduce-fn
 (defn protobuf-format
   ([proto]
@@ -55,11 +82,9 @@
   ([proto reduce-fn]
      (when-not (= reduce-fn adjoin)
        (throw (IllegalArgumentException. (format "Unsupported reduce-fn %s" reduce-fn))))
-     (let [schema       (-> (protobuf/codec-schema proto)
-                            (schema/dissoc-fields :revisions))
-           codec        (protobuf/protobuf-codec proto)
-           proto-format (keyed [codec schema reduce-fn])
-           header-len   (num-bytes-to-encode-length proto)]
+     (let [proto-format (-> (proto-format* proto)
+                            (assoc :reduce-fn reduce-fn))
+           header-len (num-bytes-to-encode-length proto)]
        (wrap-revisioning-modes
         (wrap-tidying
          (fn [{:keys [revision] :as opts}]
