@@ -49,16 +49,18 @@
             (wrapper read))
           read, (map :wrap-read actions)))
 
+(defn combine-actions [[actions read] f]
+  (let [more-actions (f read)]
+    [(into actions more-actions)
+     (advance-reader read more-actions)]))
+
 (defn compose
   "Compose a number of jiraph IOValues (functions of read) into a single action."
   [& fs]
   (fn [read]
-    (first (reduce (fn [[actions read] f]
-                     (let [more-actions (f read)]
-                       [(into actions more-actions)
-                        (advance-reader read more-actions)]))
+    (first (reduce combine-actions
                    [[] read]
-                   (remove nil? fs)))))
+                   (remove nil? (flatten fs))))))
 
 (defn same?
   "Determine whether two objects are layers using the same storage backend. Useful because = will
