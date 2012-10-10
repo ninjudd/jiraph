@@ -9,10 +9,11 @@
     (update-in (ioval read) [0 :wrap-read]
                (fn [wrapper]
                  (fn [read]
-                   (fn [layer keyseq]
-                     (read (if (same? master layer)
-                             slave, layer)
-                           keyseq)))))))
+                   (let [read (wrapper read)]
+                     (fn [layer keyseq]
+                       (read (if (same? master layer)
+                               slave, layer)
+                             keyseq))))))))
 
 (defprotocol Wrapped
   "For layers which provide additional functionality by wrapping other layers."
