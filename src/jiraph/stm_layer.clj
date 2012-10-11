@@ -1,8 +1,8 @@
 (ns jiraph.stm-layer
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Basic Layer Optimized ChangeLog get-revisions close]]
-        [jiraph.graph :only [*skip-writes*]]
-        [jiraph.utils :only [meta-id meta-id? base-id]]
+        [jiraph.graph :as graph :only [with-action get-node]]
+        [jiraph.utils :only [meta-id meta-id? base-id assert-length]]
         [retro.core :only [WrappedTransactional Revisioned OrderedRevisions
                            max-revision at-revision current-revision]]
         [useful.fn :only [given fix]]
@@ -76,12 +76,23 @@
                                          touched-revisions))
                                 0)]
             (-> @store (get-in [most-recent :nodes k] not-found)))))))
-  (assoc-node! [this k v]
-    (alter store
-           assoc-in [(current-rev this) (storage-area k) (storage-name k)] v))
-  (dissoc-node! [this k]
-    (alter store
-           update-in [(current-rev this) (storage-area k)] dissoc (storage-name k)))
+  (update-in-node [this keyseq f args]
+    (let [ioval (graph/simple-ioval this keyseq f args)]
+      (if (empty? keyseq)
+        (condp = f
+          assoc (let [[id attrs] (assert-length 2 args)]
+                  (recur [id] (constantly attrs) nil))
+          dissoc (let [[id] (assert-length 1 args)]
+                   (ioval (fn [layer]
+                            (alter store
+                                   update-in [(current-rev layer) (storage-area id)]
+                                   dissoc (storage-name id))))))
+        (let [[id & keys] keyseq]
+          (ioval (fn [layer]
+                   (apply alter store
+                          update-in (list* (current-rev layer) (storage-area id)
+                                           (storage-name id) keys)
+                          f args)))))))
 
   Revisioned
   (at-revision [this rev]
@@ -113,10 +124,10 @@
       (spit filename @store)))
   (sync! [this]
     (close this))
-  (optimize! [this] nil)
   (truncate! [this]
-    (dosync ;; since this should only be called outside a retro transaction
-     (ref-set (:store this) empty-store))))
+    (dosync
+     (ref-set store empty-store)))
+  (optimize! [this] nil))
 
 (defn make
   ([] (make nil))

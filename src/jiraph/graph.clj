@@ -4,6 +4,7 @@
         [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [useful.fn :only [fix]]
         [clojure.string :only [split join]]
+        useful.debug
         [ego.core :only [type-key]]
         (ordered [set :only [ordered-set]]
                  [map :only [ordered-map]]))
@@ -11,11 +12,8 @@
             [jiraph.wrapped-layer :as wrapped]
             [retro.core :as retro]))
 
-(def ^{:dynamic true} *skip-writes* false)
-
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
-(def ^{:private true}               write-count (atom 0))
 
 (defn edges
   "Gets edges from a node. Returns all edges, including deleted ones."
@@ -32,47 +30,116 @@
   (doseq [layer layers]
     (retro/modify! layer)))
 
-(defmacro txn [layers actions]
-  `(retro/txn ~layers ~actions))
-(defmacro dotxn [layers & body]
-  `(retro/txn ~layers ~@body))
+(defmacro with-action
+  "Construct a simple retro IOValue that touches exactly one layer.
 
-(defn touch ;; should probably rename this to touch!
-  "Touch the specified layers."
-  [& layers]
-  (doseq [layer layers]
-    (retro/touch layer)))
+   The IOValue's :value will be the one you specify, and its :actions will
+   evaluate body with layer-name bound to (an appropriately-revisioned view of)
+   layer-value."
+  [[layer-name layer-value] value & body]
+  `(retro/with-actions ~value
+     {~layer-value [(fn [~layer-name]
+                      ~@body)]}))
 
-(defn open
-  "Open the specified layers."
-  [& layers]
-  (doseq [layer layers]
-    (layer/open layer)))
+(defn advance-reader
+  "Given a vector of actualized jiraph IOValues and a read function, return a new read function by
+  calling the :wrap-read function of each action."
+  [read actions]
+  (reduce (fn [read wrapper]
+            (wrapper read))
+          read, (map :wrap-read actions)))
 
-(defn close
-  "Close the specified layers."
-  [& layers]
-  (doseq [layer layers]
-    (layer/close layer)))
+(defn combine-actions [[actions read] f]
+  (let [more-actions (f read)]
+    [(into actions more-actions)
+     (advance-reader read more-actions)]))
 
-(defn sync!
-  "Flush changes for the specified layers to the storage medium."
-  [& layers]
-  (doseq [layer layers]
-    (layer/sync! layer)))
+(defn compose
+  "Compose a number of jiraph IOValues (functions of read) into a single action."
+  [& fs]
+  (fn [read]
+    (first (reduce combine-actions
+                   [[] read]
+                   (remove nil? (flatten fs))))))
 
-(defn optimize!
-  "Optimize the underlying storage for the specified layers."
-  [& layers]
-  (doseq [layer layers]
-    (layer/optimize! layer)))
+(defn same?
+  "Determine whether two objects are layers using the same storage backend. Useful because = will
+   compare incidentals such as current revision, but you may wish to ignore those."
+  [x y]
+  (and (= (class x) (class y))
+       (layer/same? x y)))
 
-(defn truncate!
-  "Remove all nodes from the specified layers."
-  [& layers]
-  (refuse-readonly layers)
-  (doseq [layer layers]
-    (layer/truncate! layer)))
+(defn path-parts
+  "Given two paths, return a triple of [shared, read, write]. If neither path is a prefix of the
+  other, then nil is returned; otherwise, shared will be the shorter of the two, and whatever is
+  remaining from the longer path will be returned under either read or write (according to whichever
+  of the input arguments was longer)."
+  [read-path write-path]
+  (loop [shared [], read-path read-path, write-path write-path]
+    (cond (empty? read-path) [shared write-path []]
+          (empty? write-path) [shared [] read-path]
+          (not= (first read-path) (first write-path)) nil
+          :else (recur (conj shared (first read-path))
+                       (rest read-path), (rest write-path)))))
+
+(defn read-wrapper
+  "Create a simple wrap-read function representing a single update to the specified layer, at the
+  specified keyseq, to become (apply f current-value args)."
+  [layer write-keyseq f args]
+  (fn [read]
+    (fn [layer' read-keyseq]
+      (if-let [[read-path update-path get-path]
+               (and (same? layer layer')
+                    (path-parts read-keyseq write-keyseq))]
+        (let [update (partial apply update-in*)]
+          (-> (read layer' read-path)
+              (update update-path f args)
+              (get-in get-path)))
+        (read layer' read-keyseq)))))
+
+(defn simple-ioval
+  "Given the arguments to update-in-node, return a function for creating a basic jiraph iovalue.
+   The returned function expects to be passed a write function for use in the real retro iovalue.
+
+   That's a little wordy and hard to keep track of; below is a sort of pseudo type-signature. It's
+   still a bit hard to follow, but is at least clear about what functions are called when and what
+   args they want.
+
+   (Layer -> keyseq -> f -> args -> (write -> (read -> ioval)))"
+  [layer keyseq f args]
+  (fn [write]
+    (fn [read]
+      [{:write write :wrap-read (read-wrapper layer keyseq f args)
+        :layer layer :keyseq keyseq :f f :args args}])))
+
+(letfn [(layers-op [layers f]
+          (dorun (map f layers)))]
+
+  (defn open
+    "Open the specified layers."
+    [& layers]
+    (layers-op layers layer/open))
+
+  (defn close
+    "Close the specified layers."
+    [& layers]
+    (layers-op layers layer/close))
+
+  (defn sync!
+    "Flush changes for the specified layers to the storage medium."
+    [& layers]
+    (layers-op layers layer/sync!))
+
+  (defn optimize!
+    "Optimize the underlying storage for the specified layers."
+    [& layers]
+    (layers-op layers layer/optimize!))
+
+  (defn truncate!
+    "Remove all nodes from the specified layers."
+    [& layers]
+    (refuse-readonly layers)
+    (layers-op layers layer/truncate!)))
 
 (defn node-id-seq
   "Return a lazy sequence of all node ids in this layer."
@@ -94,12 +161,26 @@
   [layer cmp start]
   (layer/node-subseq layer cmp start))
 
-(let [sentinel (Object.)]
-  (defn ^{:dynamic true} get-node
+(defn get-node-raw
+  [layer id & [not-found]]
+  (apply layer/get-node [layer id not-found]))
+
+(def ^{:dynamic true} *read* nil)
+
+(defmacro with-global-read [read & body]
+  `(binding [*read* ~read]
+     ~@body))
+
+(defn ^{:dynamic true} get-node
     "Fetch a node's data from this layer."
     [layer id & [not-found]]
-    (layer/get-node layer id not-found))
+    (if-let [read *read*]
+      (or (binding [*read* nil]
+            (read layer [id]))
+          not-found)
+      (get-node-raw layer id not-found)))
 
+(let [sentinel (Object.)]
   (defn find-node
     "Get a node's data along with its id."
     [layer id]
@@ -107,16 +188,21 @@
       (when-not (identical? node sentinel)
         (map-entry id node)))))
 
+(defn- ^:dynamic query-fn [layer keyseq not-found f]
+  (when (or (not *read*)
+            (= f identity))
+    (layer/query-fn layer keyseq not-found f)))
+
 (defn query-in-node*
   "Fetch data from inside a node, replacing it with not-found if it is missing,
    and immediately call a function on it."
   [layer keyseq not-found f & args]
-  (if-let [query-fn (layer/query-fn layer keyseq not-found f)]
+  (if-let [query-fn (query-fn layer keyseq not-found f)]
     (apply query-fn args)
-    (if-let [query-fn (layer/query-fn layer keyseq not-found identity)]
+    (if-let [query-fn (query-fn layer keyseq not-found identity)]
       (apply f (query-fn) args)
       (let [[id & keys] keyseq
-            node (layer/get-node layer id nil)]
+            node (get-node layer id nil)]
         (apply f (get-in node keys) args)))))
 
 (defn query-in-node
@@ -144,111 +230,92 @@
   [layer id to-id & [not-found]]
   (get-in-edge layer [id to-id] not-found))
 
-(declare update-in-node!)
+(declare unwrap-all)
 
-(defn- changed-edges [old-edges new-edges]
-  (reduce (fn [edges [edge-id edge]]
-            (let [was-present (not (:deleted edge))
-                  is-present  (when-let [e (get edges edge-id)] (not (:deleted e)))]
-              (if (= was-present is-present)
-                (dissoc edges edge-id)
-                (assoc-in* edges [edge-id :deleted] was-present))))
-          new-edges old-edges))
+(defn ->retro-ioval
+  "Convert a jiraph IOValue to a retro IOValue."
+  [ioval]
+  (let [debug false
+        actions (ioval get-in-node)
+        actions (if-not debug
+                  actions
+                  (let [info (for [action actions]
+                               (-> action
+                                   (select-keys (rseq [:revision :layer :keyseq :f :args]))
+                                   (update-in [:layer] (comp :path :opts :db unwrap-all))))]
+                    (? info)
+                    (for [{:keys [keyseq f args] :as action} actions]
+                      (update-in action [:write]
+                                 (fn [write]
+                                   (fn debug [layer]
+                                     (printf "Before %s: %s\n"
+                                             (list 'update-in-node
+                                                   (:path (:opts (:db (unwrap-all layer))))
+                                                   keyseq f args)
+                                             (get-in-node layer keyseq f args))
+                                     (write layer)
+                                     (printf "After: %s\n" (get-in-node layer keyseq f args))))))))]
+    (retro/with-actions nil
+      (reduce (fn [retro-ioval {:keys [layer write]}]
+                (update-in retro-ioval [layer] (fnil conj []) write))
+              {}, actions))))
 
-(defn- update-edges! [layer [id & keys] old new]
-  (when (layer/manage-incoming? layer)
-    (doseq [[edge-id {:keys [deleted]}]
-            (apply changed-edges
-                   (map (comp :edges (partial assoc-in* {} keys))
-                        [old new]))]
-      ((if deleted layer/drop-incoming! layer/add-incoming!)
-       layer edge-id id))))
-
-(defn- update-changelog! [layer node-id]
-  (when (layer/manage-changelog? layer)
-    (when-let [rev-id (retro/current-revision layer)]
-      (update-in-node! layer [(meta-id :revision-id)] (constantly rev-id))
-      (when node-id
-        (update-in-node! layer [(meta-id node-id) "affected-by"] conj rev-id)
-        (update-in-node! layer [(meta-id :changed-ids) rev-id] conj node-id)))))
-
-(defn update-in-node!
-  "Update the subnode at keyseq by calling function f with the old value and any supplied args."
-  [layer keyseq f & args]
-  (refuse-readonly [layer])
-  (retro/dotxn [layer]
-    (when-not *skip-writes*
-      (let [update-meta! (if (meta-id? (first keyseq))
-                           (constantly nil)
-                           (fn [keyseq old new]
-                             (update-edges! layer keyseq old new)
-                             (update-changelog! layer (first keyseq))))]
-        (let [updater (partial layer/update-fn layer)
-              keyseq  (seq keyseq)]
-          (if-let [update! (updater keyseq f)]
-            ;; maximally-optimized; the layer can do this exact thing well
-            (let [{:keys [old new]} (apply update! args)]
-              (update-meta! keyseq old new))
-            (if-let [update! (and keyseq ;; don't look for assoc-in of empty keys
-                                  (updater (butlast keyseq) assoc))]
-              ;; they can replace this sub-node efficiently, at least
-              (let [old (get-in-node layer keyseq)
-                    new (apply f old args)]
-                (update! (last keyseq) new)
-                (update-meta! keyseq old new))
-
-              ;; need some special logic for unoptimized top-level assoc/dissoc
-              (if-let [update! (and (not keyseq) ({assoc  layer/assoc-node!
-                                                   dissoc layer/dissoc-node!} f))]
-                (let [[id new] args
-                      old (when (layer/manage-incoming? layer)
-                            (get-node layer id))]
-                  (apply update! layer args)
-                  (update-meta! [id] old new))
-                (let [[id & keyseq] keyseq
-                      old (get-node layer id)
-                      new (if keyseq
-                            (apply update-in* old keyseq f args)
-                            (apply f old args))]
-                  (layer/assoc-node! layer id new)
-                  (update-meta! [id] old new))))))
-        (swap! write-count inc)))))
+(def touch retro/touch)
+(defmacro txn [actions]
+  `(retro/txn (->retro-ioval ~actions)))
+(defmacro unsafe-txn [actions]
+  `(retro/unsafe-txn (->retro-ioval ~actions)))
+(defmacro dotxn [layers & body]
+  `(retro/dotxn ~layers ~@body))
 
 (defn update-in-node
-  "Functional version of update-in-node! for use in a transaction."
+  "Return an IOValue that will update the subnode at keyseq by calling function
+  f with the old value and any supplied args."
   [layer keyseq f & args]
-  (retro/with-actions layer
-    {layer [#(apply update-in-node! % keyseq f args)]}))
+  (layer/update-in-node layer keyseq f args))
 
-(do (defn update-node!
+(defn update-in-node!
+  "Mutable version of update-in-node: applies changes immediately, at current
+  revision."
+  [layer keyseq f & args]
+  (unsafe-txn
+   (apply update-in-node layer keyseq f args)))
+
+(do (defn update-node
       "Update a node by calling function f with the old value and any supplied args."
       [layer id f & args]
-      (apply update-in-node! layer [id] f args))
-    (defn update-node
-      "Functional version of update-node! for use in a transaction."
+      (apply update-in-node layer [id] f args))
+    (defn update-node!
+      "Mutable version of update-node: applies changes immediately, at current revision."
       [layer id f & args]
-      (retro/with-actions layer
-        {layer [#(apply update-node! % id f args)]})))
+      (unsafe-txn (apply update-node layer id f args))))
 
-(do (defn dissoc-node!
-      "Remove a node from a layer (incoming links remain)."
+(do (defn dissoc-node
+      "Remove a node from a layer."
       [layer id]
-      (update-in-node! layer [] dissoc id))
-    (defn dissoc-node
-      "Functional version of update-node! for use in a transaction."
+      (update-in-node layer [] dissoc id))
+    (defn dissoc-node!
+      "Mutable version of dissoc-node: changes are applied immediately, at the current revision."
       [layer id]
-      (retro/with-actions layer
-        {layer [#(dissoc-node! % id)]})))
+      (unsafe-txn (dissoc-node layer id))))
 
-(do (defn assoc-node!
+(do (defn assoc-node
       "Create or set a node with the given id and value."
       [layer id value]
-      (update-in-node! layer [] assoc id value))
-    (defn assoc-node
-      "Functional version of assoc-node! for use in a transaction."
+      (update-in-node layer [] assoc id value))
+    (defn assoc-node!
+      "Mutable version of assoc-node: changes are applied immediately, at the current revision."
       [layer id value]
-      (retro/with-actions layer
-        {layer [#(assoc-node! % id value)]})))
+      (unsafe-txn (assoc-node layer id value))))
+
+(do (defn assoc-in-node
+      "Set attributes inside of a node."
+      [layer keyseq value]
+      (update-in-node layer (butlast keyseq) assoc (last keyseq) value))
+    (defn assoc-in-node!
+      "Mutable version of assoc-in-node: changes are applied immediately, at the current revision."
+      [layer keyseq value]
+      (unsafe-txn (assoc-in-node layer keyseq value))))
 
 (defn unwrap-layer
   "Return the underlying layer object from a wrapped layer. Throws an exception
@@ -265,16 +332,6 @@
        (drop-while #(satisfies? wrapped/Wrapped %))
        (first)))
 
-(do (defn assoc-in-node!
-      "Set attributes inside of a node."
-      [layer keyseq value]
-      (update-in-node! layer (butlast keyseq) assoc (last keyseq) value))
-    (defn assoc-in-node
-      "Functional version of assoc-in-node! for use in a transaction."
-      [layer keyseq value]
-      (retro/with-actions layer
-        {layer #(assoc-in-node! % keyseq value)})))
-
 (defn schema
   [layer id-or-type]
   (let [id (fix id-or-type
@@ -286,20 +343,14 @@
   ([layer id-or-type]
      (keys (:fields (schema layer id-or-type)))))
 
-(defn edges-valid? [layer edges]
-  (or (not (layer/single-edge? layer))
-      (> 2 (count edges))))
-
 (defn node-valid?
   "Check if the given node is valid for the specified layer."
   [layer id attrs]
-  (and (edges-valid? layer attrs)
-       (layer/node-valid? layer attrs)))
+  (layer/node-valid? layer attrs))
 
 (defn verify-node
   "Assert that the given node is valid for the specified layer."
   [layer id attrs]
-  (assert (edges-valid? layer attrs))
   (layer/verify-node layer id attrs)
   nil)
 
@@ -326,38 +377,44 @@
     (-> layer
         (retro/at-revision nil)
         (get-in-node [(meta-id :revision-id)])
-        (or 0)))
+        (or 0))) ;; these guys want a default/permanent sentinel
 
-  layer/Incoming
-  ;; default behavior: use node meta with special prefix to track incoming edges
-  (get-incoming [layer id]
-    (get-in-node layer [(meta-id id) :incoming]))
-  (add-incoming! [layer id from-id]
-    (update-in-node! layer [(meta-id id) :incoming] adjoin (ordered-map from-id true)))
-  (drop-incoming! [layer id from-id]
-    (update-in-node! layer [(meta-id id) :incoming] adjoin (ordered-map from-id false))))
+  layer/Layer
+  ;; default implementation is to not do anything, hoping you do it
+  ;; automatically at reasonable times, or don't need it done at all
+  (open      [layer] nil)
+  (close     [layer] nil)
+  (sync!     [layer] nil)
+  (optimize! [layer] nil)
 
-(defn ^{:dynamic true} get-incoming
-  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+  ;; we can simulate this for you, pretty inefficiently
+  (truncate! [layer]
+    (unsafe-txn
+     (apply compose
+            (for [id (node-id-seq layer)]
+              (update-in-node layer [] dissoc id))))))
+
+(defn- get-incoming-edges
+  "Get incoming edges from a node, including whatever data is on the edges."
   [layer id]
-  (let [incoming (layer/get-incoming layer id)]
-    (if (set? incoming)
-      incoming
-      (into (ordered-set)
-            (for [[k v] incoming
-                  :when v]
-              k)))))
+  (when-let [incoming-layer (wrapped/child layer :incoming)]
+    (get-in-node incoming-layer [id :edges])))
 
 (defn ^{:dynamic true} get-incoming-map
   "Return a map of incoming edges, where the value for each key indicates whether an edge is
    incoming from that node."
   [layer id]
-  (let [incoming (layer/get-incoming layer id)]
-    (if (map? incoming)
-      incoming
-      (into (ordered-map)
-            (for [node incoming]
-                 [node true])))))
+  (into (ordered-map)
+        (for [[node-id edge] (get-incoming-edges layer id)]
+          [node-id (not (get edge :deleted false))])))
+
+(defn ^{:dynamic true} get-incoming
+  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+  [layer id]
+  (into (ordered-set)
+        (for [[node-id {:keys [deleted]}] (get-incoming-edges layer id)
+              :when (not deleted)]
+          node-id)))
 
 (defn wrap-bindings
   "Wrap the given function with the current graph context."
@@ -372,9 +429,9 @@
     (if *use-outer-cache*
       (f)
       (binding [*use-outer-cache* true
-                get-node          (memoize-deref [write-count] get-node)
-                get-incoming      (memoize-deref [write-count] get-incoming)
-                get-revisions     (memoize-deref [write-count] get-revisions)]
+                get-node          (memoize get-node)
+                get-incoming      (memoize get-incoming)
+                get-revisions     (memoize get-revisions)]
         (f)))))
 
 (defmacro with-caching

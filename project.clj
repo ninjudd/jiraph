@@ -5,11 +5,11 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [useful "0.8.4"]
-                 [masai "0.7.0"]
+                 [masai "0.7.1"]
                  [cereal "0.2.0"]
                  [ordered "1.2.2"]
                  [schematic "0.0.6"]
-                 [retro "0.7.0"]
+                 [retro "0.7.1"]
                  [io "0.2.1"]
                  [ego "0.1.7"]
                  [slingshot "0.10.3"]

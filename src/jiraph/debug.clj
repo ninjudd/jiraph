@@ -61,11 +61,11 @@
              #(apply u args)))))
 
   Layer
-  (open      [this] (logged (open)))
-  (close     [this] (logged (close)))
-  (sync!     [this] (logged (sync!)))
-  (optimize! [this] (logged (optimize!)))
-  (truncate! [this] (logged (truncate!)))
+  (open       [this] (logged (open)))
+  (close      [this] (logged (close)))
+  (sync!      [this] (logged (sync!)))
+  (optimize!  [this] (logged (optimize!)))
+  (truncate!  [this] (logged (truncate!)))
 
   Schema
   (schema      [this id]       (logged (schema id)))

@@ -2,17 +2,17 @@
   (:use [jiraph.core :only [layer]]
         [jiraph.layer :only [Basic Optimized get-node]]
         [jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
-        [jiraph.wrapped-layer :only [NodeFilter defwrapped]]
-        [retro.core :only [txn]]
+        [jiraph.wrapped-layer :only [NodeFilter Parent defwrapped]]
+        [retro.core :only [at-revision current-revision]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
         [useful.utils :only [adjoin]]
         [useful.datatypes :only [assoc-record]])
-  (:require [jiraph.graph :as graph]))
+  (:require [jiraph.graph :as graph :refer [unsafe-txn]]))
 
 (declare node-deleted?)
 
-(def ^{:dynamic true} *default-delete-layer-name* :id)
+(def ^{:dynamic true} *default-delete-layer* :id)
 
 (letfn [(exists?  [delete-layer id exists]  (and exists (not (node-deleted? delete-layer id))))
         (deleted? [delete-layer id deleted] (or deleted (node-deleted? delete-layer id) deleted))]
@@ -40,37 +40,43 @@
 (defn node-deleted?
   "Returns true if the specified node has been deleted."
   ([id]
-     (node-deleted? *default-delete-layer-name* id))
+     (node-deleted? *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (:deleted (graph/get-node delete-layer id)))))
 
 (defn delete-node
   "Functional version of delete-node!"
-  [delete-layer id]
-  (graph/update-node delete-layer id adjoin {:deleted true}))
+  ([id]
+     (delete-node *default-delete-layer* id))
+  ([delete-layer id]
+     (let [delete-layer (fix delete-layer keyword? layer)]
+       (graph/update-node delete-layer id adjoin {:deleted true}))))
 
 (defn delete-node!
   "Mark the specified node as deleted."
   ([id]
-     (delete-node! *default-delete-layer-name* id))
+     (delete-node! *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
-       (txn [delete-layer]
+       (unsafe-txn
          (delete-node delete-layer id)))))
 
 (defn undelete-node
   "Functional version of undelete-node!"
-  [delete-layer id]
-  (graph/update-node delete-layer id adjoin {:deleted false}))
+  ([id]
+     (delete-node *default-delete-layer* id))
+  ([delete-layer id]
+     (let [delete-layer (fix delete-layer keyword? layer)]
+       (graph/update-node delete-layer id adjoin {:deleted false}))))
 
 (defn undelete-node!
   "Mark the specified node as not deleted."
   ([id]
-     (undelete-node! *default-delete-layer-name* id))
+     (undelete-node! *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
-       (txn [delete-layer]
+       (unsafe-txn
          (undelete-node delete-layer id)))))
 
 (def ^{:private true} sentinel (Object.))
@@ -82,6 +88,7 @@
       (if (= node sentinel)
         not-found
         (mark-deleted delete-layer [id] node))))
+  ;; TODO needs update-in-node to set a read-wrapper that knows about the delete
 
   Optimized
   (query-fn [this keyseq not-found f]
@@ -93,7 +100,13 @@
 
   NodeFilter
   (keep-node? [this id]
-    (not (node-deleted? delete-layer id))))
+    (not (node-deleted? delete-layer id)))
+
+  Parent
+  (children [this]
+    [:delete])
+  (child [this name]
+    ({:delete (at-revision delete-layer (current-revision this))} name)))
 
 (defn deletable-layer [layer delete-layer]
   (DeletableLayer. layer delete-layer))

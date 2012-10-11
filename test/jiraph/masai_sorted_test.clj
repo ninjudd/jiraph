@@ -25,11 +25,11 @@
   ;; cereal's revisioned clojure-reader codec
   (let [= =*] ;; jiraph treats {} and nil equivalently; test must account for this
     (masai/with-temp-layer [layer
-                            :layout-fns {:node (-> (constantly [[[:edges :*]]
-                                                                [[:names]] ;; TODO support indexing non-maps
-                                                                [[]]])
-                                                   (masai/wrap-default-formats)
-                                                   (masai/wrap-revisioned))}]
+                            :layout-fn (-> (constantly [[[:edges :*]]
+                                                        [[:names]] ;; TODO support indexing non-maps
+                                                        [[]]])
+                                           (masai/wrap-default-formats)
+                                           (masai/wrap-revisioned))]
       (let [id "profile-1"
             init-node {:edges {"profile-10" {:rel :child}}
                        :age 24, :names {:first "Clancy"}}
@@ -40,33 +40,33 @@
                       :edges {"profile-10" {:rel :partner}}}
             node-4 (adjoin node-3 change-4)]
 
-        (is (update-in-node! layer [id] adjoin init-node))
+        (update-in-node! layer [id] adjoin init-node)
         (is (= init-node (get-node layer id)))
 
-        (is (update-in-node! layer [id :edges] assoc "profile-21" {:bond :strong}))
+        (update-in-node! layer [id :edges] assoc "profile-21" {:bond :strong})
         (is (= node-2 (get-node layer id)))
 
-        (is (update-in-node! layer [id :names] dissoc :first))
+        (update-in-node! layer [id :names] dissoc :first)
         (is (= node-3 (get-node layer id)))
 
-        (is (update-in-node! layer [id] adjoin change-4))
+        (update-in-node! layer [id] adjoin change-4)
         (is (= node-4 (get-node layer id)))))))
 
 (deftest test-subseq
   (masai/with-temp-layer [layer
-                          :layout-fns {:node (-> (constantly [[[:edges :*]]
-                                                              [[]]])
-                                                 (masai/wrap-default-formats)
-                                                 (masai/wrap-revisioned))}]
+                          :layout-fn (-> (constantly [[[:edges :*]]
+                                                      [[]]])
+                                         (masai/wrap-default-formats)
+                                         (masai/wrap-revisioned))]
     (let [node {:edges {"mary" {:data 1}
                         "charlie" {:data 2}
                         "sally" {:data 3}}}
           sorted (into (sorted-map) (:edges node))]
 
       ;; make sure there are nodes "around" him to test subseq boundaries
-      (is (assoc-node! layer "charlie" {:data "test"}))
-      (is (assoc-node! layer "mike" node))
-      (is (assoc-node! layer "sally" {:data "test"}))
+      (assoc-node! layer "charlie" {:data "test"})
+      (assoc-node! layer "mike" node)
+      (assoc-node! layer "sally" {:data "test"})
 
       (is (= node (get-node layer "mike")))
 

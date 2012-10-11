@@ -1,21 +1,22 @@
 (ns jiraph.masai-layer
   (:use [jiraph.layer :as layer
-         :only [Enumerate Optimized Historical Basic Layer ChangeLog Preferences Schema
+         :only [Enumerate Optimized Historical Basic Layer ChangeLog Schema
                 node-id-seq]]
         [jiraph.formats :only [special-codec]]
-        [jiraph.utils :only [meta-id meta-id? base-id id->str meta-str?]]
+        [jiraph.utils :only [id->str meta-str? assert-length]]
         [jiraph.codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read]]
-        [retro.core   :only [Transactional Revisioned OrderedRevisions
-                             txn-begin! txn-commit! txn-rollback!]]
+        [retro.core :only [Transactional Revisioned OrderedRevisions
+                           at-revision txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [if-ns adjoin returning map-entry]]
+        [useful.map :only [update-in*]]
         [useful.seq :only [find-with]]
         [useful.state :only [volatile put!]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
         [io.core :only [bufseq->bytes]])
   (:require [masai.db :as db]
-            [jiraph.graph :as graph]
+            [jiraph.graph :as graph :refer [with-action]]
             [jiraph.formats.cereal :as cereal])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream InputStreamReader
             DataOutputStream DataInputStream]
@@ -30,11 +31,11 @@
 ;;;   - this codec need not be capable of reading - it will only be written with
 ;;; - a :revisions codec, for reading the list of revisions at which a node has been touched.
 
-(defn- format-for [layer node-id revision]
-  (let [format-fn (get layer (cond (= node-id (meta-id :layer)) :layer-meta-format-fn
-                                   (meta-id? node-id)           :node-meta-format-fn
-                                   :else                        :node-format-fn))]
-    (format-fn {:id node-id :revision revision})))
+(defn write-format [layer node-id]
+  ((:format-fn layer) {:id node-id :revision (:revision layer)}))
+
+(defn read-format [layer node-id]
+  ((:format-fn layer) {:id node-id :revision (revision-to-read layer)}))
 
 (defn- revision-seq [format revision bytes]
   (when-let [rev-codec (:revisions format)]
@@ -42,10 +43,20 @@
       (distinct
        (if-not revision
          revs
-         (take-while #(<= % revision) revs)))))  )
+         (take-while #(<= % revision) revs))))))
 
-(defrecord MasaiLayer [db revision max-written-revision append-only?
-                       node-format-fn node-meta-format-fn layer-meta-format-fn]
+(defn- overwrite [layer id attrs]
+  (let [{:keys [db append-only?]} layer]
+    (letfn [(bytes [data]
+              (let [format (write-format layer id)
+                    codec (or (and append-only?
+                                   (:reset format))
+                              (:codec format))]
+                (encode codec data)))]
+      ((if append-only? db/append! db/put!)
+       db (id->str id) (bytes attrs)))))
+
+(defrecord MasaiLayer [db revision max-written-revision append-only? format-fn]
   Object
   (toString [this]
     (pr-str this))
@@ -60,35 +71,41 @@
   Basic
   (get-node [this id not-found]
     (if-let [data (db/fetch db (id->str id))]
-      (decode (:codec (format-for this id (revision-to-read this)))
+      (decode (:codec (read-format this id))
               data)
       not-found))
-  (assoc-node! [this id attrs]
-    (letfn [(bytes [data]
-              (let [format (format-for this id revision)
-                    codec (or (and append-only?
-                                   (:reset format))
-                              (:codec format))]
-                (encode codec data)))]
-      ((if append-only? db/append! db/put!)
-       db (id->str id) (bytes attrs))))
-  (dissoc-node! [this id]
-    (db/delete! db (id->str id)))
+  (update-in-node [this keyseq f args]
+    (let [ioval (graph/simple-ioval this keyseq f args)]
+      (ioval (if-let [[id & keys] (seq keyseq)]
+               (if (and append-only?
+                        (= f (:reduce-fn (write-format this id))))
+                 (let [[attrs] (assert-length 1 args)]
+                   (fn [layer]
+                     (->> (if keys
+                            (assoc-in {} keys attrs)
+                            attrs)
+                          (encode (:codec (write-format layer id)))
+                          (db/append! db (id->str id)))))
+                 (fn [layer]
+                   (let [old (graph/get-node layer id)
+                         new (apply update-in* old keys f args)]
+                     (overwrite layer id new))))
+               (condp = f
+                 assoc (let [[id attrs] (assert-length 2 args)]
+                         (fn [layer]
+                           (overwrite layer id attrs)))
+                 dissoc (let [[id] (assert-length 1 args)]
+                          (if append-only?
+                            (throw (IllegalArgumentException.
+                                    (format "Can't destroy history of %s on append-only layer"
+                                            id)))
+                            (fn [layer]
+                              (db/delete! db (id->str id)))))
+                 (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
+                                                           f))))))))
 
   Optimized
   (query-fn [this keyseq not-found f] nil)
-  (update-fn [this keyseq f]
-    (when append-only?
-      (when-let [[id & keys] (seq keyseq)]
-        (let [{:keys [reduce-fn codec]} (format-for this id revision)]
-          (when (= f reduce-fn)
-            (fn [attrs]
-              (->> (if keys
-                     (assoc-in {} keys attrs)
-                     attrs)
-                   (encode codec)
-                   (db/append! db (id->str id)))
-              {:old nil :new attrs}))))))
 
   Layer
   (open [this]
@@ -102,31 +119,38 @@
   (truncate! [this]
     (db/truncate! db)
     (put! max-written-revision nil))
+  (same? [this other]
+    (apply = (for [layer [this other]]
+               (get-in layer [:db :opts :path]))))
 
   Schema
   (schema [this id]
-    (:schema (format-for this id revision)))
+    (:schema (read-format this id)))
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (encode (:codec (format-for this id revision))
+      (encode (:codec (write-format this id))
               attrs)
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
     (when-let [data (db/fetch db (id->str id))]
-      (revision-seq (format-for this id nil) revision data)))
+      (revision-seq (read-format (at-revision this nil) id) revision data)))
 
   Historical
   (node-history [this id]
     (when-let [data (db/fetch db (id->str id))]
-      (if-let [historical-codec (:historical (format-for this id revision))]
+      (if-let [historical-codec (:historical (read-format this id))]
         (decode historical-codec data)
-        (when-let [revisions (revision-seq (format-for this id nil) revision data)]
+        (when-let [revisions (revision-seq (read-format (at-revision this nil)
+                                                        id)
+                                           revision data)]
           (into (sorted-map)
                 (for [revision revisions]
-                  [revision (decode (:codec (format-for this id revision))
+                  [revision (decode (:codec
+                                     (read-format (at-revision this revision)
+                                                  id))
                                     data)]))))))
 
   ;; TODO this is stubbed, will need to work eventually
@@ -146,13 +170,7 @@
   (at-revision [this rev]
     (assoc-record this :revision rev))
   (current-revision [this]
-    revision)
-
-  Preferences
-  (manage-changelog? [this] false) ;; TODO wish this were more granular
-  (manage-incoming? [this] true)
-  (single-edge? [this] ;; TODO accept option to (make)
-    false))
+    revision))
 
 (implement-ordered MasaiLayer)
 
@@ -168,16 +186,12 @@
   ;; format-fn should be a function:
   ;; - accept as arg: a map containing {revision and node-id}
   ;; - return: a format (see doc for formats at the top of this file)
-  (defn make [db & {{:keys [node meta layer-meta]} :format-fns,
-                    :keys [assoc-mode] :or {assoc-mode :append}}]
-    (let [[node-format-fn meta-format-fn layer-meta-format-fn]
-          (map #(as-fn (or % default-format-fn))
-               [node meta layer-meta])]
-      (MasaiLayer. (make-db db) nil (volatile nil)
-                   (case assoc-mode
-                     :append true
-                     :overwrite false)
-                   node-format-fn, meta-format-fn, layer-meta-format-fn))))
+  (defn make [db & {:keys [assoc-mode format-fn] :or {assoc-mode :append}}]
+    (MasaiLayer. (make-db db) nil (volatile nil)
+                 (case assoc-mode
+                   :append true
+                   :overwrite false)
+                 (as-fn (or format-fn default-format-fn)))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.
@@ -197,36 +211,3 @@
      (returning ~@body
        (layer/close layer#)
        (.delete file#))))
-
-;; TODO wth is this? Must be some scratch work I committed accidentally?
-(def codex (let [type->num {"profile" 1
-                            "union" 2}
-                 num->type (into {} (for [[k v] type->num] [v k]))
-                 write-id (fn [^DataOutputStream out ^String node-id inc?]
-                            (let [[node-type id-str] (clojure.string/split node-id #"-")
-                                  type-abbrev (get type->num node-type)
-                                  id-num (Long/parseLong id-str)]
-                              (.writeByte out type-abbrev)
-                              (.writeLong out (fix id-num inc? inc))))]
-             {:read (fn [bytes]
-                      )
-              :write (let [key-len 9] ;; one-byte type, 8-byte long for id
-                       (fn [keyseq]
-                         (let [[head & tail] keyseq
-                               edge? (= :edges (first tail))]
-                           (if (and edge? (not (next tail)))
-                             nil ;; Don't know how to handle [id :edge] with no futher tail
-                             (let [edge-to (and edge? (second tail))
-                                   range? (keyword? edge-to)
-                                   len (cond range? (inc key-len)
-                                             edge? (* 2 key-len)
-                                             :else key-len)
-                                   buf (ByteArrayOutputStream. len)
-                                   writer (DataOutputStream. buf)]
-                               (write-id writer head (and range? (= :max edge-to)))
-                               (when edge?
-                                 (case edge-to
-                                   :min (.writeByte writer (byte 0))
-                                   :max nil
-                                   (write-id writer edge-to)))
-                               (.toByteArray buf))))))}))

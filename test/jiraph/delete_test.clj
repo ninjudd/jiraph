@@ -15,10 +15,10 @@
   (is (= {:foo 1} (get-node :people "A")))
   (is (not (node-deleted? "A")))
 
-  (delete-node! "A")
+  (at-revision 2 (delete-node! "A"))
   (is (= {:foo 1 :deleted true} (get-node :people "A")))
   (is (node-deleted? "A"))
 
-  (undelete-node! "A")
+  (at-revision 3 (undelete-node! "A"))
   (is (= {:foo 1} (get-node :people "A")))
   (is (not (node-deleted? "A"))))

@@ -1,18 +1,11 @@
 (ns jiraph.layer
   (:use [useful.utils :only [adjoin map-entry]]
-        [clojure.stacktrace :only [print-trace-element]])
+        [clojure.stacktrace :only [print-trace-element]]
+        [jiraph.utils :only [assert-length]])
   (:require [retro.core :as retro])
   (:import (java.util Map$Entry)))
 
 (def ^:dynamic *warn-on-fallback* false)
-
-(defn fallback-warning []
-  (when *warn-on-fallback*
-    (let [stacktrace (seq (.getStackTrace (Exception.)))]
-      (binding [*out* *err*]
-        (print "Jiraph fallback warning: ")
-        (print-trace-element (second stacktrace))
-        (println)))))
 
 (defprotocol Enumerate
   (node-id-seq [layer]
@@ -46,19 +39,17 @@
      The return type may be either a set, or an \"existence hash\", where the value for each key
      is a boolean, indicating whether an incoming edge comes from the key to this node. This can
      be useful for allowing a client to detect that an edge once existed but has since been
-     removed.")
-  (add-incoming! [layer id from-id]
-    "Add an incoming edge record on id for from-id.")
-  (drop-incoming! [layer id from-id]
-    "Remove the incoming edge record on id for from-id."))
+     removed."))
 
 (defprotocol Basic
   (get-node [layer id not-found]
     "Fetch a node from the graph.")
-  (assoc-node! [layer id attrs]
-    "Add a node to the graph.")
-  (dissoc-node! [layer id]
-    "Remove a node from the graph."))
+
+  (update-in-node [layer keyseq f args]
+    "Return a jiraph IOValue that will update the layer under the given keyseq by calling
+     (apply f current-value args). If keyseq is empty, f must be either assoc or dissoc, in which
+     case an entire node will be either destroyed (in the case of dissoc) or added/overwritten (in
+     the case of assoc)."))
 
 (defprotocol Optimized
   "Describe to Jiraph how to perform a more-optimized version of some subset of operations on a
@@ -69,8 +60,8 @@
   checking the keyseq to see if optimized access is possible at this node.
 
   If nil is returned, the operation will be done in some less optimized way, often by calling
-  get-node, applying the update, and then assoc-node!. If an optimization is possible, you should
-  return a function which will take any additional args to f (but not f itself, or the keyseq;
+  get-node, applying the update, and then assoc-node. If an optimization is possible, you should
+  return a function which will take any additional args to f (but not f itself, or the keyseq:
   those should be closed over and captured in the returned function); Jiraph will call this
   function with the appropriate arguments.
 
@@ -78,20 +69,6 @@
   assoc), and call the returned function as (the-fn :rel :child), thus achieving basically the
   same effect as (update-in layer [from-id :edges to-id] assoc :rel :child), or (assoc-in layer
   [from-id :edges to-id :rel] child)."
-
-  (update-fn [layer keyseq f]
-    "Get a function for performing an optimized update/mutation on the layer at a specified
-    node. See documentation of Optimized for the general contract of Optimized functions. In
-    addition, the function returned by update-fn should, when called, return a hash containing
-    information about the changes it made, if possible.
-
-    The hash should contain keys :old and :new, describing the contents of the sub-node (that is,
-    the one in the layer under keyseq) before and after the update was applied. It is legal for
-    these to both be nil (eg, returning an empty hash), but in that case Jiraph will be unable to
-    provide some services, such as managing incoming edges for you.
-
-    Jiraph's behavior in the case of return values of any type other than hash (including nil) is
-    unspecified; these may receive special handling in some future version.")
 
   (query-fn [layer keyseq not-found f]
     "Get a function for performing an optimized read on the layer at a specified node. See
@@ -114,7 +91,11 @@
   (optimize! [layer]
     "Optimize underlying layer storage.")
   (truncate! [layer]
-    "Removes all node data from the layer."))
+    "Removes all node data from the layer.")
+  (same? [layer other]
+    "Given two layer objects (which must be of the same class), tell whether they refer to the same
+    storage backend. Useful because = will compare incidentals such as current revision, but you may
+    wish to ignore those."))
 
 (defprotocol ChangeLog
   (get-revisions [layer id]
@@ -127,33 +108,6 @@
     "Return a map from revision number to node data, for each revision that
      affected this node. The map must be sorted, with earliest revisions first."))
 
-(defprotocol Preferences
-  "Indicate to Jiraph what things you want it to do for you. These preferences should not
-  change while the system is running; Jiraph may choose to cache any of them."
-  (manage-incoming? [layer]
-    "Should Jiraph decide when to add/drop incoming edges?")
-  (manage-changelog? [layer]
-    "Should Jiraph store changelog information for you?")
-  (single-edge? [layer]
-    "Is it illegal to have more than one outgoing edge per node on this layer?"))
-
-;; these guys want a default/permanent sentinel
-(let [sentinel (Object.)]
-  (extend-type Object
-    Layer
-    ;; default implementation is to not do anything, hoping you do it
-    ;; automatically at reasonable times, or don't need it done at all
-    (open      [layer] nil)
-    (close     [layer] nil)
-    (sync!     [layer] nil)
-    (optimize! [layer] nil)
-
-    ;; we can simulate these for you, pretty inefficiently
-    (truncate! [layer]
-      (fallback-warning)
-      (doseq [id (node-id-seq layer)]
-        (dissoc-node! layer id)))))
-
 (def ^{:doc "A default schema describing a map which contains edges and possibly other keys."}
   edges-schema {:schema {:type :map
                          :fields {:edges {:type :map
@@ -162,14 +116,6 @@
 
 ;; Don't need any special closures here
 (extend-type Object
-  Preferences
-  ;; opt in to managed-incoming, and let the layer set a :single-edge key to
-  ;; indicate it should be in single-edge mode
-  (manage-incoming?  [layer] true)
-  (manage-changelog? [layer] true)
-  (single-edge? [layer]
-    (:single-edge layer))
-
   Schema
   ;; default behavior: no schema, all nodes valid
   (schema [layer id]
@@ -196,7 +142,10 @@
   Optimized
   ;; can't optimize anything
   (query-fn  [layer keyseq not-found f] nil)
-  (update-fn [layer keyseq f] nil)
+
+  Incoming
+  (get-incoming [layer id]
+    #{})
 
   Historical
   (node-history [layer id]
@@ -216,3 +165,15 @@
   (try (verify-node layer id attrs)
        true
        (catch AssertionError e nil)))
+
+(defn dispatch-update [keyseq f args assoc-fn dissoc-fn update-fn]
+  (if (empty? keyseq)
+    (condp = f
+      assoc (let [[id value] (assert-length 2 args)]
+              (assoc-fn id value))
+      dissoc (let [[id] (assert-length 1 args)]
+               (dissoc-fn id))
+      (throw (IllegalArgumentException.
+              (format "Can't perform function %s at top level"
+                      f))))
+    (update-fn (first keyseq) (rest keyseq))))

@@ -25,8 +25,7 @@
 (deftest persist-test
   (let [filename "./stm.layer"
         master (make filename)]
-    (txn [master]
-      (assoc-node master "test" {:name "mindy"}))
+    (txn (assoc-node master "test" {:name "mindy"}))
     (layer/close master)
     (is (= {:name "mindy"}
            (get-node (doto (make filename) layer/open)
@@ -36,8 +35,7 @@
 (deftest queryfn-test
   (let [master (make)
         counter (atom 0)]
-    (txn [master]
-      (assoc-node master "mikey" {:height {:feet 5 :inches 4}
-                                  :edges {"jennifer" {:rel :child}}}))
+    (txn (assoc-node master "mikey" {:height {:feet 5 :inches 4}
+                                     :edges {"jennifer" {:rel :child}}}))
     (is (= 2 (query-in-node master ["mikey" :height] 'specialized-count counter)))
     (is (= 1 @counter))))

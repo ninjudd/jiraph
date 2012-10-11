@@ -3,19 +3,15 @@
         [retro.core :as retro :only [at-revision]])
   (:require ;[jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
+            [jiraph.layer.ruminate :as ruminate]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
 
 (defmacro actions [layer & forms]
   (let [layer-sym (gensym 'layer)]
     `(let [~layer-sym ~layer]
-       (retro/compose ~@(for [form forms]
-                          `(-> ~layer-sym ~form))))))
-
-(defmacro layer-txn [layer & forms]
-  `(let [layer# ~layer]
-     (txn [layer#]
-       (actions layer# ~@forms))))
+       (compose ~@(for [form forms]
+                    `(-> ~layer-sym ~form))))))
 
 (defn test-layer [master]
   (testing (str (class master))
@@ -24,9 +20,9 @@
                      (at-revision master r)))
           mike-node {:age 21 :edges {"carla" {:rel :mom}}}
           carla-node {:age 48}]
-      (layer-txn (rev 0)
-                 (assoc-node "mike" mike-node)
-                 (assoc-node "carla" carla-node))
+      (txn (actions (rev 0)
+                    (assoc-node "mike" mike-node)
+                    (assoc-node "carla" carla-node)))
       (testing "Old revisions are untouched"
         (is (= nil (get-node (rev 0) "mike"))))
       (testing "Node data is written"
@@ -49,8 +45,7 @@
           (is (nil? (get-node (rev 1) "charles")))
           (is (nil? (get-node (rev 2) "charles")))
           (is (nil? (get-node master "charles"))))
-        (txn [(rev 1)]
-          action-map))
+        (txn action-map))
       (testing "Previous revisions still exist on unmodified nodes"
         (is (= carla-node (get-node (rev 1) "carla")))
         (is (= carla-node (get-node (rev 2) "carla"))))
@@ -85,15 +80,15 @@
           (is (= 2 (retro/max-revision (rev 1))))))
 
       (testing "Can't rewrite history"
-        (layer-txn (rev 0)
-                   (assoc-node "donald" {:age 72}))
+        (txn (actions (rev 0)
+                      (assoc-node "donald" {:age 72})))
         (doseq [r rev]
           (is (nil? (get-node r "donald")))))
 
       (testing "Transaction safety"
         (testing "Can't mutate active layer while building a transaction"
           (is (thrown? Exception
-                       (txn [(rev 3)]
+                       (txn
                          (do (assoc-node! (rev 3) "stevie" {:age 2})
                              {}))))))
 
@@ -103,12 +98,12 @@
 
 
 (deftest layer-impls
-  (doseq [layer [;(stm/make)
-                 (sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]], [[]]])
-                                                          (sorted/wrap-default-formats)
-                                                          (sorted/wrap-revisioned))})
-                 (masai/make-temp)]] ;; add more layers as they're implemented
-    (layer/open layer)
-    (try
-      (test-layer layer)
-      (finally (layer/close layer)))))
+  (doseq [layer-fn [#(sorted/make-temp :layout-fn (-> (constantly [[[:edges :*]], [[]]])
+                                                      (sorted/wrap-default-formats)
+                                                      (sorted/wrap-revisioned)))
+                    #(masai/make-temp)]] ;; add more layers as they're implemented
+    (let [layer (ruminate/incoming (layer-fn) (layer-fn))]
+      (layer/open layer)
+      (try
+        (test-layer layer)
+        (finally (layer/close layer))))))

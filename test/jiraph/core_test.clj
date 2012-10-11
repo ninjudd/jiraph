@@ -2,20 +2,30 @@
   (:use clojure.test jiraph.core
         [useful.utils :only [adjoin]])
   (:require [jiraph.stm-layer :as stm]
+            [jiraph.graph :as graph]
             [jiraph.layer :as layer]
             [retro.core :as retro]
+            [jiraph.layer.ruminate :as ruminate]
             [jiraph.null-layer :as null]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
 
 (let [masai  masai/make-temp
-      sorted #(sorted/make-temp :layout-fns {:node (-> (constantly [[[:edges :*]]
-                                                                    [[]]])
-                                                       (sorted/wrap-default-formats)
-                                                       (sorted/wrap-revisioned))})]
+      sorted #(sorted/make-temp :layout-fn (-> (constantly [[[:edges :*]]
+                                                            [[]]])
+                                               (sorted/wrap-default-formats)
+                                               (sorted/wrap-revisioned)))]
   (defn make-graph []
-    {:masai  (masai)
-     :sorted (sorted)}))
+    (let [masai-incoming (masai)
+          sorted-incoming (sorted)]
+      {:masai  (ruminate/incoming (masai) (masai))
+       :sorted (ruminate/incoming (sorted) (sorted))})))
+
+(defmacro each-layer [layers & forms]
+  `(with-each-layer ~(vec (if (empty? layers)
+                            (remove #{:masai.incoming :sorted.incoming} (keys *graph*))
+                            layers))
+     ~@forms))
 
 (defmacro with-each-layer
   "Execute forms with layer bound to each layer specified or all layers if layers is empty."
@@ -24,7 +34,7 @@
      ~@forms))
 
 (defmacro test-each-layer [layer & forms]
-  `(with-each-layer ~layer
+  `(each-layer ~layer
      (testing ~'layer-name
        ~@forms)))
 
@@ -250,16 +260,16 @@
   (with-graph (make-graph)
     (letfn [(write [break?]
               (at-revision 100
-                (let [actions (retro/compose (update-in-node :masai ["x" :edges "y" :times]
-                                                             conj 1)
-                                             (update-in-node :sorted ["x" :edges "y" :times]
-                                                             conj 1))]
-                  (let [remaining-actions (txn :sorted actions)]
-                    (is (= [(layer :masai)] (keys (:actions remaining-actions))))
-                    (when break?
-                      (throw (Exception. "ZOMG")))
-                    (let [leftover-actions (txn :masai remaining-actions)]
-                      (is (empty? (:actions leftover-actions))))))))]
+                (let [ioval (graph/->retro-ioval
+                             (graph/compose (update-in-node :masai ["x" :edges "y" :times]
+                                                            conj 1)
+                                            (update-in-node :sorted ["x" :edges "y" :times]
+                                                            conj 1)))]
+                  (retro/txn (update-in ioval [:actions]
+                                  select-keys [(graph/unwrap-all (layer :sorted))]))
+                  (when break?
+                    (throw (Exception. "ZOMG")))
+                  (retro/txn ioval))))]
       (are [layer] (nil? (get-node layer "x"))
            :masai :sorted)
 
@@ -288,12 +298,12 @@
     (is (= 0 (current-revision) (uncommitted-revision)))
 
     (at-revision 100
-      (with-each-layer []
+      (each-layer []
         (assoc-node! layer-name :foo {:blah 1})))
 
     (is (= 100 (current-revision) (uncommitted-revision)))
 
-    (with-each-layer [:masai :sorted]
+    (each-layer [:masai :sorted]
       (is (= {:blah 1} (get-node layer-name :foo))))
 
     (is (= 432 (get-node :null :foo 432)))))

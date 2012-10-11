@@ -1,10 +1,11 @@
 (ns jiraph.formats-test
-  (:use clojure.test jiraph.formats jiraph.formats.cereal retro.core
+  (:use clojure.test jiraph.formats jiraph.formats.cereal
         [io.core :only [catbytes]]
+        [retro.core :only [at-revision]]
         [useful.utils :only [adjoin]])
   (:require [jiraph.masai-layer :as masai]
             [jiraph.layer :as layer]
-            [jiraph.graph :as graph]
+            [jiraph.graph :as graph :refer [txn]]
             [jiraph.codex :as codex]
             [jiraph.typed :as typing]
             [masai.tokyo :as tokyo]
@@ -35,10 +36,10 @@
 (deftest typed-layers
   (let [base (revisioned-clojure-format adjoin)
         id "person-1"]
-    (masai/with-temp-layer [base-layer :format-fns {:node base}]
+    (masai/with-temp-layer [base-layer :format-fn base]
       (let [rev (vec (for [r (range 10)]
                        (at-revision base-layer r)))]
-        (txn [(rev 0)]  ;; read 0, write 1
+        (txn ;; read 0, write 1
           (graph/assoc-node (rev 0) id {:foo :blah}))
         (is (= {:foo :blah}
                (graph/get-node (rev 1) id)))
@@ -73,10 +74,10 @@
         (testing "Should work with functional interface"
           (let [l (rev 3)] ;; read 3, write 4
             (is (thrown? Exception
-                         (txn [l]
+                         (txn
                            (graph/assoc-node l "person-4" {:foo :bar}))))
             (let [id "profile-7"]
-              (txn [l]
+              (txn
                 (graph/assoc-node l id {:foo :bar}))
               (is (= {:foo :bar} (graph/get-node (rev 4) id))))))
 
@@ -94,7 +95,7 @@
                                                      (pr-str b) (pr-str a)))))]
     (with-redefs [adjoin throwing-adjoin]
       (let [master (masai/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                               :format-fns {:node (proto/protobuf-format Test$Foo)})
+                               :format-fn (proto/protobuf-format Test$Foo))
             rev (vec (for [r (range 5)]
                        (at-revision master r)))
             before {:bar 5, :tag-set #{"a" "b"}}
@@ -106,17 +107,17 @@
 
         (is (= after (real-adjoin before change)))
 
-        (txn [(rev 0)] ;; adjoin function should be optimized away for reads and writes
+        (txn ;; adjoin function should be optimized away for reads and writes
           (graph/update-node (rev 0) "1" adjoin before))
         (is (= before
                (graph/get-node (rev 1) "1")))
 
         ;; here the function can't be optimized, so we should read, adjoin, write
         (is (thrown? Exception
-                     (txn [(rev 1)]
+                     (txn
                        (graph/update-node (rev 1) "1" (comp identity adjoin) change))))
 
-        (txn [(rev 1)] ;; now make the change for real, without the breaking adjoin
+        (txn ;; now make the change for real, without the breaking adjoin
           (graph/update-node (rev 1) "1" adjoin change))
 
         (is (= after

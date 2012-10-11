@@ -1,11 +1,14 @@
 (ns jiraph.merge-test
   (:use clojure.test jiraph.core jiraph.merge)
-  (:require [jiraph.masai-layer :as masai]))
+  (:require [jiraph.masai-layer :as masai]
+            [jiraph.layer.ruminate :as ruminate]))
 
 (defn empty-graph [f]
-  (let [id-layer (masai/make-temp)]
-    (with-graph {:id     id-layer
-                 :people (mergeable-layer (masai/make-temp) id-layer)}
+  (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)
+        id-with-incoming (ruminate/incoming id-base id-incoming)
+        people-with-incoming (ruminate/incoming people-base people-incoming)]
+    (with-graph {:id     id-with-incoming
+                 :people (mergeable-layer people-with-incoming id-with-incoming)}
       (f))))
 
 (use-fixtures :each empty-graph)
