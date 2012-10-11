@@ -139,7 +139,12 @@
     "Remove all nodes from the specified layers."
     [& layers]
     (refuse-readonly layers)
-    (layers-op layers layer/truncate!)))
+    (layers-op layers layer/truncate!))
+
+  (defn touch
+    "Mark specified layers as being caught up to the current revision."
+    [& layers]
+    (layers-op layers retro/touch)))
 
 (defn node-id-seq
   "Return a lazy sequence of all node ids in this layer."
@@ -260,7 +265,6 @@
                 (update-in retro-ioval [layer] (fnil conj []) write))
               {}, actions))))
 
-(def touch retro/touch)
 (defmacro txn [actions]
   `(retro/txn (->retro-ioval ~actions)))
 (defmacro unsafe-txn [actions]
