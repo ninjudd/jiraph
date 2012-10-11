@@ -246,7 +246,6 @@
 
     (is (zero? (current-revision)))))
 
-;; TODO this is known to be breaking; retro needs a redesign before this can work
 (deftest multi-layer-transactions
   (with-graph (make-graph)
     (letfn [(write [break?]
