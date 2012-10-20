@@ -1,7 +1,8 @@
 (ns jiraph.merge-test
   (:use clojure.test jiraph.core jiraph.merge)
   (:require [jiraph.masai-layer :as masai]
-            [jiraph.layer.ruminate :as ruminate]))
+            [jiraph.layer.ruminate :as ruminate]
+            [useful.utils :refer [adjoin]]))
 
 (defn empty-graph [f]
   (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)
@@ -82,6 +83,18 @@
     (is (= nil (merge-head "E")))
     (is (= #{"F" "G"} (merged-into "E")))
     (is (= #{"B" "C" "D"} (merged-into "A")))))
+
+(deftest readable-merges
+  (let [val (promise)]
+    (at-revision 1
+      (txn (jiraph.graph/compose (update-in-node :people ["A"] adjoin {:foo 1})
+                                 (merge-node (layer :id) "B" "A")
+                                 (fn [read]
+                                   (do (deliver val (read (layer :people) ["B" :foo]))
+                                       [])))))
+    (is (= 1 @val))
+    (is (= 1 (get-in-node :people ["A" :foo])))
+    (is (= 1 (get-in-node :people ["B" :foo])))))
 
 (deftest edge-merging
   (at-revision 1 (assoc-in-node! :people ["A" :edges] {"B" {:foo 1} "C" {:foo 2}}))
