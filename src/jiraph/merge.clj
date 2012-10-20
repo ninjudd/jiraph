@@ -117,7 +117,6 @@
            0
            (get-in node [:edges head :position]))))))
 
-;; TODO this needs to use read function, not graph/get-node
 (defn merge-node
   "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
   [merge-layer head-id tail-id]
@@ -125,30 +124,33 @@
           (format "cannot merge %s into itself" tail-id))
   (verify (= (type-key head-id) (type-key tail-id))
           (format "cannot merge %s into %s because they are not the same type" tail-id head-id))
-  (let [head        (graph/get-node merge-layer head-id)
-        merge-count (or (:merge-count head) 0)
-        head-merged (fix (:head head)               #{head-id} nil)
-        tail-merged (fix (merge-head merge-layer tail-id) #{tail-id} nil)]
-    (if (= head-id tail-merged)
-      (printf "warning: %s is already merged into %s\n" tail-id head-id)
-      (do
-        (verify (not head-merged)
-                (format "cannot merge %s into %s because %2$s is already merged into %s"
-                        tail-id head-id head-merged))
-        (verify (not tail-merged)
-                (format "cannot merge %s into %s because %1$s is already merged into %s"
-                        tail-id head-id tail-merged))
-        (let [revision (retro/current-revision merge-layer)
-              tail-ids (cons tail-id (merged-into merge-layer tail-id))]
-          (apply compose
-                 (graph/update-node merge-layer head-id adjoin
-                                    {:head head-id
-                                     :merge-count (+ merge-count (count tail-ids))})
-                 (for [[pos id] (indexed tail-ids)]
-                   (graph/update-node merge-layer id adjoin
-                                      {:head head-id
-                                       :edges {head-id {:revision revision
-                                                        :position (+ 1 pos merge-count)}}}))))))))
+  (fn [read]
+    (let [head (read merge-layer head-id)
+          merge-count (or (:merge-count head) 0)
+          head-merged (fix (:head head) #{head-id} nil)
+          tail-merged (fix (merge-head read merge-layer tail-id) #{tail-id} nil)]
+      (if (= head-id tail-merged)
+        (do (printf "warning: %s is already merged into %s\n" tail-id head-id)
+            [])
+        (do
+          (verify (not head-merged)
+                  (format "cannot merge %s into %s because %2$s is already merged into %s"
+                          tail-id head-id head-merged))
+          (verify (not tail-merged)
+                  (format "cannot merge %s into %s because %1$s is already merged into %s"
+                          tail-id head-id tail-merged))
+          (let [revision (retro/current-revision merge-layer)
+                tail-ids (cons tail-id (merged-into read merge-layer tail-id))]
+            ((apply compose
+                     (graph/update-node merge-layer head-id adjoin
+                                        {:head head-id
+                                         :merge-count (+ merge-count (count tail-ids))})
+                     (for [[pos id] (indexed tail-ids)]
+                       (graph/update-node merge-layer id adjoin
+                                          {:head head-id
+                                           :edges {head-id {:revision revision
+                                                            :position (+ 1 pos merge-count)}}})))
+             read)))))))
 
 (defn merge-node!
   "Mutable version of merge-node."
@@ -169,25 +171,26 @@
                                                 (<= revision (:revision edge)))]
                                  [to-id {:deleted true}]))}))
 
-;; TODO this needs to use read function, not get-node
 (defn unmerge-node
   "Unmerge tail node from head node, taking all nodes that were previously merged into tail with it."
   [merge-layer head-id tail-id]
-  (let [tail      (graph/get-node merge-layer tail-id)
-        merge-rev (get-in tail [:edges head-id :revision])
-        tail-ids  (merged-into merge-layer tail-id)
-        head-ids  (merged-into merge-layer head-id)]
-    (verify merge-rev ;; revision of the original merge of tail into head
-            (format "cannot unmerge %s from %s because they aren't merged"
-                    tail-id head-id))
-    (apply compose
-           (delete-merges-after merge-layer merge-rev tail-id tail)
-           (graph/update-node merge-layer tail-id adjoin {:head nil})
-           (when (= (count head-ids) (inc (count tail-ids)))
-             (graph/update-node merge-layer head-id adjoin {:head nil}))
-           (for [id tail-ids]
-             (compose (delete-merges-after merge-layer merge-rev id (graph/get-node merge-layer id))
-                      (graph/update-node merge-layer id adjoin {:head tail-id}))))))
+  (fn [read]
+    (let [tail (read merge-layer tail-id)
+          merge-rev (get-in tail [:edges head-id :revision])
+          tail-ids (merged-into read merge-layer tail-id)
+          head-ids (merged-into read merge-layer head-id)]
+      (verify merge-rev ;; revision of the original merge of tail into head
+              (format "cannot unmerge %s from %s because they aren't merged"
+                      tail-id head-id))
+      ((apply compose
+              (delete-merges-after merge-layer merge-rev tail-id tail)
+              (graph/update-node merge-layer tail-id adjoin {:head nil})
+              (when (= (count head-ids) (inc (count tail-ids)))
+                (graph/update-node merge-layer head-id adjoin {:head nil}))
+              (for [id tail-ids]
+                (compose (delete-merges-after merge-layer merge-rev id (read merge-layer id))
+                         (graph/update-node merge-layer id adjoin {:head tail-id}))))
+       read))))
 
 (defn unmerge-node!
   "Mutable version of unmerge-node."
