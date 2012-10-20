@@ -69,16 +69,20 @@
   ([id]
      (merge-head *default-merge-layer-name* id))
   ([merge-layer id]
+     (merge-head graph/get-in-node merge-layer id))
+  ([read merge-layer id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (:head (graph/get-node merge-layer id)))))
+       (:head (read merge-layer [id])))))
 
 (defn merged-into
   "Returns a vector of the node ids that are merged into a specific node."
   ([id]
      (merged-into *default-merge-layer-name* id))
   ([merge-layer id]
+     (merged-into graph/get-in-node merge-layer id))
+  ([read merge-layer id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (->> (graph/get-in-node (child merge-layer :incoming) [id :edges])
+       (->> (read (child merge-layer :incoming) [id :edges])
             (remove (comp :deleted val))
             (sort-by (comp :position val))
             (keys)
@@ -90,19 +94,22 @@
   ([id]
      (merge-ids *default-merge-layer-name* id))
   ([merge-layer id]
+     (merge-ids graph/get-in-node merge-layer id))
+  ([read merge-layer id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (if-let [head-id (merge-head merge-layer id)]
-         `[~head-id ~@(merged-into merge-layer head-id)]
+       (if-let [head-id (merge-head read merge-layer id)]
+         `[~head-id ~@(merged-into read merge-layer head-id)]
          [id]))))
 
-;; TODO figure out how to use read function here rather than graph/get-node
 (defn merge-position
   "Returns the position in the merge chain for a given id, 0 for the head."
   ([id]
      (merge-position *default-merge-layer-name* id))
   ([merge-layer id]
+     (merge-position graph/get-in-node merge-layer id))
+  ([read merge-layer id]
      (let [merge-layer (fix merge-layer keyword? layer)
-           node     (graph/get-node merge-layer id)]
+           node (read merge-layer [id])]
        (when-let [head (:head node)]
          (if (= head id)
            0
