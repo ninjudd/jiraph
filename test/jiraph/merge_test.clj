@@ -88,7 +88,7 @@
   (let [val (promise)]
     (at-revision 1
       (txn (jiraph.graph/compose (update-in-node :people ["A"] adjoin {:foo 1})
-                                 (merge-node (layer :id) "B" "A")
+                                 (merge-node (layer :id) "A" "B")
                                  (fn [read]
                                    (do (deliver val (read (layer :people) ["B" :foo]))
                                        [])))))
