@@ -10,10 +10,10 @@
                (fn [wrapper]
                  (fn [read]
                    (let [read (wrapper read)]
-                     (fn [layer keyseq]
+                     (fn [layer keyseq & [not-found]]
                        (read (if (same? master layer)
                                slave, layer)
-                             keyseq))))))))
+                             keyseq, not-found))))))))
 
 (defprotocol Wrapped
   "For layers which provide additional functionality by wrapping other layers."

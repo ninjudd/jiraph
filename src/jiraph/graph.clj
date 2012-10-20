@@ -87,15 +87,15 @@
   specified keyseq, to become (apply f current-value args)."
   [layer write-keyseq f args]
   (fn [read]
-    (fn [layer' read-keyseq]
+    (fn [layer' read-keyseq & [not-found]]
       (if-let [[read-path update-path get-path]
                (and (same? layer layer')
                     (path-parts read-keyseq write-keyseq))]
         (let [update (partial apply update-in*)]
-          (-> (read layer' read-path)
+          (-> (read layer' read-path not-found)
               (update update-path f args)
               (get-in get-path)))
-        (read layer' read-keyseq)))))
+        (read layer' read-keyseq not-found)))))
 
 (defn simple-ioval
   "Given the arguments to update-in-node, return a function for creating a basic jiraph iovalue.
