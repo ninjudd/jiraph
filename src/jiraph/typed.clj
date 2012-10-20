@@ -2,7 +2,7 @@
   (:use [jiraph.core :only [layer]]
         [jiraph.layer :only [Basic Optimized Schema get-node schema update-in-node]]
         [jiraph.utils :only [assert-length edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
-        [jiraph.wrapped-layer :only [defwrapped wrap-forwarded-reads]]
+        [jiraph.wrapped-layer :only [defwrapped update-wrap-read forward-reads]]
         [clojure.core.match :only [match]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
@@ -49,7 +49,7 @@
                                 ([:edges] :seq) (keys attrs)
                                 ([:edges to-id & _] :seq) [to-id])))))
         (-> (update-in-node layer keyseq f args)
-            (wrap-forwarded-reads this layer))))
+            (update-wrap-read forward-reads this layer))))
 
   Schema
   (schema [this node-id]
