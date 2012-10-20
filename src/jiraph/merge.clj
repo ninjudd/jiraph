@@ -46,15 +46,17 @@
     (reduce adjoin nil nodes)))
 
 (defn- expand-keyseq-merges
-  [merge-layer keyseq]
-  (let [[from-id attr to-id & tail] keyseq
-        from-ids (reverse (merge-ids merge-layer from-id))]
-    (if (and to-id (= :edges attr))
-      (for [from-id from-ids
-            to-id   (reverse (merge-ids merge-layer to-id))]
-        `(~from-id :edges ~to-id ~@tail))
-      (for [from-id from-ids]
-        (cons from-id (rest keyseq))))))
+  ([merge-layer keyseq]
+     (expand-keyseq-merges graph/get-in-node merge-layer keyseq))
+  ([read merge-layer keyseq]
+     (let [[from-id attr to-id & tail] keyseq
+           from-ids (reverse (merge-ids read merge-layer from-id))]
+       (if (and to-id (= :edges attr))
+         (for [from-id from-ids
+               to-id   (reverse (merge-ids read merge-layer to-id))]
+           `(~from-id :edges ~to-id ~@tail))
+         (for [from-id from-ids]
+           (cons from-id (rest keyseq)))))))
 
 (defn- merge-fn [merge-layer keyseq f]
   (when (seq keyseq)
