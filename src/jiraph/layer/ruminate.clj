@@ -22,11 +22,6 @@
                     keyseq f args))
         (update-wrap-read forward-reads this input-layer)))
 
-  layer/Layer
-  (truncate! [this]
-    (doseq [layer (cons input-layer (map second output-layers))]
-      (layer/truncate! layer)))
-
   Parent
   (children [this]
     (map first output-layers))
@@ -42,6 +37,9 @@
   (close [this]
     (doseq [layer (cons input-layer (map second output-layers))]
       (layer/close layer)))
+  (truncate! [this]
+    (doseq [layer (cons input-layer (map second output-layers))]
+      (layer/truncate! layer)))
 
   retro/Transactional
   (txn-begin! [this]
