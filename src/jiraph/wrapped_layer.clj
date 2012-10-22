@@ -66,9 +66,6 @@
        (node-seq    [this#] (filter #(keep-node? this# (first %))
                                     (node-seq ~layer-sym)))
 
-       Incoming
-       (get-incoming [this# id#] (get-incoming ~layer-sym id#))
-
        SortedEnumerate
        (node-id-subseq [this# cmp# start#] (filter #(keep-node? this# %)
                                                    (node-id-subseq ~layer-sym cmp# start#)))

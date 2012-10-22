@@ -33,14 +33,6 @@
   (verify-node [layer id attrs]
     "Verify that the given node is valid according to the layer schema."))
 
-(defprotocol Incoming
-  (get-incoming [layer id]
-    "Return the ids of all nodes that have an incoming edge to this one.
-     The return type may be either a set, or an \"existence hash\", where the value for each key
-     is a boolean, indicating whether an incoming edge comes from the key to this node. This can
-     be useful for allowing a client to detect that an edge once existed but has since been
-     removed."))
-
 (defprotocol Basic
   (get-node [layer id not-found]
     "Fetch a node from the graph.")
@@ -142,10 +134,6 @@
   Optimized
   ;; can't optimize anything
   (query-fn  [layer keyseq not-found f] nil)
-
-  Incoming
-  (get-incoming [layer id]
-    #{})
 
   Historical
   (node-history [layer id]
