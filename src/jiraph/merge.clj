@@ -74,7 +74,7 @@
      (merge-head graph/get-in-node merge-layer id))
   ([read merge-layer id]
      (let [merge-layer (fix merge-layer keyword? layer)]
-       (:head (read merge-layer [id])))))
+       (read merge-layer [id :head]))))
 
 (defn merged-into
   "Returns a vector of the node ids that are merged into a specific node."
