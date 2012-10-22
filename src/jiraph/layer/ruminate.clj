@@ -20,7 +20,7 @@
                     (for [[name layer] output-layers]
                       (at-revision layer rev))
                     keyseq f args))
-        (wrap-forwarded-reads this input-layer)))
+        (update-wrap-read forward-reads this input-layer)))
 
   layer/Layer
   (truncate! [this]

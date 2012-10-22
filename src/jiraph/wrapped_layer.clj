@@ -1,19 +1,24 @@
 (ns jiraph.wrapped-layer
   (:use jiraph.layer retro.core
-        [useful.map :only [merge-in]]
+        [useful.map :only [merge-in update]]
         [useful.datatypes :only [assoc-record]]
         [useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
 
-(defn wrap-forwarded-reads [ioval master slave]
+(defn update-wrap-read [ioval f & args]
   (fn [read]
-    (update-in (ioval read) [0 :wrap-read]
-               (fn [wrapper]
-                 (fn [read]
-                   (let [read (wrapper read)]
-                     (fn [layer keyseq]
-                       (read (if (same? master layer)
-                               slave, layer)
-                             keyseq))))))))
+    (let [actions (ioval read)]
+      (conj (pop actions)
+            (update (peek actions) :wrap-read
+              (fn [wrapper]
+                (fn [read]
+                  (let [read (wrapper read)]
+                    (apply f read args)))))))))
+
+(defn forward-reads [read master slave]
+  (fn [layer keyseq & [not-found]]
+    (read (if (same? master layer)
+            slave, layer)
+          keyseq, not-found)))
 
 (defprotocol Wrapped
   "For layers which provide additional functionality by wrapping other layers."
@@ -74,7 +79,7 @@
        (get-node [this# id# not-found#] (get-node ~layer-sym id# not-found#))
        (update-in-node [this# keyseq# f# args#]
                        (-> (update-in-node ~layer-sym keyseq# f# args#)
-                           (wrap-forwarded-reads this# ~layer-sym)))
+                           (update-wrap-read forward-reads this# ~layer-sym)))
 
        Optimized
        (query-fn  [this# keyseq# not-found# f#] (query-fn ~layer-sym keyseq# not-found# f#))
