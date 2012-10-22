@@ -202,6 +202,8 @@
   "Fetch data from inside a node, replacing it with not-found if it is missing,
    and immediately call a function on it."
   [layer keyseq not-found f & args]
+  (verify (sequential? keyseq) (format "Can't look up keyseq %s in layer %s"
+                                       (pr-str keyseq) (pr-str layer)))
   (if-let [query-fn (query-fn layer keyseq not-found f)]
     (apply query-fn args)
     (if-let [query-fn (query-fn layer keyseq not-found identity)]

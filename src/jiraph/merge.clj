@@ -212,7 +212,7 @@
                  (when (= (count head-ids) (inc (count tail-ids)))
                    (graph/update-node merge-layer head-id adjoin {:head nil}))
                  (for [id tail-ids]
-                   (compose (delete-merges-after merge-layer merge-rev id (read merge-layer id))
+                   (compose (delete-merges-after merge-layer merge-rev id (read merge-layer [id]))
                             (graph/update-node merge-layer id adjoin {:head tail-id}))))
           (update-wrap-read merge-reads merge-layer)
           (invoke read)))))
