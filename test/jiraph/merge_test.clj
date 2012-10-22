@@ -1,7 +1,8 @@
 (ns jiraph.merge-test
   (:use clojure.test jiraph.core jiraph.merge)
   (:require [jiraph.masai-layer :as masai]
-            [jiraph.layer.ruminate :as ruminate]))
+            [jiraph.layer.ruminate :as ruminate]
+            [useful.utils :refer [adjoin]]))
 
 (defn empty-graph [f]
   (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)
@@ -83,6 +84,66 @@
     (is (= #{"F" "G"} (merged-into "E")))
     (is (= #{"B" "C" "D"} (merged-into "A")))))
 
+(deftest readable-merge-update
+  (let [val (promise)]
+    (at-revision 1
+      (txn (jiraph.graph/compose (merge-node (layer :id) "A" "B")
+                                 (update-in-node :people ["A"] adjoin {:foo 1})
+                                 (fn [read]
+                                   (do (deliver val (read (layer :people) ["B" :foo]))
+                                       [])))))
+    (is (= 1 @val))
+    (is (= 1 (get-in-node :people ["A" :foo])))
+    (is (= 1 (get-in-node :people ["B" :foo])))))
+
+(deftest readable-update-merge
+  (let [val (promise)]
+    (at-revision 1
+      (txn (jiraph.graph/compose (update-in-node :people ["A"] adjoin {:foo 1})
+                                 (merge-node (layer :id) "A" "B")
+                                 (fn [read]
+                                   (do (deliver val (read (layer :people) ["B" :foo]))
+                                       [])))))
+    (is (= 1 @val))
+    (is (= 1 (get-in-node :people ["A" :foo])))
+    (is (= 1 (get-in-node :people ["B" :foo])))))
+
+(deftest readable-merge-update-unmerge
+  (let [val (promise)]
+    (at-revision 1
+      (txn (jiraph.graph/compose (merge-node (layer :id) "A" "B")
+                                 (update-in-node :people ["A"] adjoin {:foo 1})
+                                 (unmerge-node (layer :id) "A" "B")
+                                 (fn [read]
+                                   (do (deliver val (read (layer :people) ["B" :foo]))
+                                       [])))))
+    (is (= nil @val))
+    (is (= 1   (get-in-node :people ["A" :foo])))
+    (is (= nil (get-in-node :people ["B" :foo])))))
+
+(deftest readable-merge-unmerge-merge
+  (let [val1 (promise)
+        val2 (promise)
+        val3 (promise)]
+    (at-revision 1
+      (txn (jiraph.graph/compose (merge-node (layer :id) "A" "B")
+                                 (fn [read]
+                                   (do (deliver val1 (merged-into read (layer :id) "A"))
+                                       []))
+                                 (unmerge-node (layer :id) "A" "B")
+                                 (fn [read]
+                                   (do (deliver val2 (merged-into read (layer :id) "A"))
+                                       [])))))
+    (at-revision 2
+      (txn (jiraph.graph/compose (merge-node (layer :id) "A" "B")
+                                 (fn [read]
+                                   (do (deliver val3 (merged-into read (layer :id) "A"))
+                                       [])))))
+    (is (= #{"B"} @val1))
+    (is (= #{}    @val2))
+    (is (= #{"B"} @val3))
+    (is (= #{"B"} (merged-into (layer :id) "A")))))
+
 (deftest edge-merging
   (at-revision 1 (assoc-in-node! :people ["A" :edges] {"B" {:foo 1} "C" {:foo 2}}))
   (at-revision 2 (merge-node! "C" "B"))
@@ -106,7 +167,7 @@
   (is (= {:a 1 :edges {"G" {:foo 3 :bar 2 :baz nil}}} (get-node :people "E")))
   (is (= #{"D"} (get-incoming :people "G")))
   (is (= #{"D"} (get-incoming :people "F")))
-  
+
   (at-revision 9  (unmerge-node! "D" "E"))
   (at-revision 10 (unmerge-node! "G" "F"))
 
