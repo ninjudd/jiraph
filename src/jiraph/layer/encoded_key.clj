@@ -1,4 +1,4 @@
-(ns jiraph.layer.single-type
+(ns jiraph.layer.encoded-key
   (:use jiraph.wrapped-layer
         [useful.utils :only [map-entry]])
   (:require [jiraph.layer :as layer :refer [dispatch-update same?]]
@@ -9,7 +9,7 @@
   (cons (encode (first keyseq))
         (rest keyseq)))
 
-(defwrapped SingleTypeLayer [layer encode decode]
+(defwrapped EncodedKeyLayer [layer encode decode]
   layer/Basic
   (get-node [this id not-found]
     (layer/get-node layer (encode id) not-found))
@@ -53,10 +53,10 @@
   (get-changed-ids [this rev]
     (map decode (layer/get-changed-ids layer rev))))
 
-(defn make [layer type]
+(defn single-type-layer [layer type]
   (let [type-prefix (str (name type) "-")
         type-len (count type-prefix)] ;; if type is :person, drop the "person-" suffix
-    (SingleTypeLayer. layer
+    (EncodedKeyLayer. layer
                       (fn encode [^String id]
                         (String. (long->bytes (Long/parseLong (subs id type-len)))))
                       (fn decode [^String key]

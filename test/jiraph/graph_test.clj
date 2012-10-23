@@ -4,7 +4,7 @@
   (:require ;[jiraph.stm-layer :as stm]
             [jiraph.layer :as layer]
             [jiraph.layer.ruminate :as ruminate]
-            [jiraph.layer.single-type :as single-type]
+            [jiraph.layer.encoded-key :as encoded]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
 
@@ -103,7 +103,7 @@
                                                       (sorted/wrap-default-formats)
                                                       (sorted/wrap-revisioned)))
                     #(masai/make-temp)] ;; add more layers as they're implemented
-          wrap [identity #(single-type/make % :profile)]]
+          wrap [identity #(encoded/single-type-layer % :profile)]]
     (let [layer (ruminate/incoming (wrap (layer-fn)) (layer-fn))]
       (layer/open layer)
       (try
