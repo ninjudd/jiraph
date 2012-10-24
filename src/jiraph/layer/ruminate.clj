@@ -116,16 +116,20 @@ true/false."
           (fn [read]
             (let [source-update ((apply update-in-node source keyseq f args) read)
                   read' (graph/advance-reader read source-update)]
-              (reduce into source-update
-                      (when-let [id (first (if (seq keyseq)
-                                             (when (or (not (next keyseq))
-                                                       (= field (second keyseq)))
-                                               keyseq)
-                                             args))]
-                        (let [[old-idx new-idx] ((juxt read read') source [id field])]
-                          (when (not= old-idx new-idx)
-                            [((update-in-node index [old-idx index-fieldname] disj id) read)
-                             ((update-in-node index [new-idx index-fieldname] conj id) read)])))))))))
+              (into source-update
+                    (when-let [id (first (if (seq keyseq)
+                                           (when (or (not (next keyseq))
+                                                     (= field (second keyseq)))
+                                             keyseq)
+                                           args))]
+                      (let [[old-idx new-idx] ((juxt read read') source [id field])]
+                        (when (not= old-idx new-idx)
+                          (letfn [(record [idx exists]
+                                    (when idx
+                                      ((update-in-node index [idx index-fieldname]
+                                                       adjoin {id exists}) read)))]
+                            (concat (record new-idx true)
+                                    (record old-idx false))))))))))))
 
 ;; - eventually, switch from deleted to exists, but not yet
 ;; - until then, copy all data to incoming edges, whether using adjoin or not
