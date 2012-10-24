@@ -32,10 +32,10 @@
 ;;; - a :revisions codec, for reading the list of revisions at which a node has been touched.
 
 (defn write-format [layer node-id]
-  ((:format-fn layer) {:id node-id :revision (:revision layer)}))
+  ((:node-format-fn layer) {:id node-id :revision (:revision layer)}))
 
 (defn read-format [layer node-id]
-  ((:format-fn layer) {:id node-id :revision (revision-to-read layer)}))
+  ((:node-format-fn layer) {:id node-id :revision (revision-to-read layer)}))
 
 (defn- revision-seq [format revision bytes]
   (when-let [rev-codec (:revisions format)]
@@ -56,7 +56,7 @@
       ((if append-only? db/append! db/put!)
        db (id->str id) (bytes attrs)))))
 
-(defrecord MasaiLayer [db revision max-written-revision append-only? format-fn]
+(defrecord MasaiLayer [db revision max-written-revision append-only? node-format-fn]
   Object
   (toString [this]
     (pr-str this))
@@ -182,16 +182,16 @@
        (defn- make-db [db]
          db))
 
-(let [default-format-fn (cereal/revisioned-clojure-format adjoin)]
-  ;; format-fn should be a function:
+(let [default-node-format-fn (cereal/revisioned-clojure-format adjoin)]
+  ;; node-format-fn should be a function:
   ;; - accept as arg: a map containing {revision and node-id}
   ;; - return: a format (see doc for formats at the top of this file)
-  (defn make [db & {:keys [assoc-mode format-fn] :or {assoc-mode :append}}]
+  (defn make [db & {:keys [assoc-mode node-format-fn] :or {assoc-mode :append}}]
     (MasaiLayer. (make-db db) nil (volatile nil)
                  (case assoc-mode
                    :append true
                    :overwrite false)
-                 (as-fn (or format-fn default-format-fn)))))
+                 (as-fn (or node-format-fn default-node-format-fn)))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.
