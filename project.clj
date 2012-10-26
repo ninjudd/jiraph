@@ -1,4 +1,4 @@
-(defproject jiraph "0.8.2"
+(defproject jiraph "0.8.3-SNAPSHOT"
   :description "embedded graph db library for clojure"
   :url "https://github.com/flatland/jiraph"
   :license {:name "Eclipse Public License - v 1.0"

@@ -131,5 +131,19 @@ true/false."
                             (concat (record new-idx true)
                                     (record old-idx false))))))))))))
 
+(defn changelog [source dest]
+  (make source [[:change-log dest]]
+        (fn [source [dest] keyseq f args]
+          (graph/compose (apply update-in-node source keyseq f args)
+                         (update-in-node dest [(str "revision-" (inc (current-revision dest)))
+                                               :ids]
+                                         adjoin [(dispatch-update keyseq f args
+                                                                  (fn assoc* [id value]
+                                                                    id)
+                                                                  (fn dissoc* [id]
+                                                                    id)
+                                                                  (fn update* [id keys]
+                                                                    id))])))))
+
 ;; - eventually, switch from deleted to exists, but not yet
 ;; - until then, copy all data to incoming edges, whether using adjoin or not
