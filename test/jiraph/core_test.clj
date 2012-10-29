@@ -17,10 +17,8 @@
                                                (sorted/wrap-default-formats)
                                                (sorted/wrap-revisioned)))]
   (defn make-graph []
-    (let [masai-incoming (masai)
-          sorted-incoming (sorted)]
-      {:masai  (ruminate/incoming (masai) (masai))
-       :sorted (ruminate/incoming (sorted) (sorted))})))
+    {:masai  (ruminate/incoming (masai) (masai))
+     :sorted (ruminate/incoming (sorted) (sorted))}))
 
 (defmacro each-layer [layers & forms]
   `(with-each-layer ~(vec (if (empty? layers)
