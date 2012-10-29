@@ -6,6 +6,7 @@
             [jiraph.layer :as layer]
             [retro.core :as retro]
             [jiraph.layer.ruminate :as ruminate]
+            [jiraph.wrapped-layer :as wrapped]
             [jiraph.null-layer :as null]
             [jiraph.masai-layer :as masai]
             [jiraph.masai-sorted-layer :as sorted]))
@@ -173,7 +174,8 @@
 
       (testing "max-revision"
         (at-revision 102
-          (assoc-node! layer-name "8" {:foo 8}))
+          (assoc-node! layer-name "8" {:foo 8})
+          (touch layer-name)) ;; make sure ruminants get updated
         (is (= 8 (:foo (get-node layer-name "8"))))
         (is (= 102 (retro/max-revision layer))))
 
@@ -265,8 +267,12 @@
                                                             conj 1)
                                             (update-in-node :sorted ["x" :edges "y" :times]
                                                             conj 1)))]
-                  (retro/txn (update-in ioval [:actions]
-                                  select-keys [(graph/unwrap-all (layer :sorted))]))
+                  (let [sorted (layer :sorted)
+                        incoming (graph/unwrap-all (wrapped/child sorted :incoming))
+                        sorted (graph/unwrap-all sorted)]
+                    (retro/txn (update-in ioval [:actions]
+                                          select-keys [sorted incoming]))
+                    (retro/touch incoming)) ;; ruminant layers not guaranteed to update max-rev
                   (when break?
                     (throw (Exception. "ZOMG")))
                   (retro/txn ioval))))]
@@ -299,7 +305,8 @@
 
     (at-revision 100
       (each-layer []
-        (assoc-node! layer-name :foo {:blah 1})))
+        (assoc-node! layer-name :foo {:blah 1})
+        (touch layer-name))) ;; make sure ruminants get updated as well
 
     (is (= 100 (current-revision) (uncommitted-revision)))
 

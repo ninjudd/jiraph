@@ -53,7 +53,17 @@
   (txn-rollback! [this]
     (doseq [[name layer] (rseq output-layers)]
       (retro/txn-rollback! layer))
-    (retro/txn-rollback! input-layer)))
+    (retro/txn-rollback! input-layer))
+
+  retro/OrderedRevisions
+  (max-revision [this]
+    (apply min (or (seq (remove #{Double/POSITIVE_INFINITY}
+                                (map retro/max-revision
+                                     (cons input-layer (map second output-layers)))))
+                   [0])))
+  (touch [this]
+    (doseq [layer (cons input-layer (map second output-layers))]
+      (retro/touch (at-revision layer (current-revision this))))))
 
 ;; write will be called once per update, passed args like: (write input-layer [output1 output2...]
 ;; keyseq f args) It should return a jiraph io-value (a function of read; see update-in-node's
