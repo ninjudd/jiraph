@@ -145,7 +145,7 @@ true/false."
                                     (record old-idx false))))))))))))
 
 (defn changelog [source dest]
-  (make source [[:change-log dest]]
+  (make source [[:changelog dest]]
         (fn [source [dest] keyseq f args]
           (graph/compose (apply update-in-node source keyseq f args)
                          (update-in-node dest [(str "revision-" (inc (current-revision dest)))
