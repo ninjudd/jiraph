@@ -338,6 +338,18 @@
        (drop-while #(satisfies? wrapped/Wrapped %))
        (first)))
 
+(defn children
+  "Return the names of all the children that this layer has, ie those for
+   which (child l name) would return non-nil."
+  [layer]
+  (layer/children layer))
+
+(defn child
+  "Find a layer which is related in some way to this one. For example, pass :incoming to get the
+    layer (if any) on which incoming edges from this layer are stored."
+  [layer name]
+  (layer/child layer name))
+
 (defn schema
   [layer id-or-type]
   (let [id (fix id-or-type
@@ -403,7 +415,7 @@
 (defn- get-incoming-edges
   "Get incoming edges from a node, including whatever data is on the edges."
   [layer id]
-  (when-let [incoming-layer (wrapped/child layer :incoming)]
+  (when-let [incoming-layer (child layer :incoming)]
     (get-in-node incoming-layer [id :edges])))
 
 (defn ^{:dynamic true} get-incoming-map

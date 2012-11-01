@@ -25,24 +25,9 @@
   (unwrap [layer]
     "Provide access to the underlying layer."))
 
-(defprotocol Parent
-  (children [layer]
-    "Return the names of all the children that this layer has, ie those for
-    which (child l name) would return non-nil.")
-  (child [layer name]
-    "Find a layer which is related in some way to this one. For example, pass :incoming to get the
-    layer (if any) on which incoming edges from this layer are stored."))
-
 (defprotocol NodeFilter
   "Implement this to get automatic filtering of nodes and ids in node-[id-]seq."
   (keep-node? [layer id]))
-
-(extend-type Object
-  Parent
-  (children [this]
-    nil)
-  (child [this name]
-    nil))
 
 (defn default-specs [layer-sym]
   (let [layer-key (keyword layer-sym)]

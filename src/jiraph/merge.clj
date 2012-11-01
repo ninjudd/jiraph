@@ -1,8 +1,9 @@
 (ns jiraph.merge
-  (:use [jiraph.layer :only [Layer Basic Optimized query-fn get-node update-in-node]]
+  (:use [jiraph.layer :only [Layer Basic Optimized Parent
+                             children child query-fn get-node update-in-node]]
         [jiraph.core :only [layer unsafe-txn]]
         [jiraph.utils :only [edges-keyseq]]
-        [jiraph.wrapped-layer :only [NodeFilter Parent children child defwrapped update-wrap-read]]
+        [jiraph.wrapped-layer :only [NodeFilter defwrapped update-wrap-read]]
         [useful.map :only [dissoc-in* assoc-in* update-in*]]
         [useful.seq :only [merge-sorted indexed]]
         [useful.fn :only [fix given]]

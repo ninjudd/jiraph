@@ -266,7 +266,7 @@
                                             (update-in-node :sorted ["x" :edges "y" :times]
                                                             conj 1)))]
                   (let [sorted (layer :sorted)
-                        incoming (graph/unwrap-all (wrapped/child sorted :incoming))
+                        incoming (graph/unwrap-all (graph/child sorted :incoming))
                         sorted (graph/unwrap-all sorted)]
                     (retro/txn (update-in ioval [:actions]
                                           select-keys [sorted incoming]))

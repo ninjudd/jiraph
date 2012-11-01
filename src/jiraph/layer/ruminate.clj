@@ -22,7 +22,7 @@
                     keyseq f args))
         (update-wrap-read forward-reads this input-layer)))
 
-  Parent
+  layer/Parent
   (children [this]
     (map first output-layers))
   (child [this child-name]
