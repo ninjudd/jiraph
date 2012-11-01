@@ -24,11 +24,14 @@
 
   layer/Parent
   (children [this]
-    (map first output-layers))
+    (reduce into #{}
+            [(map first output-layers)
+             (layer/children input-layer)]))
   (child [this child-name]
-    (first (for [[name layer] output-layers
-                 :when (= name child-name)]
-             (at-revision layer (current-revision this)))))
+    (or (first (for [[name layer] output-layers
+                     :when (= name child-name)]
+                 (at-revision layer (current-revision this))))
+        (layer/child (at-revision input-layer (current-revision this)) child-name)))
 
   layer/Layer
   (open [this]
