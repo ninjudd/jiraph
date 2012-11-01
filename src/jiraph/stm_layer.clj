@@ -2,10 +2,11 @@
   (:refer-clojure :exclude [meta])
   (:use [jiraph.layer :only [Enumerate Basic Layer Optimized ChangeLog get-revisions close]]
         [jiraph.graph :as graph :only [with-action get-node]]
-        [jiraph.utils :only [meta-id meta-id? base-id assert-length]]
+        [jiraph.utils :only [meta-id meta-id? base-id]]
         [retro.core :only [WrappedTransactional Revisioned OrderedRevisions
                            max-revision at-revision current-revision]]
         [useful.fn :only [given fix]]
+        [useful.seq :only [assert-length]]
         [useful.utils :only [returning or-min]]
         [useful.datatypes :only [assoc-record]])
   (:import (java.io FileNotFoundException)))

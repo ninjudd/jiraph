@@ -1,8 +1,8 @@
 (ns jiraph.layer.ruminate
   (:use jiraph.wrapped-layer
         useful.debug
-        [jiraph.utils :only [assert-length]]
         [useful.utils :only [returning adjoin]]
+        [useful.seq :only [assert-length]]
         [useful.map :only [assoc-in*]])
   (:require [jiraph.layer :as layer :refer [dispatch-update]]
             [jiraph.graph :as graph :refer [update-in-node]]

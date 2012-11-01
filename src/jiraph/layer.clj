@@ -1,7 +1,7 @@
 (ns jiraph.layer
   (:use [useful.utils :only [adjoin map-entry]]
         [clojure.stacktrace :only [print-trace-element]]
-        [jiraph.utils :only [assert-length]])
+        [useful.seq :only [assert-length]])
   (:require [retro.core :as retro])
   (:import (java.util Map$Entry)))
 

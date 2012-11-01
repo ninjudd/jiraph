@@ -3,14 +3,14 @@
          :only [Enumerate Optimized Historical Basic Layer ChangeLog Schema
                 node-id-seq]]
         [jiraph.formats :only [special-codec]]
-        [jiraph.utils :only [id->str meta-str? assert-length]]
+        [jiraph.utils :only [id->str meta-str?]]
         [jiraph.codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            at-revision txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [if-ns adjoin returning map-entry]]
         [useful.map :only [update-in*]]
-        [useful.seq :only [find-with]]
+        [useful.seq :only [find-with assert-length]]
         [useful.state :only [volatile put!]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]

@@ -1,12 +1,13 @@
 (ns jiraph.typed
   (:use [jiraph.core :only [layer]]
         [jiraph.layer :only [Basic Optimized Schema get-node schema update-in-node]]
-        [jiraph.utils :only [assert-length edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
+        [jiraph.utils :only [edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [jiraph.wrapped-layer :only [defwrapped update-wrap-read forward-reads]]
         [clojure.core.match :only [match]]
         [useful.map :only [map-vals-with-keys update update-in*]]
         [useful.fn :only [fix fixing]]
         [useful.utils :only [adjoin]]
+        [useful.seq :only [assert-length]]
         [useful.experimental :only [prefix-lookup]]
         [useful.datatypes :only [assoc-record]])
   (:require [jiraph.layer :as layer]))
