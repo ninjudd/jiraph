@@ -6,16 +6,14 @@
         [jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            txn-begin! txn-commit! txn-rollback!]]
-        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? switch verify update-peek]]
-        [useful.seq :only [find-with prefix-of? single? remove-prefix find-first glue]]
+        [useful.utils :only [if-ns adjoin returning empty-coll? switch]]
+        [useful.seq :only [prefix-of? single? remove-prefix glue take-until]]
         [useful.state :only [volatile put!]]
-        [useful.string :only [substring-after substring-before]]
-        [useful.map :only [assoc-in* map-vals keyed]]
-        [useful.fn :only [as-fn knit any fix to-fix ! validator decorate]]
-        [useful.io :only [long->bytes bytes->long compare-bytes]]
+        [useful.map :only [assoc-in* merge-in keyed]]
+        [useful.fn :only [as-fn any to-fix]]
+        [useful.io :only [compare-bytes]]
         [useful.datatypes :only [assoc-record]]
-        useful.debug
-        [io.core :only [bufseq->bytes]])
+        useful.debug)
   (:require [flatland.masai.db :as db]
             [flatland.masai.cursor :as cursor]
             [jiraph.graph :as graph :refer [with-action]]
@@ -35,7 +33,7 @@
 (defn path-match
   "Try to match pattern to keyseq. If pattern matches keyseq, return a map containing
   the matching :prefix and the remaining :suffix or :pattern, whichever is left."
-  [pattern keyseq]
+  [keyseq pattern]
   (loop [pattern (cons :* pattern)
          suffix (sequence keyseq)
          prefix []]
@@ -50,20 +48,17 @@
           (keyed [prefix pattern])))
       (keyed [prefix suffix]))))
 
+(defn matching-path [keyseq]
+  (fn [layout-entry]
+    (when-let [match (path-match keyseq (:pattern layout-entry))]
+      (assoc layout-entry :match match))))
+
 (defn full-match? [path-match]
   (and path-match
        (every? #{:*} (:pattern path-match))))
 
-(defn split-keyseq
-  "Split keyseq using the patterns from the appropriate layout."
-  [layer keyseq]
-  (if (seq keyseq)
-    (let [layout (layout :read layer (first keyseq))]
-      (->> layout
-           (map #(path-match (first %) keyseq))
-           (filter full-match?)
-           (first)))
-    {:prefix []}))
+(defn wildcard-match? [path-match]
+  (= :* (first (:pattern path-match))))
 
 (defn along-path?
   "Is either of these a path-prefix of the other?"
@@ -75,29 +70,32 @@
   [pattern keyseq]
   (= [] (:suffix (path-match pattern keyseq))))
 
+(defn find-codec
+  "Find the first codec of type codec-type in layout that matches keyseq."
+  [layout codec-type keyseq]
+  (when-let [{:keys [format]} (first (filter #(match-path? (first %) keyseq)
+                                             layout))]
+    (or (get format codec-type)
+        (get format :codec))))
+
 (defn codec-finder
   "Returns a function to find the first [path, format] pair in the applicable layout that matches
   keyseq exactly."
   [layer codec-type]
   (let [layout-fn (memoize (fn [id] (layout :read layer id)))]
     (fn [keyseq]
-      (let [layout (layout-fn (first keyseq))]
-        (when-let [[path format] (first (filter #(match-path? (first %) keyseq)
-                                                layout))]
-          (or (get format key)
-              (get format :codec)))))))
+      (-> (layout-fn (first keyseq))
+          (find-codec codec-type keyseq)))))
 
 (defn- subnode-layout
-  "This is used to find, given a layout and a keyseq, the subset of the layout that will actually be
-   needed to read or write at that keyseq. Basically, this means all formats whose path is below the
-   keyseq, and one format which is at or above it."
+  "This is used to find, given kind (:read|:write) a layer and a keyseq, the subset of the layout
+   that will actually be needed for that keyseq. Basically, this means all formats matching that
+   keyseq up until the first format that matches the keyseq completely."
   [kind layer keyseq]
   (when (seq keyseq)
-    (let [[below above] (->> (layout kind layer (first keyseq))
-                             (map (decorate #(path-match (first %) keyseq)))
-                             (filter second)
-                             (split-with (comp full-match? second)))]
-      (map first (concat below (take 1 above))))))
+    (->> (layout kind layer (first keyseq))
+         (keep (matching-path keyseq))
+         (take-until (comp full-match? :match)))))
 
 (defn matching-subpaths
   "Look through a node for all actual paths that match a path pattern. If include-empty? is truthy,
@@ -166,26 +164,61 @@
                                 [end end-test])]
            (keyed [start end start-test end-test]))))))
 
+(defn fetch
+  "top-level"
+  [layer keyseq val-codec]
+  (let [{:keys [key-codec db]} layer
+        key (encode key-codec keyseq)]
+    (when-let [val (db/fetch db key)]
+      (->> (decode val-codec val)
+           (assoc-in* {} keyseq)))))
+
+(defn- fetch-range
+  "top-level"
+  [layer prefix opts]
+  (let [{:keys [key-codec db]} layer
+        {:keys [start end start-test end-test]} (bounds key-codec prefix opts)
+        {:keys [reverse? codec-type layout] :or {codec-type :codec}} opts
+        fetch (if reverse? db/fetch-rsubseq db/fetch-subseq)
+        codec (if layout
+                (partial find-codec layout codec-type)
+                (codec-finder layer codec-type))]
+    (for [[key val] (apply fetch db
+                           start-test start
+                           (when end [end-test end]))
+          :when (not (revision-key? key))
+          :let [keyseq (decode key-codec key)
+                val-codec (codec keyseq)]
+          :when val-codec]
+      (->> (decode val-codec val)
+           (assoc-in* {} keyseq)))))
+
 (defn node-chunks
-  ([layer prefix]
-     (node-chunks layer prefix {}))
-  ([layer prefix opts]
-     (let [{:keys [key-codec]} layer
-           {:keys [start end start-test end-test]} (bounds key-codec prefix opts)
-           {:keys [reverse? codec-type] :or {codec-type :codec}} opts
-           fetch (if reverse? db/fetch-rsubseq db/fetch-subseq)
-           codec (codec-finder layer codec-type)]
-       (glue conj [] #(= (keys %1) (keys %2))
-             (for [[key val] (apply fetch (:db layer)
-                                    start-test start
-                                    (when end [end-test end]))
-                   :when (not (revision-key? key))
-                   :let [keyseq (decode key-codec key)
-                         suffix (remove-prefix prefix keyseq)
-                         val-codec (codec keyseq)]
-                   :when (and suffix val-codec)]
-               (->> (decode val-codec val)
-                    (assoc-in* {} suffix)))))))
+  "top-level"
+  [layer codec-type keyseq]
+  (for [[prefix layout] (group-by (comp :prefix :match)
+                                  (subnode-layout :read layer keyseq))]
+    (if (or (next layout)
+            (:pattern (-> layout first :match)))
+      (fetch-range layer prefix (keyed [codec-type layout]))
+      (let [val-codec (get-in (first layout) [:format codec-type])]
+        (fetch prefix val-codec)))))
+
+(defn- get-node-seq
+  "not top-level"
+  [layer prefix opts]
+  (->> (fetch-range layer prefix opts)
+       (map #(get-in % prefix))
+       (glue merge-in {} #(= (keys %1) (keys %2)))))
+
+(defn- get-in-node
+  "not top-level"
+  [layer keyseq not-found]
+  {:pre [(seq keyseq)]}
+  (if-let [chunks (seq (node-chunks layer :codec keyseq))]
+    (-> (reduce merge-in chunks)
+        (get-in keyseq not-found))
+    not-found))
 
 (defn- subseq-fn [node-entries-fn opts]
   (fn
@@ -195,26 +228,18 @@
        (node-entries-fn (merge opts (keyed [start-test start end-test end]))))))
 
 (defn seq-fn [layer keyseq not-found f]
-  (when-not (:suffix (split-keyseq layer keyseq))
-    (let [node-entries #(mapcat seq (node-chunks layer keyseq %))
-          node-subseq (switch f
-                        seq #(node-entries {})
-                        rseq #(node-entries {:reverse? true})
-                        subseq (subseq-fn node-entries {})
-                        rsubseq (subseq-fn node-entries {:reverse? true}))]
-      (when node-subseq
+  (when (some (comp wildcard-match? :match)
+              (subnode-layout :read layer keyseq))
+    (let [node-entries #(mapcat seq (get-node-seq layer keyseq %))]
+      (when-let [node-subseq (switch f
+                               seq #(node-entries {})
+                               rseq #(node-entries {:reverse? true})
+                               subseq (subseq-fn node-entries {})
+                               rsubseq (subseq-fn node-entries {:reverse? true}))]
         (fn [& args]
-          (or (seq (apply subseq args))
+          (or (seq (apply node-subseq args))
               (when (empty? (node-entries {}))
                 (apply f not-found args))))))))
-
-(defn- get-in-node [layer keyseq not-found]
-  {:pre [(seq keyseq)]}
-  (let [{:keys [prefix suffix]} (split-keyseq layer keyseq)]
-    (if-let [chunks (seq (node-chunks layer prefix))]
-      (-> (reduce adjoin chunks)
-          (get-in suffix not-found))
-      not-found)))
 
 (defn- optimized-writer
   "Return a writer iff the keyseq corresponds exactly to one path in path-formats, and the
@@ -241,7 +266,7 @@
           layout (subnode-layout :write layer keyseq)
           id (first keyseq)
           node (assoc-in* {} keyseq node)]
-      (reduce (fn [node [path format]]
+      (reduce (fn [node {:keys [pattern format match]}]
                 (reduce (fn [node path]
                           (let [path (vec path)]
                             (write-fn db
@@ -251,7 +276,7 @@
                             (when (seq path)
                               (no-nil-update node (pop path) dissoc (peek path)))))
                         node
-                        (matching-subpaths node path include-empty?)))
+                        (matching-subpaths node pattern include-empty?)))
               (get node id)
               layout))))
 
@@ -393,7 +418,7 @@
 
   ChangeLog
   (get-revisions [this id]
-    (let [revs (->> (node-chunks this [id] {:codec-type :revisions})
+    (let [revs (->> (node-chunks this :revisions [id])
                     (tree-seq (any map? sequential?)
                               (to-fix map? vals, sequential? seq))
                     (filter number?)
@@ -426,6 +451,7 @@
 (def default-format {:codec (cereal/clojure-codec :repeated true)
                      :reduce-fn adjoin})
 
+;; TODO fix
 (defn wrap-default-formats [layout-fn]
   (fn [opts]
     (when-let [layout (layout-fn opts)]
@@ -447,10 +473,9 @@
        (defn- make-db [db]
          db))
 
-clojure.string/split
-
-(let [default-layout-fn (wrap-revisioned (constantly [[[:edges :*] default-format]
-                                                      [         [] default-format]]))
+(let [default-layout-fn (wrap-revisioned
+                         (constantly [{:pattern [:edges :*] :format default-format}
+                                      {:pattern []          :format default-format}]))
       default-key-codec {:read (fn [db-key]
                                  (let [pieces (s/split (String. ^bytes db-key) #":")]
                                    (case (count pieces)
