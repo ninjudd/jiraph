@@ -445,9 +445,15 @@
        (defn- make-db [db]
          db))
 
+clojure.string/split
+
 (let [default-layout-fn (wrap-revisioned (constantly [[[:edges :*] default-format]
                                                       [         [] default-format]]))
-      default-key-codec {:read #(s/split (String. ^bytes %) #":")
+      default-key-codec {:read (fn [db-key]
+                                 (let [pieces (s/split (String. ^bytes db-key) #":")]
+                                   (case (count pieces)
+                                     1 pieces
+                                     3 (assoc pieces 1 :edges))))
                          :write #(.getBytes ^String (s/join ":" (map name %)))}]
   (defn make [db & {:keys [assoc-mode layout-fn key-codec]
                     :or {assoc-mode :append
