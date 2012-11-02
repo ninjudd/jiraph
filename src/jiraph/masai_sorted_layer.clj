@@ -175,7 +175,9 @@
            fetch (if reverse? db/fetch-rsubseq db/fetch-subseq)
            codec (codec-finder layer codec-type)]
        (glue conj [] #(= (keys %1) (keys %2))
-             (for [[key val] (fetch (:db layer) start-test start end-test end)
+             (for [[key val] (apply fetch (:db layer)
+                                    start-test start
+                                    (when end [end-test end]))
                    :let [keyseq (decode key-codec key)
                          suffix (remove-prefix prefix keyseq)
                          val-codec (codec keyseq)]
