@@ -3,7 +3,7 @@
          :only [SortedEnumerate Optimized Basic Layer ChangeLog Schema node-id-seq]]
         [jiraph.utils :only [keyseq->str meta-str? assert-length]]
         [jiraph.codex :only [encode decode]]
-        [jiraph.masai-common :only [implement-ordered revision-to-read]]
+        [jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? switch verify update-peek]]
@@ -51,7 +51,8 @@
       (keyed [prefix suffix]))))
 
 (defn full-match? [path-match]
-  (every? #{:*} (:pattern path-match)))
+  (and path-match
+       (every? #{:*} (:pattern path-match))))
 
 (defn split-keyseq
   "Split keyseq using the patterns from the appropriate layout."
@@ -178,6 +179,7 @@
              (for [[key val] (apply fetch (:db layer)
                                     start-test start
                                     (when end [end-test end]))
+                   :when (not (revision-key? key))
                    :let [keyseq (decode key-codec key)
                          suffix (remove-prefix prefix keyseq)
                          val-codec (codec keyseq)]
