@@ -12,8 +12,8 @@
 (defn test-graph []
   {:foo (masai/make-temp)
    :bar (masai/make-temp)
-   :baz (sorted/make-temp :layout-fn (-> (constantly [[[:edges :*]]
-                                                      [[]]])
+   :baz (sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]}
+                                                      {:pattern []}])
                                          (sorted/wrap-default-formats)
                                          (sorted/wrap-revisioned)))
    :stm (stm/make)})

@@ -25,9 +25,9 @@
   ;; cereal's revisioned clojure-reader codec
   (let [= =*] ;; jiraph treats {} and nil equivalently; test must account for this
     (masai/with-temp-layer [layer
-                            :layout-fn (-> (constantly [[[:edges :*]]
-                                                        [[:names]] ;; TODO support indexing non-maps
-                                                        [[]]])
+                            :layout-fn (-> (constantly [{:pattern [:edges :*]}
+                                                        {:pattern [:names]}
+                                                        {:pattern []}])
                                            (masai/wrap-default-formats)
                                            (masai/wrap-revisioned))]
       (let [id "profile-1"
@@ -54,8 +54,8 @@
 
 (deftest test-subseq
   (masai/with-temp-layer [layer
-                          :layout-fn (-> (constantly [[[:edges :*]]
-                                                      [[]]])
+                          :layout-fn (-> (constantly [{:pattern [:edges :*]}
+                                                      {:pattern []}])
                                          (masai/wrap-default-formats)
                                          (masai/wrap-revisioned))]
     (let [node {:edges {"mary" {:data 1}

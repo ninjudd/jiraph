@@ -11,8 +11,8 @@
             [jiraph.masai-sorted-layer :as sorted]))
 
 (let [masai  masai/make-temp
-      sorted #(sorted/make-temp :layout-fn (-> (constantly [[[:edges :*]]
-                                                            [[]]])
+      sorted #(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]}
+                                                            {:pattern []}])
                                                (sorted/wrap-default-formats)
                                                (sorted/wrap-revisioned)))]
   (defn make-graph []
