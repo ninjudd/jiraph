@@ -63,12 +63,12 @@
 (defn along-path?
   "Is either of these a path-prefix of the other?"
   [pattern keyseq]
-  (boolean (path-match pattern keyseq)))
+  (boolean (path-match keyseq pattern)))
 
 (defn match-path?
   "Does pattern match path exactly?"
   [pattern keyseq]
-  (= [] (:suffix (path-match pattern keyseq))))
+  (= [] (:suffix (path-match keyseq pattern))))
 
 (defn find-codec
   "Find the first codec of type codec-type in layout that matches keyseq."
