@@ -9,7 +9,7 @@
         [useful.utils :only [if-ns adjoin returning empty-coll? switch]]
         [useful.seq :only [prefix-of? single? remove-prefix glue take-until]]
         [useful.state :only [volatile put!]]
-        [useful.map :only [assoc-in* merge-in keyed]]
+        [useful.map :only [update assoc-in* merge-in keyed]]
         [useful.fn :only [as-fn any to-fix]]
         [useful.io :only [compare-bytes]]
         [useful.datatypes :only [assoc-record]]
@@ -73,7 +73,7 @@
 (defn find-codec
   "Find the first codec of type codec-type in layout that matches keyseq."
   [layout codec-type keyseq]
-  (when-let [{:keys [format]} (first (filter #(match-path? (first %) keyseq)
+  (when-let [{:keys [format]} (first (filter #(match-path? (:pattern %) keyseq)
                                              layout))]
     (or (get format codec-type)
         (get format :codec))))
@@ -247,11 +247,11 @@
    appending something to a single database value)."
   [layer layout keyseq f args]
   (when-not (next layout) ;; can only optimize a single codec
-    (let [[path format] (first layout)]
+    (let [{:keys [pattern format]} (first layout)]
       (when (and (= f (:reduce-fn format)) ;; performing optimized function
                  (single? args)) ;; with just one arg
         (let [[id & keys] keyseq]
-          (when (= (count keys) (count path)) ;; at exactly this level
+          (when (= (count keys) (count pattern)) ;; at exactly this level
             (let [db (:db layer)
                   key (encode (:key-codec layer) keyseq)
                   arg (first args)] ;; great, we can optimize it
@@ -340,7 +340,7 @@
   nil)
 
 (defmethod specialized-writer adjoin [layer layout keyseq _ args]
-  (when (and (every? (fn [[path format]] ;; TODO support any reduce-fn
+  (when (and (every? (fn [{:keys [format]}] ;; TODO support any reduce-fn
                        (= adjoin (:reduce-fn format)))
                      layout)
              (single? args)) ;; can only adjoin with exactly one arg
@@ -401,8 +401,8 @@
 
   Schema
   (schema [this id]
-    (reduce (fn [acc [path format]]
-              (let [path (vec path)
+    (reduce (fn [acc {:keys [pattern format]}]
+              (let [path (vec pattern)
                     schema (:schema format)
                     [path schema] (if (= :* (peek path))
                                     [(pop path) {:type :map
@@ -455,15 +455,18 @@
 (defn wrap-default-formats [layout-fn]
   (fn [opts]
     (when-let [layout (layout-fn opts)]
-      (for [[path format] layout]
-        [path (merge default-format format)]))))
+      (for [entry layout]
+        (merge {:format default-format} entry)))))
+
+(defn revisioned-format [format opts]
+  ((formats/revisioned-format (constantly format))
+   opts))
 
 (defn wrap-revisioned [layout-fn]
   (fn [opts]
     (when-let [layout (layout-fn opts)]
-      (for [[path format] layout]
-        [path ((formats/revisioned-format (constantly format))
-               opts)]))))
+      (for [entry layout]
+        (update entry :format revisioned-format opts)))))
 
 (if-ns (:require [flatland.masai.tokyo-sorted :as tokyo])
        (defn- make-db [db]
