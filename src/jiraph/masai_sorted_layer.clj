@@ -2,7 +2,7 @@
   (:use [jiraph.layer :as layer
          :only [SortedEnumerate Optimized Basic Layer ChangeLog Schema node-id-seq]]
         [jiraph.utils :only [keyseq->str meta-str? assert-length]]
-        [jiraph.codex :only [encode decode]]
+        [jiraph.codex :as codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            txn-begin! txn-commit! txn-rollback!]]
@@ -476,15 +476,20 @@
        (defn- make-db [db]
          db))
 
+(def simple-key-codec {:read (fn [db-key]
+                               (s/split (String. ^bytes db-key) #":"))
+                       :write #(.getBytes ^String (s/join ":" (map name %)))})
+
+(def default-key-codec (-> simple-key-codec
+                           (codex/wrap identity
+                                       (fn [keys]
+                                         (if (next keys)
+                                           (update-in keys [1] keyword)
+                                           keys)))))
+
 (let [default-layout-fn (wrap-revisioned
                          (constantly [{:pattern [:edges :*] :format default-format}
-                                      {:pattern []          :format default-format}]))
-      default-key-codec {:read (fn [db-key]
-                                 (let [pieces (s/split (String. ^bytes db-key) #":")]
-                                   (case (count pieces)
-                                     1 pieces
-                                     3 (assoc pieces 1 :edges))))
-                         :write #(.getBytes ^String (s/join ":" (map name %)))}]
+                                      {:pattern []          :format default-format}]))]
   (defn make [db & {:keys [assoc-mode layout-fn key-codec]
                     :or {assoc-mode :append
                          layout-fn default-layout-fn
