@@ -52,6 +52,14 @@
         (update-in-node! layer [id] adjoin change-4)
         (is (= node-4 (get-node layer id)))))))
 
+(deftest path-match
+  (is (nil? (masai/path-match ["profile-1" :edges "profile-10"]
+                        [:names])))
+  (is (= {:prefix ["profile-1"] :pattern [:edges :*]}
+         (masai/path-match ["profile-1"] [:edges :*])))
+  (is (= {:prefix ["profile-1" :edges "profile-10"], :suffix [:rel]}
+         (masai/path-match ["profile-1" :edges "profile-10" :rel] [:edges :*]))))
+
 (deftest test-subseq
   (masai/with-temp-layer [layer
                           :layout-fn (-> (constantly [{:pattern [:edges :*]}
