@@ -82,5 +82,6 @@
                (seq (apply query-in-node layer ["mike" :edges] f args)))))
 
       (is (= ["charlie" "mike" "sally" (layer/node-id-seq layer)]))
-      (is (= ["mike" "sally" (layer/node-id-subseq layer > "edward")]))
-      (is (= [["sally" {:data "test"}]] (layer/node-subseq layer > "nicholas"))))))
+      ;; (is (= ["mike" "sally" (layer/node-id-subseq layer > "edward")]))
+      ;; (is (= [["sally" {:data "test"}]] (layer/node-subseq layer > "nicholas")))
+      )))

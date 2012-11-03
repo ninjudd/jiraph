@@ -1,13 +1,18 @@
 (ns jiraph.layer.encoded-key
   (:use jiraph.wrapped-layer
+        [useful.map :only [update-each]]
         [useful.utils :only [map-entry]])
   (:require [jiraph.layer :as layer :refer [dispatch-update same?]]
             [jiraph.graph :as graph :refer [update-in-node]]
             [jiraph.masai-common :refer [bytes->long long->bytes]]))
 
-(defn update-keyseq-id [keyseq encode]
+(defn- update-keyseq-id [keyseq encode]
   (cons (encode (first keyseq))
         (rest keyseq)))
+
+(defn- update-subseq-opts [opts encode]
+  (update-each opts [:start-key :end-key]
+               #(when % (encode %))))
 
 (defwrapped EncodedKeyLayer [layer encode decode]
   layer/Basic
@@ -34,10 +39,10 @@
     (layer/query-fn layer (update-keyseq-id keyseq encode) not-found f))
 
   layer/SortedEnumerate
-  (node-id-subseq [this cmp start]
-    (map decode (layer/node-id-subseq layer cmp (encode start))))
-  (node-subseq [this cmp start]
-    (for [[id attrs] (layer/node-subseq layer cmp (encode start))]
+  (node-id-subseq [this opts]
+    (map decode (layer/node-id-subseq layer (update-subseq-opts opts encode))))
+  (node-subseq [this opts]
+    (for [[id attrs] (layer/node-subseq layer (update-subseq-opts opts encode))]
       (map-entry (decode id) attrs)))
 
   layer/Enumerate

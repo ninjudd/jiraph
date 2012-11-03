@@ -59,6 +59,3 @@
                                vals)))
           (frame identity identity))))))
 
-(defn special-codec [format key]
-  (or (get format key)
-      (get format :codec)))

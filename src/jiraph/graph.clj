@@ -1,6 +1,6 @@
 (ns jiraph.graph
   (:use [jiraph.utils :only [meta-id meta-id?]]
-        [useful.map :only [filter-keys-by-val assoc-in* update-in*]]
+        [useful.map :only [filter-keys-by-val assoc-in* update-in* keyed]]
         [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [useful.fn :only [fix]]
         [clojure.string :only [split join]]
@@ -167,17 +167,13 @@
 
 (defn node-id-subseq
   "Return a lazy subsequence of node ids in this layer."
-  [layer cmp start]
-  (layer/node-id-subseq layer cmp start))
+  [layer start-test start-key]
+  (layer/node-id-subseq layer (keyed [start-test start-key])))
 
 (defn node-subseq
   "Return a lazy subsequence of [node id] pairs in the layer."
-  [layer cmp start]
-  (layer/node-subseq layer cmp start))
-
-(defn get-node-raw
-  [layer id & [not-found]]
-  (apply layer/get-node [layer id not-found]))
+  [layer start-test start-key]
+  (layer/node-subseq layer (keyed [start-test start-key])))
 
 (def ^{:dynamic true} *read* nil)
 

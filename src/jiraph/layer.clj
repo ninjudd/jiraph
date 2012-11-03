@@ -9,16 +9,15 @@
 
 (defprotocol Enumerate
   (node-id-seq [layer]
-    "A seq of all node ids in this layer")
+    "A seq of all node ids in this layer.")
   (node-seq [layer]
-    "A seq of all [id, node] entries in this layer"))
+    "A seq of all [id, node] entries in this layer."))
 
 (defprotocol SortedEnumerate
-  "For layers which can provide indexed access into their Enumerate functions.
-   Operations are versions fo Enumerate functions that take additional arguments
-   in the form accepted by clojure.core/subseq."
-  (node-id-subseq [layer cmp start])
-  (node-subseq [layer cmp start]))
+  (node-id-subseq [layer opts]
+    "An ordered, bounded seq of all node ids in this layer.")
+  (node-subseq [layer opts]
+    "An ordered, bounded seq of all nodes in this layer."))
 
 (defprotocol Schema
   (schema [layer id]
@@ -120,20 +119,20 @@
 
   Enumerate
   (node-id-seq [layer]
-    (node-id-subseq layer >= ""))
+    (node-id-subseq layer {}))
   (node-seq [layer]
-    (node-subseq layer >= ""))
+    (node-subseq layer {}))
 
   SortedEnumerate
-  (node-subseq [layer cmp start]
-    (for [id (node-id-subseq layer cmp start)]
+  (node-subseq [layer opts]
+    (for [id (node-id-subseq layer {})]
       (map-entry id (get-node layer id nil))))
   ;; intentionally unimplemented - this blows up if you don't support it
-  ;; (node-id-subseq [layer cmp start])
+  ;; (node-id-subseq [layer {}])
 
   Optimized
   ;; can't optimize anything
-  (query-fn  [layer keyseq not-found f] nil)
+  (query-fn [layer keyseq not-found f] nil)
 
   Historical
   (node-history [layer id]

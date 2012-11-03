@@ -1,5 +1,6 @@
 (ns jiraph.wrapped-layer
   (:use jiraph.layer retro.core
+        [useful.utils :only [update-peek]]
         [useful.map :only [merge-in update]]
         [useful.datatypes :only [assoc-record]]
         [useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
@@ -7,12 +8,11 @@
 (defn update-wrap-read [ioval f & args]
   (fn [read]
     (let [actions (ioval read)]
-      (conj (pop actions)
-            (update (peek actions) :wrap-read
-              (fn [wrapper]
-                (fn [read]
-                  (let [read (wrapper read)]
-                    (apply f read args)))))))))
+      (update-peek actions update :wrap-read
+                   (fn [wrapper]
+                     (fn [read]
+                       (let [read (wrapper read)]
+                         (apply f read args))))))))
 
 (defn forward-reads [read master slave]
   (fn [layer keyseq & [not-found]]
@@ -67,10 +67,10 @@
                                     (node-seq ~layer-sym)))
 
        SortedEnumerate
-       (node-id-subseq [this# cmp# start#] (filter #(keep-node? this# %)
-                                                   (node-id-subseq ~layer-sym cmp# start#)))
-       (node-subseq    [this# cmp# start#] (filter #(keep-node? this# (first %))
-                                                   (node-subseq ~layer-sym cmp# start#)))
+       (node-id-subseq [this# opts#] (filter #(keep-node? this# %)
+                                             (node-id-subseq ~layer-sym opts#)))
+       (node-subseq    [this# opts#] (filter #(keep-node? this# (first %))
+                                             (node-subseq ~layer-sym opts#)))
 
        Basic
        (get-node [this# id# not-found#] (get-node ~layer-sym id# not-found#))

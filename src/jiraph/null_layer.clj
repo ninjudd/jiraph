@@ -4,8 +4,8 @@
 ;; a layer object like /dev/null - it ignores all writes, and returns nil for all reads
 (defrecord NullLayer []
   SortedEnumerate
-  (node-id-subseq [this cmp start] ())
-  (node-subseq    [this cmp start] ())
+  (node-id-subseq [this opts] ())
+  (node-subseq    [this opts] ())
 
   Basic
   (get-node [this id not-found] not-found)

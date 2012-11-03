@@ -2,9 +2,8 @@
   (:use [jiraph.layer :as layer
          :only [Enumerate Optimized Historical Basic Layer ChangeLog Schema
                 node-id-seq]]
-        [jiraph.formats :only [special-codec]]
         [jiraph.utils :only [assert-length]]
-        [jiraph.codex :only [encode decode encode-format decode-format]]
+        [jiraph.codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            at-revision txn-begin! txn-commit! txn-rollback!]]
@@ -55,36 +54,35 @@
                 (encode codec data)))]
       ((if append-only?
          db/append!, db/put!)
-       db (encode-format (:key-format layer) id) (bytes attrs)))))
+       db (encode (:key-codec layer) id) (bytes attrs)))))
 
 (defn- get-node* [layer id key not-found]
   (if-let [data (db/fetch (:db layer) key)]
-    (decode-format (read-format layer id)
-                   data)
+    (decode (:codec (read-format layer id))
+            data)
     not-found))
 
 (defn- key-seq [layer]
   (remove revision-key? (db/key-seq (:db layer))))
 
-(defrecord MasaiLayer [db revision max-written-revision append-only? format-fn key-format]
+(defrecord MasaiLayer [db revision max-written-revision append-only? format-fn key-codec]
   Object
   (toString [this]
     (pr-str this))
 
   Enumerate
   (node-id-seq [this]
-    (map (partial decode (:codec key-format))
+    (map (partial decode key-codec)
          (key-seq this)))
   (node-seq [this]
-    (let [key-codec (:codec key-format)]
-      (for [key (key-seq this)]
-        (let [id (decode key-codec key)]
-          (map-entry id (get-node* this id key nil))))))
+    (for [key (key-seq this)]
+      (let [id (decode key-codec key)]
+        (map-entry id (get-node* this id key nil)))))
 
   Basic
   (get-node [this id not-found]
     (get-node* this id
-               (encode-format key-format id)
+               (encode key-codec id)
                not-found))
   (update-in-node [this keyseq f args]
     (let [ioval (graph/simple-ioval this keyseq f args)]
@@ -96,8 +94,8 @@
                      (->> (if keys
                             (assoc-in {} keys attrs)
                             attrs)
-                          (encode-format (write-format layer id))
-                          (db/append! db (encode-format key-format id)))))
+                          (encode (:codec (write-format layer id)))
+                          (db/append! db (encode key-codec id)))))
                  (fn [layer]
                    (let [old (graph/get-node layer id)
                          new (apply update-in* old keys f args)]
@@ -112,7 +110,7 @@
                                     (format "Can't destroy history of %s on append-only layer"
                                             id)))
                             (fn [layer]
-                              (db/delete! db (encode-format key-format id)))))
+                              (db/delete! db (encode key-codec id)))))
                  (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
                                                            f))))))))
 
@@ -141,25 +139,25 @@
   (verify-node [this id attrs]
     (try
       ;; do a fake write (does no I/O), to see if an exception would occur
-      (encode-format (write-format this id) attrs)
+      (encode (:codec (write-format this id)) attrs)
       (catch Exception _ false)))
 
   ChangeLog
   (get-revisions [this id]
-    (when-let [data (db/fetch db (encode-format key-format id))]
+    (when-let [data (db/fetch db (encode key-codec id))]
       (revision-seq (read-format (at-revision this nil) id) revision data)))
 
   Historical
   (node-history [this id]
-    (when-let [data (db/fetch db (encode-format key-format id))]
+    (when-let [data (db/fetch db (encode key-codec id))]
       (if-let [historical-codec (:historical (read-format this id))]
         (decode historical-codec data)
         (when-let [revisions (revision-seq (read-format (at-revision this nil) id)
                                            revision data)]
           (into (sorted-map)
                 (for [revision revisions]
-                  [revision (decode-format (read-format (at-revision this revision) id)
-                                           data)]))))))
+                  [revision (decode (:codec (read-format (at-revision this revision) id))
+                                    data)]))))))
 
   ;; TODO this is stubbed, will need to work eventually
   (get-changed-ids [this rev]
@@ -191,21 +189,21 @@
          db))
 
 (let [default-format-fn (cereal/revisioned-clojure-format adjoin)
-      default-key-format {:codec {:read  #(String. ^bytes %)
-                                  :write #(.getBytes ^String %)}}]
+      default-key-codec {:read #(String. ^bytes %)
+                         :write #(.getBytes ^String %)}]
   ;; format-fn should be a function:
   ;; - accept as arg: a map containing {revision and node-id}
   ;; - return: a format (see doc for formats at the top of this file)
-  (defn make [db & {:keys [assoc-mode format-fn key-format]
+  (defn make [db & {:keys [assoc-mode format-fn key-codec]
                     :or {assoc-mode :append
                          format-fn default-format-fn
-                         key-format default-key-format}}]
+                         key-codec default-key-codec}}]
     (MasaiLayer. (make-db db) nil (volatile nil)
                  (case assoc-mode
                    :append true
                    :overwrite false)
                  (as-fn format-fn)
-                 key-format)))
+                 key-codec)))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.

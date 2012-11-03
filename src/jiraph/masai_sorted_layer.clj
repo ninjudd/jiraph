@@ -6,17 +6,18 @@
         [jiraph.masai-common :only [implement-ordered revision-to-read]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            txn-begin! txn-commit! txn-rollback!]]
-        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? switch verify]]
-        [useful.seq :only [find-with prefix-of? find-first glue]]
+        [useful.utils :only [invoke if-ns adjoin returning map-entry empty-coll? switch verify update-peek]]
+        [useful.seq :only [find-with prefix-of? single? remove-prefix find-first glue]]
         [useful.state :only [volatile put!]]
         [useful.string :only [substring-after substring-before]]
         [useful.map :only [assoc-in* map-vals keyed]]
-        [useful.fn :only [as-fn knit any fix to-fix ! validator]]
-        [useful.io :only [long->bytes bytes->long]]
+        [useful.fn :only [as-fn knit any fix to-fix ! validator decorate]]
+        [useful.io :only [long->bytes bytes->long compare-bytes]]
         [useful.datatypes :only [assoc-record]]
+        useful.debug
         [io.core :only [bufseq->bytes]])
-  (:require [masai.db :as db]
-            [masai.cursor :as cursor]
+  (:require [flatland.masai.db :as db]
+            [flatland.masai.cursor :as cursor]
             [jiraph.graph :as graph :refer [with-action]]
             [cereal.core :as cereal]
             [jiraph.formats :as formats]
@@ -24,57 +25,78 @@
             [clojure.string :as s])
   (:import [java.nio ByteBuffer]))
 
-(defn- single? [coll]
-  (and (seq coll)
-       (not (next coll))))
+(defn- layout
+  [kind layer id]
+  (let [revision (case kind
+                   :read (revision-to-read layer)
+                   :write (:revision layer))]
+    ((:layout-fn layer) (keyed [id revision]))))
 
-(defn- no-nil-update
-  "Update-in, but any value that would have become nil (or empty) is dissoc'ed entirely,
-   recursively up to the root."
-  ([m ks f & args]
-     (no-nil-update m ks #(apply f % args)))
-  ([m ks f]
-     (if-let [[k & ks] (seq ks)]
-       (let [v (no-nil-update (get m k) ks f)]
-         (if (empty-coll? v)
-           (dissoc m k)
-           (assoc m k v)))
-       (f m))))
+(defn path-match
+  "Try to match pattern to keyseq. If pattern matches keyseq, return a map containing
+  the matching :prefix and the remaining :suffix or :pattern, whichever is left."
+  [pattern keyseq]
+  (loop [pattern (cons :* pattern)
+         suffix (sequence keyseq)
+         prefix []]
+    (if (seq pattern)
+      (let [x (first pattern)]
+        (if (seq suffix)
+          (let [y (first suffix)]
+            (when (contains? #{y :*} x)
+              (recur (rest pattern)
+                     (rest suffix)
+                     (conj prefix y))))
+          (keyed [prefix pattern])))
+      (keyed [prefix suffix]))))
 
-(defn- path-prefix?
-  "This is a lot like prefix-of? in useful, but treats :* as equal to everything and has
-  a \"strict\" mode for requiring strict (not equal-length) prefixes."
-  ([pattern path]
-     (path-prefix? pattern path false))
-  ([pattern path strict?]
-     (loop [pattern pattern, path path]
-       (if (empty? pattern)
-         (or (not strict?)
-             (and (seq path)
-                  (not= [:*] path)))
-         (and (seq path)
-              (let [[x & xs] pattern
-                    [y & ys] path]
-                (and (or (= x y) (= x :*) (= y :*))
-                     (recur xs ys))))))))
+(defn full-match? [path-match]
+  (every? #{:*} (:pattern path-match)))
+
+(defn split-keyseq
+  "Split keyseq using the patterns from the appropriate layout."
+  [layer keyseq]
+  (if (seq keyseq)
+    (let [layout (layout :read layer (first keyseq))]
+      (->> layout
+           (map #(path-match (first %) keyseq))
+           (filter full-match?)
+           (first)))
+    {:prefix []}))
 
 (defn along-path?
   "Is either of these a path-prefix of the other?"
-  [pattern path]
-  (every? true?
-          (map (fn [x y]
-                 (or (= x y) (= x :*) (= y :*)))
-               pattern, path)))
+  [pattern keyseq]
+  (boolean (path-match pattern keyseq)))
 
-(defn- subnode-formats
-  "This is used to find, given a path through a node and a sequence of [path,format] pairs,
-   all the formats that will actually be needed to write at that path. Basically, this means all
-   formats whose path is below the write-path, and one format which is at or above it."
-  [layout path]
-  (let [path-to-root (filter #(along-path? (first %) path) layout)
-        [below above] (split-with #(path-prefix? path (first %) true)
-                                  path-to-root)]
-    (concat below (take 1 above))))
+(defn match-path?
+  "Does pattern match path exactly?"
+  [pattern keyseq]
+  (= [] (:suffix (path-match pattern keyseq))))
+
+(defn codec-finder
+  "Returns a function to find the first [path, format] pair in the applicable layout that matches
+  keyseq exactly."
+  [layer codec-type]
+  (let [layout-fn (memoize (fn [id] (layout :read layer id)))]
+    (fn [keyseq]
+      (let [layout (layout-fn (first keyseq))]
+        (when-let [[path format] (first (filter #(match-path? (first %) keyseq)
+                                                layout))]
+          (or (get format key)
+              (get format :codec)))))))
+
+(defn- subnode-layout
+  "This is used to find, given a layout and a keyseq, the subset of the layout that will actually be
+   needed to read or write at that keyseq. Basically, this means all formats whose path is below the
+   keyseq, and one format which is at or above it."
+  [kind layer keyseq]
+  (when (seq keyseq)
+    (let [[below above] (->> (layout kind layer (first keyseq))
+                             (map (decorate #(path-match (first %) keyseq)))
+                             (filter second)
+                             (split-with (comp full-match? second)))]
+      (map first (concat below (take 1 above))))))
 
 (defn matching-subpaths
   "Look through a node for all actual paths that match a path pattern. If include-empty? is truthy,
@@ -99,118 +121,96 @@
          '(())))
      node path)))
 
-(let [char-after (fn [c]
-                   (char (inc (int c))))
-      after-colon (char-after \:)
-      str-after (fn [s] ;; the string immediately after this one in lexical order
-                  (str s \u0001))]
-  (defn bounds [path]
-    (let [path  (vec path)
-          last  (peek path)
-          path  (pop path)
-          end   (keyseq->str [last])
-          start (keyseq->str path)]
-      (into {:parent path}
-            (if (empty? path) ; top-level
-              {:start end
-               :stop  (str-after end)
-               :keyfn (constantly last)}
-              (if (= :* last) ; multi
-                {:start (str start ":")
-                 :stop  (str start after-colon)
-                 :keyfn (substring-after ":")
-                 :multi true}
-                (let [start-key (str start ":" (name last))]
-                  {:start start-key
-                   :stop  (str-after start-key)
-                   :keyfn (constantly last)})))))))
+(defn- no-nil-update
+  "Update-in, but any value that would have become nil (or empty) is dissoc'ed entirely,
+   recursively up to the root."
+  ([m ks f & args]
+     (no-nil-update m ks #(apply f % args)))
+  ([m ks f]
+     (if-let [[k & ks] (seq ks)]
+       (let [v (no-nil-update (get m k) ks f)]
+         (if (empty-coll? v)
+           (dissoc m k)
+           (assoc m k v)))
+       (f m))))
 
-(defn- find-format [keyseq formats]
-  (when-let [expected-path (next keyseq)]
-    (some (fn [[path format]]
-            (when (= expected-path path)
-              format))
-          formats)))
+(defn inc-last-byte [^bytes b]
+  (let [index (dec (alength b))]
+    (when-not (neg? index)
+      (aset b index
+            (->> (aget b index)
+                 (unchecked-inc)
+                 (unchecked-byte)))
+      b)))
 
-(defn- seq-fn [layer keys layout not-found f]
-  (let [path `[~@keys :*]]
-    (when-let [{:keys [codec]} (find-format path layout)]
-      (let [{:keys [start stop keyfn]} (bounds path)
-            db-key (partial str start)
-            db     (:db layer)
-            all    (db/fetch-subseq db >= start < stop)]
-        (when-let [fetch-nodes
-                   (switch f
-                     seq  #(seq all)
-                     rseq #(db/fetch-rsubseq db >= start < stop)
-                     subseq (fn
-                              ([test key]
-                                 (if (#{< <=} test)
-                                   (db/fetch-subseq db >= start test (db-key key))
-                                   (db/fetch-subseq db test (db-key key) < stop)))
-                              ([start-test start-key end-test end-key]
-                                 (db/fetch-subseq db
-                                                  start-test (db-key start-key)
-                                                  end-test (db-key end-key))))
-                     rsubseq (fn
-                               ([test key]
-                                  (if (#{> >=} test)
-                                    (db/fetch-rsubseq db test (db-key key) < stop)
-                                    (db/fetch-rsubseq db >= start test (db-key key))))
-                               ([start-test start-key end-test end-key]
-                                  (db/fetch-rsubseq db
-                                                    start-test (db-key start-key)
-                                                    end-test (db-key end-key)))))]
-          (fn [& args]
-            (if (seq all)
-              (for [[k v] (apply fetch-nodes args)]
-                (map-entry (keyfn k)
-                           (decode codec v)))
-              (apply f not-found args))))))))
+(defn bounds
+  "Compute the bounds for fetching db records under prefix. Valid options are:
+    :start-test :start :end-test :end
+   These options correspond to the arguments to clojure.core's subseq and rsubseq."
+  ([key-codec prefix]
+     (bounds key-codec prefix {}))
+  ([key-codec prefix opts]
+     (let [{:keys [start end start-test end-test]
+            :or {start-test >=, end-test <=}} opts]
+       (if (contains? #{< <=} start-test)
+         (bounds key-codec prefix {:start-test >=
+                                   :end-test start-test
+                                   :end start})
+         (let [[start end] (for [key [start end]]
+                             (encode key-codec (if key
+                                                 (concat prefix [key])
+                                                 prefix)))
+               [end end-test] (if (= end-test <=)
+                                [(inc-last-byte end) <]
+                                [end end-test])]
+           (keyed [start end start-test end-test]))))))
 
-(defn- write-layout [layer node-id]
-  ((:layout-fn layer) {:id node-id :revision (:revision layer)}))
+(defn node-chunks
+  ([layer prefix]
+     (node-chunks layer prefix {}))
+  ([layer prefix opts]
+     (let [{:keys [key-codec]} layer
+           {:keys [start end start-test end-test]} (bounds key-codec prefix opts)
+           {:keys [reverse? codec-type] :or {codec-type :codec}} opts
+           fetch (if reverse? db/fetch-rsubseq db/fetch-subseq)
+           codec (codec-finder layer codec-type)]
+       (glue conj [] #(= (keys %1) (keys %2))
+             (for [[key val] (fetch (:db layer) start-test start end-test end)
+                   :let [keyseq (decode key-codec key)
+                         suffix (remove-prefix prefix keyseq)
+                         val-codec (codec keyseq)]
+                   :when (and suffix val-codec)]
+               (->> (decode val-codec val)
+                    (assoc-in* {} suffix)))))))
 
-(defn- read-layout [layer node-id]
-  ((:layout-fn layer) {:id node-id :revision (revision-to-read layer)}))
+(defn- subseq-fn [node-entries-fn opts]
+  (fn
+    ([start-test start]
+       (node-entries-fn (merge opts (keyed [start-test start]))))
+    ([start-test start end-test end]
+       (node-entries-fn (merge opts (keyed [start-test start end-test end]))))))
 
-(defn- delete-ranges!
-  "Given a layer and a sequence of [start, end) intervals, delete every key in range. If the
-   layer is in append-only mode, then a format must be included with each interval to enable
-   us to encode a reset."
-  [layer deletion-ranges]
-  (doseq [{:keys [start stop format]} deletion-ranges]
-    (let [delete (if (:append-only? layer)
-                   (let [deleted (delay (encode (formats/special-codec format :reset)
-                                                {}))]
-                     (fn [cursor]
-                       (-> cursor
-                           (cursor/append (force deleted))
-                           (cursor/next))))
-                   cursor/delete)]
-      (loop [cur (db/cursor (:db layer) start)]
-        (when-let [k ^bytes (cursor/key cur)]
-          (when-let [cur (and (neg? (compare (String. k) stop))
-                              (delete cur))]
-            (recur cur)))))))
+(defn seq-fn [layer keyseq not-found f]
+  (when-not (:suffix (split-keyseq layer keyseq))
+    (let [node-entries #(mapcat seq (node-chunks layer keyseq %))
+          node-subseq (switch f
+                        seq #(node-entries {})
+                        rseq #(node-entries {:reverse? true})
+                        subseq (subseq-fn node-entries {})
+                        rsubseq (subseq-fn node-entries {:reverse? true}))]
+      (when node-subseq
+        (fn [& args]
+          (or (seq (apply subseq args))
+              (when (empty? (node-entries {}))
+                (apply f not-found args))))))))
 
-(defn- node-chunks [layout db id]
-  (for [[path {:keys [codec]}] layout
-        :let [{:keys [start stop parent keyfn]} (bounds (cons id path))
-              kvs (seq (for [[k v] (db/fetch-seq db start)
-                             :while (neg? (compare k stop))
-                             :let [node (decode codec v)]
-                             :when (not (empty-coll? node))]
-                         (map-entry (keyfn k) node)))]
-        :when kvs]
-    (assoc-in* {} parent
-               (into {} kvs))))
-
-(defn- read-node [layout db id not-found]
-  (reduce (fn ;; for an empty list (no keys found), reduce calls f with no args
-            ([] not-found)
-            ([a b] (adjoin a b)))
-          (node-chunks layout db id)))
+(defn- get-in-node [layer keyseq not-found]
+  {:pre [(seq keyseq)]}
+  (let [{:keys [prefix suffix]} (split-keyseq layer keyseq)]
+    (if-let [chunks (seq (node-chunks layer prefix))]
+      (-> (reduce adjoin chunks)
+          (get-in suffix not-found))
+      not-found)))
 
 (defn- optimized-writer
   "Return a writer iff the keyseq corresponds exactly to one path in path-formats, and the
@@ -223,50 +223,72 @@
                  (single? args)) ;; with just one arg
         (let [[id & keys] keyseq]
           (when (= (count keys) (count path)) ;; at exactly this level
-            (let [db  (:db layer)
-                  key (keyseq->str keyseq)
+            (let [db (:db layer)
+                  key (encode (:key-codec layer) keyseq)
                   arg (first args)] ;; great, we can optimize it
               (fn [layer']
-                (let [[_ format] (first (write-layout layer' id))]
+                (let [[_ format] (first (layout :write layer' id))]
                   (db/append! db key
                               (encode (:codec format) arg)))))))))))
 
-(defn- write-paths! [layer write-fn layout id node include-deletions? codec-type]
-  (reduce (fn [node [path format]]
-            (let [write! (fn [key data]
-                           (->> data
-                                (encode (get format codec-type))
-                                (write-fn key)))]
-              (reduce (fn [node path]
-                        (let [path (vec path)
-                              data (get-in node path)]
-                          (write! (keyseq->str (cons id path)) data)
-                          (when (seq path)
-                            (no-nil-update node (pop path) dissoc (peek path)))))
-                      node (matching-subpaths node path include-deletions?))))
-          (get node id)
-          layout))
+(defn- path-write-fn [include-empty? write-fn codec-type]
+  (fn [layer keyseq node]
+    (let [{:keys [db key-codec]} layer
+          layout (subnode-layout :write layer keyseq)
+          id (first keyseq)
+          node (assoc-in* {} keyseq node)]
+      (reduce (fn [node [path format]]
+                (reduce (fn [node path]
+                          (let [path (vec path)]
+                            (write-fn db
+                                      (encode key-codec (cons id path))
+                                      (encode (get format codec-type)
+                                              (get-in node path)))
+                            (when (seq path)
+                              (no-nil-update node (pop path) dissoc (peek path)))))
+                        node
+                        (matching-subpaths node path include-empty?)))
+              (get node id)
+              layout))))
+
+(defn- delete-in-node!
+  "Given a layer and a keyseq, delete every key beneath that keyseq. We need the
+  node-format in case the layer is in append-only mode so we can encode a reset."
+  [layer keyseq]
+  (when (seq keyseq)
+    (let [{:keys [key-codec append-only?]} layer
+          {:keys [start end]} (bounds key-codec keyseq)
+          reset-codec (codec-finder layer :reset)
+          encode (memoize encode)]
+      (loop [cur (db/cursor (:db layer) start)]
+        (when cur
+          (when-let [^bytes key (cursor/key cur)]
+            (when (neg? (compare-bytes key end))
+              (recur (if append-only?
+                       (let [keyseq (decode key-codec key)
+                             deleted (encode (reset-codec keyseq) {})]
+                         (-> cur
+                             (cursor/append deleted)
+                             (cursor/next)))
+                       (cursor/delete cur))))))))))
+
+(defn- bounds-match? [{:keys [multi parent]} keyseq]
+  (and multi
+       (prefix-of? parent keyseq)))
 
 (defn- simple-writer [layer layout keyseq f args]
   (let [{:keys [db append-only?]} layer
         [id & keys] keyseq
-        [write-mode codec-type] (if append-only?
-                                  [db/append! :reset]
-                                  [db/put! :codec])
-        writer (partial write-mode db)]
+        key-codec (:key-codec layer)
+        write! (apply path-write-fn true
+                      (if append-only?
+                        [db/append! :reset]
+                        [db/put! :codec]))]
     (fn [layer']
-      (letfn [(sublayout [kind]
-                (subnode-formats (kind layer' id) keys))]
-        (let [read (sublayout read-layout)
-              write (sublayout write-layout)
-              old (read-node read db id nil)
-              new (apply update-in old keyseq f args)
-              deletion-ranges (for [[path format] write
-                                    :let [{:keys [start stop multi]} (bounds (cons id path))]
-                                    :when (and multi (prefix-of? (butlast path) keys))]
-                                (keyed [start stop format]))]
-          (delete-ranges! layer' deletion-ranges)
-          (write-paths! layer' writer write id new true codec-type))))))
+      (let [old (get-in-node layer' keyseq nil)
+            new (apply f old args)]
+        (delete-in-node! layer' keyseq)
+        (write! layer' keyseq new)))))
 
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
@@ -295,44 +317,27 @@
              (single? args)) ;; can only adjoin with exactly one arg
     (let [db (:db layer)
           [id & keys] keyseq
-          writer (partial db/append! db)
+          write! (path-write-fn false db/append! :codec)
           arg (first args)]
       (fn [layer']
-        (write-paths! layer' writer (subnode-formats (write-layout layer' id) keys) id
-                      (assoc-in {} keyseq arg)
-                      false :codec))))) ;; don't include deletions
+        (write! layer' keyseq arg)))))
 
-(defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn]
+(defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn key-codec]
   SortedEnumerate
-  (node-id-subseq [this cmp start]
-    (verify (#{> >=} cmp) "Only > and >= supported")
-    (let [start (if (= cmp >)
-                  (str start ";")
-                  start)
-          entries (db/fetch-subseq db >= start)
-          ids (map first entries)]
-      (glue (fn [old new] new)
-            =
-            (constantly false)
-            (map (substring-before ":")
-                 (remove meta-str? ids)))))
-  (node-subseq [this cmp start]
-    (for [id (layer/node-id-subseq this cmp start)]
-      (map-entry id (graph/get-node this id))))
+  ;; TODO implement these
+  (node-id-subseq [layer opts])
+  (node-subseq [layer opts])
 
   Basic
   (get-node [this id not-found]
-    (let [node (read-node (read-layout this id) db id not-found)]
-      (if (identical? node not-found)
-        not-found
-        (get node id))))
+    (get-in-node this [id] not-found))
   (update-in-node [this keyseq f args]
     (let [ioval (graph/simple-ioval this keyseq f args)]
-      (if-let [[id & keys] (seq keyseq)]
-        (let [layout (subnode-formats (read-layout this id) keys)]
+      (if (seq keyseq)
+        (let [layout (subnode-layout :read this keyseq)]
           (assert (seq layout) "No codecs to write with")
           (ioval (some #(% this layout keyseq f args)
-                       [specialized-writer, optimized-writer, simple-writer])))
+                       [specialized-writer optimized-writer simple-writer])))
         (condp = f
           dissoc (let [[node-id] (assert-length 1 args)] ;; TODO don't think this is right, but copying from old
                    ;; version for now.
@@ -345,23 +350,9 @@
 
   Optimized
   (query-fn [this keyseq not-found f]
-    (let [[id & keys] keyseq
-          layout (subnode-formats (read-layout this id) keys)]
-      (or (seq-fn this keyseq layout not-found f)
-          (if (seq layout)
-            (fn [& args]
-              ;; incoming protobufs store their incoming edges with each key pointing to a map like:
-              ;; {:deleted bool, :revisions [...], :codec_length ...}.
-              ;; we need to coerce it into a map with one entry for each key, whose value is a
-              ;; boolean indicating existence (so inverting the meaning of :deleted, and "lifting" it
-              ;; outside of the map).
-              (let [node (read-node layout db id not-found)]
-                (apply f (if (= node not-found)
-                           not-found
-                           (get-in node keyseq))
-                       args)))
-            ;; if no codecs apply, every read will be nil
-            (fn [& args] (apply f not-found args))))))
+    (or (seq-fn this keyseq not-found f)
+        (fn [& args]
+          (apply f (get-in-node this keyseq not-found) args))))
 
   Layer
   (open [this]
@@ -391,26 +382,16 @@
                                     [path schema])]
                 (schema/assoc-in acc path schema)))
             {},
-            (reverse (read-layout this id)))) ;; start with shortest path for schema
+            (reverse (layout :read this id)))) ;; start with shortest path for schema
   (verify-node [this id attrs]
-    (try
-      ;; do a fake write (does no I/O), to see if an exception would occur
-      (do (write-paths! this (constantly nil), (write-layout this id),
-                        id, attrs, false, :codec)
-          true)
-      (catch Exception _ false)))
+    ;; TODO remove
+    )
 
   ChangeLog
   (get-revisions [this id]
-    (let [layout (read-layout this id)
-          revisioned-layout (for [[path format] layout
-                                  :let [codec (:revisions format)]
-                                  :when codec] ; pretend :revisions is the normal codec, so that
-                                        ; node-chunks will read using it
-                              [path {:codec codec}])
-          revs (->> (node-chunks revisioned-layout db id)
-                    (tree-seq (any map? sequential?) (to-fix map? vals,
-                                                             sequential? seq))
+    (let [revs (->> (node-chunks this [id] {:codec-type :revisions})
+                    (tree-seq (any map? sequential?)
+                              (to-fix map? vals, sequential? seq))
                     (filter number?)
                     (into (sorted-set)))]
       (seq (if revision
@@ -454,7 +435,7 @@
         [path ((formats/revisioned-format (constantly format))
                opts)]))))
 
-(if-ns (:require [masai.tokyo-sorted :as tokyo])
+(if-ns (:require [flatland.masai.tokyo-sorted :as tokyo])
        (defn- make-db [db]
          (if (string? db)
            (tokyo/make {:path db :create true})
@@ -462,17 +443,20 @@
        (defn- make-db [db]
          db))
 
-(defn make [db & {:keys [assoc-mode layout-fn] :or {assoc-mode :append}}]
-  (let [layout-fn (condp invoke layout-fn
-                    nil? (wrap-revisioned (constantly [[[:edges :*] default-format]
-                                                       [         [] default-format]]))
-                    (! fn?) (constantly layout-fn)
-                    layout-fn)]
+(let [default-layout-fn (wrap-revisioned (constantly [[[:edges :*] default-format]
+                                                      [         [] default-format]]))
+      default-key-codec {:read #(s/split (String. ^bytes %) #":")
+                         :write #(.getBytes ^String (s/join ":" (map name %)))}]
+  (defn make [db & {:keys [assoc-mode layout-fn key-codec]
+                    :or {assoc-mode :append
+                         layout-fn default-layout-fn
+                         key-codec default-key-codec}}]
     (MasaiSortedLayer. (make-db db) nil (volatile nil)
                        (case assoc-mode
                          :append true
                          :overwrite false)
-                       layout-fn)))
+                       (as-fn layout-fn)
+                       key-codec)))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.

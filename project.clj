@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.flatland/masai "0.8.0-SNAPSHOT"]
-                 [useful "0.8.6-SNAPSHOT"]
+                 [useful "0.8.8-SNAPSHOT"]
                  [cereal "0.2.0"]
                  [ordered "1.2.2"]
                  [schematic "0.0.6"]
