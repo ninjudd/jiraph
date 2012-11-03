@@ -202,7 +202,7 @@
             (:pattern (-> layout first :match)))
       (fetch-range layer prefix (keyed [codec-type layout]))
       (let [val-codec (get-in (first layout) [:format codec-type])]
-        (fetch prefix val-codec)))))
+        (fetch layer prefix val-codec)))))
 
 (defn- get-node-seq
   "not top-level"
