@@ -1,7 +1,7 @@
 (ns jiraph.masai-common
   (:use [useful.utils :only [or-max]]
         [useful.state :only [put!]])
-  (:require [masai.db :as db]
+  (:require [flatland.masai.db :as db]
             [retro.core :as retro])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream
             DataOutputStream DataInputStream]))
@@ -14,8 +14,13 @@
       (doto (-> (DataOutputStream.) (.writeLong long)))
       (.toByteArray)))
 
-(let [revision-key "__revision"
-      freshen (fn [cache layer]
+(def revision-key (byte-array [(byte 0)]))
+
+(defn revision-key? [key]
+  (and (= 1 (alength key))
+       (= 0 (aget key 0))))
+
+(let [freshen (fn [cache layer]
                 (or @cache
                     (put! cache
                           (if-let [bytes (db/fetch (:db layer) revision-key)]

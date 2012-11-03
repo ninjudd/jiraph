@@ -111,20 +111,6 @@
           (assoc-node! layer-name "7" node))
         (is (= node (get-node layer-name "7")))))))
 
-(deftest properties
-  (with-graph (make-graph)
-    (test-each-layer []
-      (truncate! layer-name)
-      (testing "layer-wide properties"
-        (let [keys [:meta :foo]
-              curr-foo (fn []
-                         (get-in-node layer-name keys))]
-          (is (not (curr-foo)))
-          (assoc-in-node! layer-name keys [1 2 3])
-          (is (= [1 2 3] (curr-foo)))
-          (update-in-node! layer-name keys conj 5)
-          (is (= [1 2 3 5] (curr-foo))))))))
-
 (deftest incoming
   (with-graph (make-graph)
     (test-each-layer []
@@ -299,14 +285,14 @@
 
     (at-revision 100
       (each-layer []
-        (assoc-node! layer-name :foo {:blah 1})))
+        (assoc-node! layer-name "foo" {:blah 1})))
 
     (is (= 100 (current-revision) (uncommitted-revision)))
 
     (each-layer [:masai :sorted]
-      (is (= {:blah 1} (get-node layer-name :foo))))
+      (is (= {:blah 1} (get-node layer-name "foo"))))
 
-    (is (= 432 (get-node :null :foo 432)))))
+    (is (= 432 (get-node :null "foo" 432)))))
 
 (comment
   (deftest compact-node

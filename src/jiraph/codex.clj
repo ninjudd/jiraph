@@ -47,3 +47,9 @@ The generalized version of gloss/compile-frame."
     (gloss/decode this [(ByteBuffer/wrap byte-array)]))
   (encode [this obj]
     (bufseq->bytes (gloss/encode this obj))))
+
+(defn encode-format [format object]
+  (encode (:codec format) object))
+
+(defn decode-format [format data]
+  (decode (:codec format) data))

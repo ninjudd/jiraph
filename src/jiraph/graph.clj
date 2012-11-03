@@ -8,7 +8,7 @@
         [ego.core :only [type-key]]
         (ordered [set :only [ordered-set]]
                  [map :only [ordered-map]]))
-  (:require [jiraph.layer :as layer]
+  (:require [jiraph.layer :as layer :refer [dispatch-update]]
             [jiraph.wrapped-layer :as wrapped]
             [retro.core :as retro]))
 
@@ -81,21 +81,30 @@
           (not= (first read-path) (first write-path)) nil
           :else (recur (conj shared (first read-path))
                        (rest read-path), (rest write-path)))))
-
 (defn read-wrapper
   "Create a simple wrap-read function representing a single update to the specified layer, at the
   specified keyseq, to become (apply f current-value args)."
   [layer write-keyseq f args]
   (fn [read]
-    (fn [layer' read-keyseq & [not-found]]
-      (if-let [[read-path update-path get-path]
-               (and (same? layer layer')
-                    (path-parts read-keyseq write-keyseq))]
-        (let [update (partial apply update-in*)]
-          (-> (read layer' read-path not-found)
-              (update update-path f args)
-              (get-in get-path)))
-        (read layer' read-keyseq not-found)))))
+    (fn [layer' read-keyseq & [not-found]]      
+      (let [[f [read-path update-path get-path :as paths]]
+            (when (same? layer layer')
+              (dispatch-update write-keyseq f args
+                               (fn assoc* [id value]
+                                 [(constantly value)
+                                  (path-parts read-keyseq [id])])
+                               (fn dissoc* [id]
+                                 [(constantly not-found)
+                                  (path-parts read-keyseq [id])])
+                               (fn update* [_ _]                                       
+                                 [#(apply f % args)
+                                  (path-parts read-keyseq write-keyseq)])))]
+        (if paths
+          (do (assert (seq read-keyseq))
+              (-> (read layer' read-path not-found)
+                  (update-in* update-path f)
+                  (get-in get-path)))
+          (read layer' read-keyseq not-found))))))
 
 (defn simple-ioval
   "Given the arguments to update-in-node, return a function for creating a basic jiraph iovalue.
@@ -177,13 +186,13 @@
      ~@body))
 
 (defn ^{:dynamic true} get-node
-    "Fetch a node's data from this layer."
-    [layer id & [not-found]]
-    (if-let [read *read*]
-      (or (binding [*read* nil]
-            (read layer [id]))
-          not-found)
-      (get-node-raw layer id not-found)))
+  "Fetch a node's data from this layer."
+  [layer id & [not-found]]
+  (if-let [read *read*]
+    (or (binding [*read* nil]
+          (read layer [id]))
+        not-found)
+    (layer/get-node layer id not-found)))
 
 (let [sentinel (Object.)]
   (defn find-node

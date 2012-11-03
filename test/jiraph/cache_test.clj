@@ -7,12 +7,12 @@
         [fogus.unk :only [memo-lru snapshot]])
   (:require [jiraph.masai-layer :as bal]
             [jiraph.stm-layer :as stm]
-            [masai.tokyo :as tokyo])
+            [flatland.masai.tokyo :as tokyo])
   (:import [jiraph Test$Node]))
 
 (def test-graph
   {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                  :node-format-fn (protobuf-format Test$Node))})
+                  :format-fn (protobuf-format Test$Node))})
 
 (defwalk full-walk
   :add?      true

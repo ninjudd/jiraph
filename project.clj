@@ -4,8 +4,8 @@
   :license {:name "Eclipse Public License - v 1.0"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]
-                 [useful "0.8.4"]
-                 [masai "0.7.1"]
+                 [org.flatland/masai "0.8.0-SNAPSHOT"]
+                 [useful "0.8.6-SNAPSHOT"]
                  [cereal "0.2.0"]
                  [ordered "1.2.2"]
                  [schematic "0.0.6"]

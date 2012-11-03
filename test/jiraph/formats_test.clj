@@ -8,7 +8,7 @@
             [jiraph.graph :as graph :refer [txn]]
             [jiraph.codex :as codex]
             [jiraph.typed :as typing]
-            [masai.tokyo :as tokyo]
+            [flatland.masai.tokyo :as tokyo]
             [ego.core :as ego]
             [jiraph.formats.protobuf :as proto])
   (:import (java.nio ByteBuffer)
@@ -36,7 +36,7 @@
 (deftest typed-layers
   (let [base (revisioned-clojure-format adjoin)
         id "person-1"]
-    (masai/with-temp-layer [base-layer :node-format-fn base]
+    (masai/with-temp-layer [base-layer :format-fn base]
       (let [rev (vec (for [r (range 10)]
                        (at-revision base-layer r)))]
         (txn ;; read 0, write 1
@@ -95,7 +95,7 @@
                                                      (pr-str b) (pr-str a)))))]
     (with-redefs [adjoin throwing-adjoin]
       (let [master (masai/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                               :node-format-fn (proto/protobuf-format Test$Foo))
+                               :format-fn (proto/protobuf-format Test$Foo))
             rev (vec (for [r (range 5)]
                        (at-revision master r)))
             before {:bar 5, :tag-set #{"a" "b"}}

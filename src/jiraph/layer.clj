@@ -154,7 +154,15 @@
        true
        (catch AssertionError e nil)))
 
-(defn dispatch-update [keyseq f args assoc-fn dissoc-fn update-fn]
+(defn dispatch-update
+  "Takes the args to update-in-node (keyseq, f, args) and functions to handle top-level assoc,
+  top-level dissoc, or anything else. Calls the appropriate function, passing the following
+  arguments:
+
+    (assoc-fn id value)
+    (dissoc-fn id)
+    (update-fn id keys)"
+  [keyseq f args assoc-fn dissoc-fn update-fn]
   (if (empty? keyseq)
     (condp = f
       assoc (let [[id value] (assert-length 2 args)]

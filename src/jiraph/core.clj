@@ -1,8 +1,8 @@
 (ns jiraph.core
-  (:use     [useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
-            [useful.map :only [update into-map]]
-            [useful.macro :only [macro-do]]
-            slingshot.slingshot)
+  (:use [useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
+        [useful.map :only [update into-map]]
+        [useful.macro :only [macro-do]]
+        slingshot.slingshot)
   (:require [jiraph.graph :as graph]
             [jiraph.layer :as layer]
             [clojure.string :as s]
