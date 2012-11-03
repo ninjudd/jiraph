@@ -41,7 +41,7 @@
       (let [x (first pattern)]
         (if (seq suffix)
           (let [y (first suffix)]
-            (when (contains? #{y :*} x)
+            (when (or (= x y) (= x :*))
               (recur (rest pattern)
                      (rest suffix)
                      (conj prefix y))))
