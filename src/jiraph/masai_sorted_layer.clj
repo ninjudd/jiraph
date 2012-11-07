@@ -24,8 +24,8 @@
   (:import [java.nio ByteBuffer]))
 
 (defn- layout
-  [kind layer id]
-  (let [revision (case kind
+  [mode layer id]
+  (let [revision (case mode
                    :read (revision-to-read layer)
                    :write (:revision layer))]
     ((:layout-fn layer) (keyed [id revision]))))
@@ -81,19 +81,19 @@
 (defn codec-finder
   "Returns a function to find the first [path, format] pair in the applicable layout that matches
   keyseq exactly."
-  [layer codec-type]
-  (let [layout-fn (memoize (fn [id] (layout :read layer id)))]
+  [layer mode codec-type]
+  (let [layout-fn (memoize (fn [id] (layout mode layer id)))]
     (fn [keyseq]
       (-> (layout-fn (first keyseq))
           (find-codec codec-type keyseq)))))
 
 (defn- subnode-layout
-  "This is used to find, given kind (:read|:write) a layer and a keyseq, the subset of the layout
+  "This is used to find, given mode (:read|:write) a layer and a keyseq, the subset of the layout
    that will actually be needed for that keyseq. Basically, this means all formats matching that
    keyseq up until the first format that matches the keyseq completely."
-  [kind layer keyseq]
+  [mode layer keyseq]
   (when (seq keyseq)
-    (->> (layout kind layer (first keyseq))
+    (->> (layout mode layer (first keyseq))
          (keep (matching-path keyseq))
          (take-until (comp full-match? :match)))))
 
@@ -182,27 +182,29 @@
         fetch (if reverse? db/fetch-rsubseq db/fetch-subseq)
         codec (if layout
                 (partial find-codec layout codec-type)
-                (codec-finder layer codec-type))]
+                (codec-finder layer :read codec-type))]
     (for [[key val] (apply fetch db
                            start-test start
                            (when end [end-test end]))
           :when (not (revision-key? key))
           :let [keyseq (decode key-codec key)
                 val-codec (codec keyseq)]
-          :when val-codec]
-      (->> (decode val-codec val)
-           (assoc-in* {} keyseq)))))
+          :when val-codec
+          :let [value (decode val-codec val)]
+          :when (not (empty-coll? value))]
+      (assoc-in* {} keyseq value))))
 
 (defn node-chunks
   "top-level"
   [layer codec-type keyseq]
-  (for [[prefix layout] (group-by (comp :prefix :match)
-                                  (subnode-layout :read layer keyseq))]
-    (if (or (next layout)
-            (:pattern (-> layout first :match)))
-      (fetch-range layer prefix (keyed [codec-type layout]))
-      (let [val-codec (get-in (first layout) [:format codec-type])]
-        (fetch layer prefix val-codec)))))
+  (apply concat
+         (for [[prefix layout] (group-by (comp :prefix :match)
+                                         (subnode-layout :read layer keyseq))]
+           (if (or (next layout)
+                   (:pattern (-> layout first :match)))
+             (fetch-range layer prefix (keyed [codec-type layout]))
+             (let [val-codec (get-in (first layout) [:format codec-type])]
+               [(fetch layer prefix val-codec)])))))
 
 (defn- get-node-seq
   "not top-level"
@@ -280,25 +282,24 @@
               (get node id)
               layout))))
 
-(defn- delete-in-node!
-  "Given a layer and a keyseq, delete every key beneath that keyseq. We need the
-  node-format in case the layer is in append-only mode so we can encode a reset."
-  [layer keyseq]
-  (when (seq keyseq)
+(defn- delete-range!
+  "Given a layer and a prefix, delete every key beneath that prefix."
+  [layer prefix]
+  (when (seq prefix)
     (let [{:keys [key-codec append-only?]} layer
-          {:keys [start end]} (bounds key-codec keyseq)
-          reset-codec (codec-finder layer :reset)
+          {:keys [start end]} (bounds key-codec prefix)
+          reset-codec (codec-finder layer :write :reset)
           encode (memoize encode)]
       (loop [cur (db/cursor (:db layer) start)]
         (when cur
           (when-let [^bytes key (cursor/key cur)]
             (when (neg? (compare-bytes key end))
               (recur (if append-only?
-                       (let [keyseq (decode key-codec key)
-                             deleted (encode (reset-codec keyseq) {})]
-                         (-> cur
-                             (cursor/append deleted)
-                             (cursor/next)))
+                       (let [keyseq (decode key-codec key)]
+                         (when-not (= keyseq prefix)
+                           (cursor/append cur (->> {}
+                                                   (encode (reset-codec keyseq)))))
+                         (cursor/next cur))
                        (cursor/delete cur))))))))))
 
 (defn- bounds-match? [{:keys [multi parent]} keyseq]
@@ -316,7 +317,7 @@
     (fn [layer']
       (let [old (get-in-node layer' keyseq nil)
             new (apply f old args)]
-        (delete-in-node! layer' keyseq)
+        (delete-range! layer' keyseq)
         (write! layer' keyseq new)))))
 
 (defmulti specialized-writer
