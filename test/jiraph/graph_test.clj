@@ -17,8 +17,7 @@
 (defn test-layer [master]
   (testing (str (class (unwrap-all master)))
     (truncate! master)
-    (let [rev (vec (for [r (range 5)]
-                     (at-revision master r)))
+    (let [rev (memoize (fn [revision] (at-revision master revision)))
           mike-node {:age 21 :edges {"profile-2" {:rel :mom}}}
           carla-node {:age 48}]
       (txn (actions (rev 0)
@@ -83,8 +82,8 @@
       (testing "Can't rewrite history"
         (txn (actions (rev 0)
                       (assoc-node "profile-4" {:age 72})))
-        (doseq [r rev]
-          (is (nil? (get-node r "profile-4")))))
+        (doseq [r (range 5)]
+          (is (nil? (get-node (rev r) "profile-4")))))
 
       (testing "Transaction safety"
         (testing "Can't mutate active layer while building a transaction"
