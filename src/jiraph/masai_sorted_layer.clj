@@ -371,7 +371,7 @@
         (condp = f
           dissoc (let [[node-id] (assert-length 1 args)]
                    (ioval (fn [layer']
-                            (delete-range! this [node-id] :delete-exact? true))))
+                            (delete-range! layer' [node-id] :delete-exact? true))))
           assoc (let [[node-id attrs] (assert-length 2 args)]
                   (recur [node-id] (constantly attrs) nil))
           (throw (IllegalArgumentException. (format "Can't apply function %s at top level"

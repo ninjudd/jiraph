@@ -97,9 +97,11 @@
         (is (nil? (retro/current-revision master))))
 
       (testing "dissoc at top level"
-        (let [r (rev 4)]
-          (txn (update-in-node r [] dissoc "profile-3"))
-          (is (nil? (get-node r "profile-3"))))))))
+        (let [node {:age 21 :edges {"profile-7" {:rel :mom}}}]
+          (txn (assoc-node  (rev 4) "profile-6" node))
+          (txn (dissoc-node (rev 5) "profile-6"))
+          (is (= node (get-node (rev 5) "profile-6")))
+          (is (nil?   (get-node (rev 6) "profile-6"))))))))
 
 (deftest layer-impls
   (doseq [layer-fn [#(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]},
