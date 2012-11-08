@@ -55,13 +55,13 @@
                 (encode codec data)))]
       ((if append-only?
          db/append!, db/put!)
-       db (encode (:key-codec layer) id) (doto (bytes (? attrs)) (-> String. ?))))))
+       db (encode (:key-codec layer) id) (bytes attrs)))))
 
 (defn- get-node* [layer id key not-found]
-  (if-let [data (db/fetch (:db layer) key)]
-    (decode (:codec (read-format layer id))
-            data)
-    not-found))
+  (or (when-let [data (db/fetch (:db layer) key)]
+        (not-empty (decode (:codec (read-format layer id))
+                           data)))
+      not-found))
 
 (defn- key-seq [layer]
   (remove revision-key? (db/key-seq (:db layer))))
