@@ -144,7 +144,7 @@
 
 (defn bounds
   "Compute the bounds for fetching db records under prefix. Valid options are:
-    :start-test :start :end-test :end
+    :start-test, :start, :end-test, :end
    These options correspond to the arguments to clojure.core's subseq and rsubseq."
   ([key-codec prefix]
      (bounds key-codec prefix {}))
@@ -165,8 +165,9 @@
            (keyed [start end start-test end-test]))))))
 
 (defn fetch
-  "top-level"
-  [layer keyseq val-codec]
+  "Fetch a single single chunk of a node at keyseq, using val-codec to decode. Returns a sparse map
+  at the top level of the graph."
+ [layer keyseq val-codec]
   (let [{:keys [key-codec db]} layer
         key (encode key-codec keyseq)]
     (when-let [val (db/fetch db key)]
@@ -174,7 +175,12 @@
            (assoc-in* {} keyseq)))))
 
 (defn- fetch-range
-  "top-level"
+  "Fetch a range of node chunks beneath prefix. Returns a seq of sparse maps at the top level of the
+  graph. Valid options are:
+   :reverse?    - fetch chunks in reverse
+   :codec-type  - which codec type to use for decoding values (default :codec)
+   :layout      - layout to use for looking up codecs (optimization)
+   :start-test, :start, :end-test, :end - options passed to bounds"
   [layer prefix opts]
   (let [{:keys [key-codec db]} layer
         {:keys [start end start-test end-test]} (bounds key-codec prefix opts)
@@ -195,7 +201,8 @@
       (assoc-in* {} keyseq value))))
 
 (defn node-chunks
-  "top-level"
+  "Fetch all chunks necessary to assemble a node or subnode at keyseq. Use codec-type for
+  decoding. Returns a seq of sparse maps at the top level of the graph."
   [layer codec-type keyseq]
   (apply concat
          (for [[prefix layout] (group-by (comp :prefix :match)
@@ -207,14 +214,14 @@
                [(fetch layer prefix val-codec)])))))
 
 (defn- get-node-seq
-  "not top-level"
+  "Return a sequence of nodes or subnodes at prefix depth. Takes the same opts as fetch-range."
   [layer prefix opts]
   (->> (fetch-range layer prefix opts)
        (map #(get-in % prefix))
        (glue merge-in {} #(= (keys %1) (keys %2)))))
 
 (defn- get-in-node
-  "not top-level"
+  "Return the node or subnode at keyseq. Returns not-found if the keyseq is not present."
   [layer keyseq not-found]
   {:pre [(seq keyseq)]}
   (if-let [chunks (seq (node-chunks layer :codec keyseq))]
