@@ -15,7 +15,7 @@
                     `(-> ~layer-sym ~form))))))
 
 (defn test-layer [master]
-  (testing (str (class master))
+  (testing (str (class (unwrap-all master)))
     (truncate! master)
     (let [rev (vec (for [r (range 5)]
                      (at-revision master r)))
@@ -95,8 +95,12 @@
 
       (testing "Reporting of revision views"
         (is (= 2 (retro/current-revision (rev 2))))
-        (is (nil? (retro/current-revision master)))))))
+        (is (nil? (retro/current-revision master))))
 
+      (testing "dissoc at top level"
+        (let [r (rev 4)]
+          (txn (update-in-node r [] dissoc "profile-3"))
+          (is (nil? (get-node r "profile-3"))))))))
 
 (deftest layer-impls
   (doseq [layer-fn [#(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]},

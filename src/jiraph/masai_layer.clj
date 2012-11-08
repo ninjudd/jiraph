@@ -13,7 +13,8 @@
         [useful.state :only [volatile put!]]
         [useful.fn :only [as-fn fix given]]
         [useful.datatypes :only [assoc-record]]
-        [io.core :only [bufseq->bytes]])
+        [io.core :only [bufseq->bytes]]
+        useful.debug)
   (:require [flatland.masai.db :as db]
             [jiraph.graph :as graph :refer [with-action]]
             [jiraph.formats.cereal :as cereal])
@@ -54,7 +55,7 @@
                 (encode codec data)))]
       ((if append-only?
          db/append!, db/put!)
-       db (encode (:key-codec layer) id) (bytes attrs)))))
+       db (encode (:key-codec layer) id) (doto (bytes (? attrs)) (-> String. ?))))))
 
 (defn- get-node* [layer id key not-found]
   (if-let [data (db/fetch (:db layer) key)]
@@ -106,9 +107,8 @@
                            (overwrite layer id attrs)))
                  dissoc (let [[id] (assert-length 1 args)]
                           (if append-only?
-                            (throw (IllegalArgumentException.
-                                    (format "Can't destroy history of %s on append-only layer"
-                                            id)))
+                            (fn [layer]
+                              (overwrite layer id {}))
                             (fn [layer]
                               (db/delete! db (encode key-codec id)))))
                  (throw (IllegalArgumentException. (format "Can't apply function %s at top level"

@@ -284,7 +284,7 @@
 
 (defn- delete-range!
   "Given a layer and a prefix, delete every key beneath that prefix."
-  [layer prefix]
+  [layer prefix & {:keys [delete-exact?]}]
   (when (seq prefix)
     (let [{:keys [key-codec append-only?]} layer
           {:keys [start end]} (bounds key-codec prefix)
@@ -296,7 +296,7 @@
             (when (neg? (compare-bytes key end))
               (recur (if append-only?
                        (let [keyseq (decode key-codec key)]
-                         (when-not (= keyseq prefix)
+                         (when (or delete-exact? (not= keyseq prefix))
                            (cursor/append cur (->> {}
                                                    (encode (reset-codec keyseq)))))
                          (cursor/next cur))
@@ -369,10 +369,9 @@
           (ioval (some #(% this layout keyseq f args)
                        [specialized-writer optimized-writer simple-writer])))
         (condp = f
-          dissoc (let [[node-id] (assert-length 1 args)] ;; TODO don't think this is right, but copying from old
-                   ;; version for now.
+          dissoc (let [[node-id] (assert-length 1 args)]
                    (ioval (fn [layer']
-                            (db/delete! db node-id))))
+                            (delete-range! this [node-id] :delete-exact? true))))
           assoc (let [[node-id attrs] (assert-length 2 args)]
                   (recur [node-id] (constantly attrs) nil))
           (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
@@ -452,7 +451,6 @@
 (def default-format {:codec (cereal/clojure-codec :repeated true)
                      :reduce-fn adjoin})
 
-;; TODO fix
 (defn wrap-default-formats [layout-fn]
   (fn [opts]
     (when-let [layout (layout-fn opts)]
