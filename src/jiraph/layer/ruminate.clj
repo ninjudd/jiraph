@@ -1,8 +1,8 @@
 (ns jiraph.layer.ruminate
   (:use jiraph.wrapped-layer
         useful.debug
-        [jiraph.utils :only [assert-length]]
         [useful.utils :only [returning adjoin]]
+        [useful.seq :only [assert-length]]
         [useful.map :only [assoc-in*]])
   (:require [jiraph.layer :as layer :refer [dispatch-update]]
             [jiraph.graph :as graph :refer [update-in-node]]
@@ -22,13 +22,16 @@
                     keyseq f args))
         (update-wrap-read forward-reads this input-layer)))
 
-  Parent
+  layer/Parent
   (children [this]
-    (map first output-layers))
+    (reduce into #{}
+            [(map first output-layers)
+             (layer/children input-layer)]))
   (child [this child-name]
-    (first (for [[name layer] output-layers
-                 :when (= name child-name)]
-             (at-revision layer (current-revision this)))))
+    (or (first (for [[name layer] output-layers
+                     :when (= name child-name)]
+                 (at-revision layer (current-revision this))))
+        (layer/child (at-revision input-layer (current-revision this)) child-name)))
 
   layer/Layer
   (open [this]
@@ -53,7 +56,17 @@
   (txn-rollback! [this]
     (doseq [[name layer] (rseq output-layers)]
       (retro/txn-rollback! layer))
-    (retro/txn-rollback! input-layer)))
+    (retro/txn-rollback! input-layer))
+
+  retro/OrderedRevisions
+  (max-revision [this]
+    (apply min (or (seq (remove #{Double/POSITIVE_INFINITY}
+                                (map retro/max-revision
+                                     (cons input-layer (map second output-layers)))))
+                   [0])))
+  (touch [this]
+    (doseq [layer (cons input-layer (map second output-layers))]
+      (retro/touch (at-revision layer (current-revision this))))))
 
 ;; write will be called once per update, passed args like: (write input-layer [output1 output2...]
 ;; keyseq f args) It should return a jiraph io-value (a function of read; see update-in-node's
@@ -110,22 +123,40 @@ true/false."
                      (apply concat)
                      (into source-actions))))))))
 
-(defn top-level-indexer [source index field]
+(defn top-level-indexer [source index field index-fieldname]
   (make source [[field index]]
         (fn [source [index] keyseq f args]
           (fn [read]
             (let [source-update ((apply update-in-node source keyseq f args) read)
                   read' (graph/advance-reader read source-update)]
-              (reduce into source-update
-                      (when-let [id (first (if (seq keyseq)
-                                             (when (or (not (next keyseq))
-                                                       (= field (second keyseq)))
-                                               keyseq)
-                                             args))]
-                        (let [[old-idx new-idx] ((juxt read read') source [id field])]
-                          (when (not= old-idx new-idx)
-                            [((update-in-node index [old-idx] disj id) read)
-                             ((update-in-node index [new-idx] conj id) read)])))))))))
+              (into source-update
+                    (when-let [id (first (if (seq keyseq)
+                                           (when (or (not (next keyseq))
+                                                     (= field (second keyseq)))
+                                             keyseq)
+                                           args))]
+                      (let [[old-idx new-idx] ((juxt read read') source [id field])]
+                        (when (not= old-idx new-idx)
+                          (letfn [(record [idx exists]
+                                    (when idx
+                                      ((update-in-node index [idx index-fieldname]
+                                                       adjoin {id exists}) read)))]
+                            (concat (record new-idx true)
+                                    (record old-idx false))))))))))))
+
+(defn changelog [source dest]
+  (make source [[:changelog dest]]
+        (fn [source [dest] keyseq f args]
+          (graph/compose (apply update-in-node source keyseq f args)
+                         (update-in-node dest [(str "revision-" (inc (current-revision dest)))
+                                               :ids]
+                                         adjoin [(dispatch-update keyseq f args
+                                                                  (fn assoc* [id value]
+                                                                    id)
+                                                                  (fn dissoc* [id]
+                                                                    id)
+                                                                  (fn update* [id keys]
+                                                                    id))])))))
 
 ;; - eventually, switch from deleted to exists, but not yet
 ;; - until then, copy all data to incoming edges, whether using adjoin or not

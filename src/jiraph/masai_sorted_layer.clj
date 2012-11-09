@@ -1,13 +1,13 @@
 (ns jiraph.masai-sorted-layer
   (:use [jiraph.layer :as layer
          :only [SortedEnumerate Optimized Basic Layer ChangeLog Schema node-id-seq]]
-        [jiraph.utils :only [keyseq->str meta-str? assert-length]]
+        [jiraph.utils :only [keyseq->str meta-str?]]
         [jiraph.codex :as codex :only [encode decode]]
         [jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [retro.core :only [Transactional Revisioned OrderedRevisions
                            txn-begin! txn-commit! txn-rollback!]]
         [useful.utils :only [if-ns adjoin returning empty-coll? switch]]
-        [useful.seq :only [prefix-of? single? remove-prefix glue take-until]]
+        [useful.seq :only [prefix-of? single? remove-prefix glue take-until assert-length]]
         [useful.state :only [volatile put!]]
         [useful.map :only [update assoc-in* merge-in keyed]]
         [useful.fn :only [as-fn any to-fix]]

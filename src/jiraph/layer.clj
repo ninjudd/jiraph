@@ -1,7 +1,7 @@
 (ns jiraph.layer
   (:use [useful.utils :only [adjoin map-entry]]
         [clojure.stacktrace :only [print-trace-element]]
-        [jiraph.utils :only [assert-length]])
+        [useful.seq :only [assert-length]])
   (:require [retro.core :as retro])
   (:import (java.util Map$Entry)))
 
@@ -99,6 +99,14 @@
     "Return a map from revision number to node data, for each revision that
      affected this node. The map must be sorted, with earliest revisions first."))
 
+(defprotocol Parent
+  (children [layer]
+    "Return the names of all the children that this layer has, ie those for
+    which (child l name) would return non-nil.")
+  (child [layer name]
+    "Find a layer which is related in some way to this one. For example, pass :incoming to get the
+    layer (if any) on which incoming edges from this layer are stored."))
+
 (def ^{:doc "A default schema describing a map which contains edges and possibly other keys."}
   edges-schema {:schema {:type :map
                          :fields {:edges {:type :map
@@ -138,7 +146,11 @@
   (node-history [layer id]
     (into (sorted-map)
           (for [r (get-revisions layer id)]
-            [r (get-node (retro/at-revision layer r) id nil)]))))
+            [r (get-node (retro/at-revision layer r) id nil)])))
+
+  Parent
+  (children [this] nil)
+  (child [this name] nil))
 
 (extend-type nil
   Schema
