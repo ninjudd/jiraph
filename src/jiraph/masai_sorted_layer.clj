@@ -9,7 +9,7 @@
         [useful.utils :only [if-ns adjoin returning empty-coll? switch]]
         [useful.seq :only [prefix-of? single? remove-prefix glue take-until assert-length]]
         [useful.state :only [volatile put!]]
-        [useful.map :only [update assoc-in* merge-in keyed]]
+        [useful.map :only [update assoc-in* merge-in keyed into-map]]
         [useful.fn :only [as-fn any to-fix]]
         [useful.io :only [compare-bytes]]
         [useful.datatypes :only [assoc-record]]
@@ -511,16 +511,18 @@
 (let [default-layout-fn (wrap-revisioned
                          (constantly [{:pattern [:edges :*] :format default-format}
                                       {:pattern []          :format default-format}]))]
-  (defn make [db & {:keys [assoc-mode layout-fn key-codec]
-                    :or {assoc-mode :append
-                         layout-fn default-layout-fn
-                         key-codec default-key-codec}}]
-    (MasaiSortedLayer. (make-db db) nil (volatile nil)
-                       (case assoc-mode
-                         :append true
-                         :overwrite false)
-                       (as-fn layout-fn)
-                       key-codec)))
+  (defn make [db & opts]
+    (let [{:keys [assoc-mode layout-fn key-codec]
+           :or {assoc-mode :append
+                layout-fn default-layout-fn
+                key-codec default-key-codec}}
+          (into-map opts)]
+      (MasaiSortedLayer. (make-db db) nil (volatile nil)
+                         (case assoc-mode
+                           :append true
+                           :overwrite false)
+                         (as-fn layout-fn)
+                         key-codec))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.
