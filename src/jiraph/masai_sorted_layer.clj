@@ -184,21 +184,26 @@
   [layer prefix opts]
   (let [{:keys [key-codec db]} layer
         {:keys [start end start-test end-test]} (bounds key-codec prefix opts)
-        {:keys [reverse? codec-type layout] :or {codec-type :codec}} opts
-        fetch (if reverse? db/fetch-rsubseq db/fetch-subseq)
-        codec (if layout
-                (partial find-codec layout codec-type)
-                (codec-finder layer :read codec-type))]
-    (for [[key val] (apply fetch db
-                           start-test start
-                           (when end [end-test end]))
-          :when (not (revision-key? key))
-          :let [keyseq (decode key-codec key)
-                val-codec (codec keyseq)]
-          :when val-codec
-          :let [value (decode val-codec val)]
-          :when (not (empty-coll? value))]
-      (assoc-in* {} keyseq value))))
+        {:keys [reverse? ids-only? codec-type layout] :or {codec-type :codec}} opts
+        fetch (if end
+                (fn [subseq-fn] (subseq-fn db start-test start end-test end))
+                (fn [subseq-fn] (subseq-fn db start-test start)))]
+    (if ids-only?
+      (for [key (fetch (if reverse? db/fetch-key-rsubseq db/fetch-key-subseq))
+            :when (not (revision-key? key))]
+        ;; TODO optimize to use cursor to jump to next id
+        (decode key-codec key))
+      (let [codec (if layout
+                    (partial find-codec layout codec-type)
+                    (codec-finder layer :read codec-type))]
+        (for [[key val] (fetch (if reverse? db/fetch-rsubseq db/fetch-subseq))
+              :when (not (revision-key? key))
+              :let [keyseq (decode key-codec key)
+                    val-codec (codec keyseq)]
+              :when val-codec
+              :let [value (decode val-codec val)]
+              :when (not (empty-coll? value))]
+          (assoc-in* {} keyseq value))))))
 
 (defn node-chunks
   "Fetch all chunks necessary to assemble a node or subnode at keyseq. Use codec-type for
@@ -213,12 +218,21 @@
              (let [val-codec (get-in (first layout) [:format codec-type])]
                [(fetch layer prefix val-codec)])))))
 
-(defn- get-node-seq
+(defn- get-id-seq
   "Return a sequence of nodes or subnodes at prefix depth. Takes the same opts as fetch-range."
+  [layer prefix opts]
+  (->> (fetch-range layer prefix (assoc opts :ids-only? true))
+       (map first)
+       (distinct)))
+
+(defn- get-node-seq
+  "Return a sequence of [key, node/subnode] pairs at prefix depth. Takes the same opts as
+  fetch-range."
   [layer prefix opts]
   (->> (fetch-range layer prefix opts)
        (map #(get-in % prefix))
-       (glue merge-in {} #(= (keys %1) (keys %2)))))
+       (glue merge-in {} #(= (keys %1) (keys %2)))
+       (mapcat seq)))
 
 (defn- get-in-node
   "Return the node or subnode at keyseq. Returns not-found if the keyseq is not present."
@@ -239,7 +253,7 @@
 (defn seq-fn [layer keyseq not-found f]
   (when (some (comp wildcard-match? :match)
               (subnode-layout :read layer keyseq))
-    (let [node-entries #(mapcat seq (get-node-seq layer keyseq %))]
+    (let [node-entries (partial get-node-seq layer keyseq)]
       (when-let [node-subseq (switch f
                                seq #(node-entries {})
                                rseq #(node-entries {:reverse? true})
@@ -361,9 +375,10 @@
 
 (defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn key-codec]
   SortedEnumerate
-  ;; TODO implement these
-  (node-id-subseq [layer opts])
-  (node-subseq [layer opts])
+  (node-id-subseq [layer opts]
+    (get-id-seq layer [] opts))
+  (node-subseq [layer opts]
+    (get-node-seq layer [] opts))
 
   Basic
   (get-node [this id not-found]

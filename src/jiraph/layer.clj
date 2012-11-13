@@ -133,10 +133,10 @@
 
   SortedEnumerate
   (node-subseq [layer opts]
-    (for [id (node-id-subseq layer {})]
+    (for [id (node-id-subseq layer opts)]
       (map-entry id (get-node layer id nil))))
   ;; intentionally unimplemented - this blows up if you don't support it
-  ;; (node-id-subseq [layer {}])
+  ;; (node-id-subseq [layer opts])
 
   Optimized
   ;; can't optimize anything

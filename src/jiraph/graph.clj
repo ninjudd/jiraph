@@ -167,13 +167,31 @@
 
 (defn node-id-subseq
   "Return a lazy subsequence of node ids in this layer."
-  [layer start-test start-key]
-  (layer/node-id-subseq layer (keyed [start-test start-key])))
+  ([layer start-test start]
+     (layer/node-id-subseq layer (keyed [start-test start])))
+  ([layer start-test start end-test end]
+     (layer/node-id-subseq layer (keyed [start-test start end-test end]))))
+
+(defn node-id-rsubseq
+  "Return a lazy subsequence in reverse order of node ids in this layer."
+  ([layer start-test start]
+     (layer/node-id-subseq layer (assoc (keyed [start-test start]) :reverse? true)))
+  ([layer start-test start end-test end]
+     (layer/node-id-subseq layer (assoc (keyed [start-test start end-test end]) :reverse? true))))
 
 (defn node-subseq
-  "Return a lazy subsequence of [node id] pairs in the layer."
-  [layer start-test start-key]
-  (layer/node-subseq layer (keyed [start-test start-key])))
+  "Return a lazy subsequence of [id node] pairs in the layer."
+  ([layer start-test start]
+     (layer/node-subseq layer (keyed [start-test start])))
+  ([layer start-test start end-test end]
+     (layer/node-subseq layer (keyed [start-test start end-test end]))))
+
+(defn node-rsubseq
+  "Return a lazy subsequence in reverse order of [id node] pairs in the layer."
+  ([layer start-test start]
+     (layer/node-subseq layer (assoc (keyed [start-test start]) :reverse? true)))
+  ([layer start-test start end-test end]
+     (layer/node-subseq layer (assoc (keyed [start-test start end-test end]) :reverse? true))))
 
 (def ^{:dynamic true} *read* nil)
 
