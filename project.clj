@@ -1,10 +1,10 @@
-(defproject jiraph "0.8.3-beta2"
+(defproject jiraph "0.8.3-beta3"
   :description "embedded graph db library for clojure"
   :url "https://github.com/flatland/jiraph"
   :license {:name "Eclipse Public License - v 1.0"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]
-                 [org.flatland/masai "0.8.0-beta1"]
+                 [org.flatland/masai "0.8.0-beta2"]
                  [useful "0.8.8"]
                  [cereal "0.2.0"]
                  [ordered "1.2.2"]
