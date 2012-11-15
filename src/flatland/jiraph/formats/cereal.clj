@@ -1,6 +1,6 @@
 (ns flatland.jiraph.formats.cereal
   (:use [flatland.jiraph.formats :only [revisioned-format]])
-  (:require [cereal.core :as cereal]))
+  (:require [flatland.cereal.core :as cereal]))
 
 (letfn [(cereal-format [codec] ;; Codec -> (a -> a) -> (opts -> Codec)
           (fn [reduce-fn]

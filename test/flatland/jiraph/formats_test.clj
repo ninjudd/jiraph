@@ -1,18 +1,18 @@
 (ns flatland.jiraph.formats-test
   (:use clojure.test flatland.jiraph.formats flatland.jiraph.formats.cereal
-        [io.core :only [catbytes]]
-        [retro.core :only [at-revision]]
-        [useful.utils :only [adjoin]])
+        [flatland.io.core :only [catbytes]]
+        [flatland.retro.core :only [at-revision]]
+        [flatland.useful.utils :only [adjoin]])
   (:require [flatland.jiraph.masai-layer :as masai]
             [flatland.jiraph.layer :as layer]
             [flatland.jiraph.graph :as graph :refer [txn]]
             [flatland.jiraph.codex :as codex]
             [flatland.jiraph.typed :as typing]
             [flatland.masai.tokyo :as tokyo]
-            [ego.core :as ego]
+            [flatland.ego.core :as ego]
             [flatland.jiraph.formats.protobuf :as proto])
   (:import (java.nio ByteBuffer)
-           (jiraph Test$Foo)))
+           (flatland.jiraph Test$Foo)))
 
 (deftest revisioned-codecs
   (doseq [impl [revisioned-clojure-format revisioned-java-format]

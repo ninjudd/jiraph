@@ -1,9 +1,9 @@
 (ns flatland.jiraph.wrapped-layer
-  (:use flatland.jiraph.layer retro.core
-        [useful.utils :only [update-peek]]
-        [useful.map :only [merge-in update]]
-        [useful.datatypes :only [assoc-record]]
-        [useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
+  (:use flatland.jiraph.layer flatland.retro.core
+        [flatland.useful.utils :only [update-peek]]
+        [flatland.useful.map :only [merge-in update]]
+        [flatland.useful.datatypes :only [assoc-record]]
+        [flatland.useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
 
 (defn update-wrap-read [ioval f & args]
   (fn [read]

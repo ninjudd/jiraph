@@ -1,12 +1,12 @@
 (ns flatland.jiraph.layer.ruminate
   (:use flatland.jiraph.wrapped-layer
-        useful.debug
-        [useful.utils :only [returning adjoin]]
-        [useful.seq :only [assert-length]]
-        [useful.map :only [assoc-in*]])
+        flatland.useful.debug
+        [flatland.useful.utils :only [returning adjoin]]
+        [flatland.useful.seq :only [assert-length]]
+        [flatland.useful.map :only [assoc-in*]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
             [flatland.jiraph.graph :as graph :refer [update-in-node]]
-            [retro.core :as retro :refer [at-revision current-revision]]))
+            [flatland.retro.core :as retro :refer [at-revision current-revision]]))
 
 ;;; TODO make sure wrapping layers like merge and ruminate use correctly-revisioned versions of
 ;;; their child layers (eg ruminate's outputs, and the id layer for merges). Add tests verifying

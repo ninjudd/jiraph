@@ -1,6 +1,6 @@
 (ns flatland.jiraph.masai-sorted-test
   (:use clojure.test flatland.jiraph.graph
-        [useful.utils :only [adjoin]])
+        [flatland.useful.utils :only [adjoin]])
   (:require [gloss.core :as gloss]
             [flatland.jiraph.masai-sorted-layer :as masai]
             [flatland.jiraph.layer :as layer]

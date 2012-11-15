@@ -4,16 +4,16 @@
                 node-id-seq]]
         [flatland.jiraph.codex :only [encode decode]]
         [flatland.jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
-        [retro.core :only [Transactional Revisioned OrderedRevisions
+        [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                            at-revision txn-begin! txn-commit! txn-rollback!]]
-        [useful.utils :only [if-ns adjoin returning map-entry]]
-        [useful.map :only [update-in*]]
-        [useful.seq :only [find-with assert-length]]
-        [useful.state :only [volatile put!]]
-        [useful.fn :only [as-fn fix given]]
-        [useful.datatypes :only [assoc-record]]
-        [io.core :only [bufseq->bytes]]
-        useful.debug)
+        [flatland.useful.utils :only [if-ns adjoin returning map-entry]]
+        [flatland.useful.map :only [update-in*]]
+        [flatland.useful.seq :only [find-with assert-length]]
+        [flatland.useful.state :only [volatile put!]]
+        [flatland.useful.fn :only [as-fn fix given]]
+        [flatland.useful.datatypes :only [assoc-record]]
+        [flatland.io.core :only [bufseq->bytes]]
+        flatland.useful.debug)
   (:require [flatland.masai.db :as db]
             [flatland.jiraph.graph :as graph :refer [with-action]]
             [flatland.jiraph.formats.cereal :as cereal])

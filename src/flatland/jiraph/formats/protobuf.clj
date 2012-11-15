@@ -1,13 +1,13 @@
 (ns flatland.jiraph.formats.protobuf
   (:use [flatland.jiraph.formats :only [revisioned-format tidy-node add-revisioning-modes]]
         [flatland.jiraph.codex :only [encode decode] :as codex]
-        [useful.utils :only [adjoin]]
-        [useful.map :only [keyed update]]
-        [io.core :only [catbytes]]
-        [protobuf.core :only [protodef protobuf-dump]])
+        [flatland.useful.utils :only [adjoin]]
+        [flatland.useful.map :only [keyed update]]
+        [flatland.io.core :only [catbytes]]
+        [flatland.protobuf.core :only [protodef protobuf-dump]])
   (:require [gloss.core :as gloss]
-            [protobuf.codec :as protobuf]
-            [schematic.core :as schema]))
+            [flatland.protobuf.codec :as protobuf]
+            [flatland.schematic.core :as schema]))
 
 (def ^:private ^:const len-key :proto_length)
 

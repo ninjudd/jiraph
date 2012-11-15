@@ -2,7 +2,7 @@
   (:use clojure.test flatland.jiraph.core flatland.jiraph.merge)
   (:require [flatland.jiraph.masai-layer :as masai]
             [flatland.jiraph.layer.ruminate :as ruminate]
-            [useful.utils :refer [adjoin]]))
+            [flatland.useful.utils :refer [adjoin]]))
 
 (defn empty-graph [f]
   (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)

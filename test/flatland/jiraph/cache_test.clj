@@ -8,7 +8,7 @@
   (:require [flatland.jiraph.masai-layer :as bal]
             [flatland.jiraph.stm-layer :as stm]
             [flatland.masai.tokyo :as tokyo])
-  (:import [jiraph Test$Node]))
+  (:import (flatland.jiraph Test$Node)))
 
 (def test-graph
   {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})

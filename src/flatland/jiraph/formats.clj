@@ -1,9 +1,9 @@
 (ns flatland.jiraph.formats
-  (:use [useful.experimental :only [lift-meta]]
-        [useful.map :only [update update-each]]
-        [useful.utils :only [copy-meta]])
-  (:require [ego.core :as ego]
-            [schematic.core :as schema]
+  (:use [flatland.useful.experimental :only [lift-meta]]
+        [flatland.useful.map :only [update update-each]]
+        [flatland.useful.utils :only [copy-meta]])
+  (:require [flatland.ego.core :as ego]
+            [flatland.schematic.core :as schema]
             [flatland.jiraph.codex :as codex]))
 
 (def reset-key :codec_reset)

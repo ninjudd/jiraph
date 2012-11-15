@@ -1,6 +1,6 @@
 (ns flatland.jiraph.graph-test
   (:use clojure.test flatland.jiraph.graph
-        [retro.core :as retro :only [at-revision]])
+        [flatland.retro.core :as retro :only [at-revision]])
   (:require ;[flatland.jiraph.stm-layer :as stm]
             [flatland.jiraph.layer :as layer]
             [flatland.jiraph.layer.ruminate :as ruminate]

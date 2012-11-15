@@ -1,8 +1,8 @@
 (ns flatland.jiraph.layer
-  (:use [useful.utils :only [adjoin map-entry]]
+  (:use [flatland.useful.utils :only [adjoin map-entry]]
         [clojure.stacktrace :only [print-trace-element]]
-        [useful.seq :only [assert-length]])
-  (:require [retro.core :as retro])
+        [flatland.useful.seq :only [assert-length]])
+  (:require [flatland.retro.core :as retro])
   (:import (java.util Map$Entry)))
 
 (def ^:dynamic *warn-on-fallback* false)

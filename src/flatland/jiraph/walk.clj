@@ -1,9 +1,9 @@
 (ns flatland.jiraph.walk
-  (:use [useful.map :only [assoc-in! update-in! update into-map]]
-        [useful.utils :only [or-max]]
-        [useful.parallel :only [pcollect *pcollect-thread-num*]]
-        [useful.java :only [construct]]
-        [useful.datatypes :only [make-record assoc-record update-record record-accessors]])
+  (:use [flatland.useful.map :only [assoc-in! update-in! update into-map]]
+        [flatland.useful.utils :only [or-max]]
+        [flatland.useful.parallel :only [pcollect *pcollect-thread-num*]]
+        [flatland.useful.java :only [construct]]
+        [flatland.useful.datatypes :only [make-record assoc-record update-record record-accessors]])
   (:require [flatland.jiraph.graph :as graph]
             [flatland.jiraph.core  :as core]
             [clojure.set :as set]))

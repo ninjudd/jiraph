@@ -4,15 +4,15 @@
         [flatland.jiraph.core :only [layer unsafe-txn]]
         [flatland.jiraph.utils :only [edges-keyseq]]
         [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped update-wrap-read]]
-        [useful.map :only [dissoc-in* assoc-in* update-in*]]
-        [useful.seq :only [merge-sorted indexed]]
-        [useful.fn :only [fix given]]
-        [useful.utils :only [adjoin verify invoke]]
-        [useful.datatypes :only [assoc-record]]
-        [ordered.set :only [ordered-set]]
-        [ego.core :only [type-key]])
+        [flatland.useful.map :only [dissoc-in* assoc-in* update-in*]]
+        [flatland.useful.seq :only [merge-sorted indexed]]
+        [flatland.useful.fn :only [fix given]]
+        [flatland.useful.utils :only [adjoin verify invoke]]
+        [flatland.useful.datatypes :only [assoc-record]]
+        [flatland.ordered.set :only [ordered-set]]
+        [flatland.ego.core :only [type-key]])
   (:require [flatland.jiraph.graph :as graph :refer [compose same?]]
-            [retro.core :as retro]))
+            [flatland.retro.core :as retro]))
 
 (declare merge-ids merge-head merge-position)
 

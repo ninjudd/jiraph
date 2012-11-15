@@ -4,12 +4,12 @@
         [flatland.jiraph.utils :only [edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [flatland.jiraph.wrapped-layer :only [defwrapped update-wrap-read forward-reads]]
         [clojure.core.match :only [match]]
-        [useful.map :only [map-vals-with-keys update update-in*]]
-        [useful.fn :only [fix fixing]]
-        [useful.utils :only [adjoin]]
-        [useful.seq :only [assert-length]]
-        [useful.experimental :only [prefix-lookup]]
-        [useful.datatypes :only [assoc-record]])
+        [flatland.useful.map :only [map-vals-with-keys update update-in*]]
+        [flatland.useful.fn :only [fix fixing]]
+        [flatland.useful.utils :only [adjoin]]
+        [flatland.useful.seq :only [assert-length]]
+        [flatland.useful.experimental :only [prefix-lookup]]
+        [flatland.useful.datatypes :only [assoc-record]])
   (:require [flatland.jiraph.layer :as layer]))
 
 (defn edge-validator [layer id]

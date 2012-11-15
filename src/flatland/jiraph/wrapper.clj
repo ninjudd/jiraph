@@ -1,5 +1,5 @@
 (ns flatland.jiraph.wrapper
-  (:use [useful.experimental :only [with-wrapper]])
+  (:use [flatland.useful.experimental :only [with-wrapper]])
   (:require [clojure.string :as s]))
 
 ;; wrappers for read/write methods, used with defn-wrapping
@@ -7,7 +7,7 @@
 (def ^{:dynamic true} *write-wrappers* [])
 
 (defn fn-name [wrapper]
-  (-> wrapper meta :useful.experimental/call-data :fn-name))
+  (-> wrapper meta :flatland.useful.experimental/call-data :fn-name))
 
 (defn simple-logging-wrapper [f]
   (fn [& args]

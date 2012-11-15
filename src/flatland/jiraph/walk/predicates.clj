@@ -1,5 +1,5 @@
 (ns flatland.jiraph.walk.predicates
-  (:use [useful.utils :only [defm]])
+  (:use [flatland.useful.utils :only [defm]])
   (:use [flatland.jiraph.walk :only [result-count from-id distance]]))
 
 (defn at-limit

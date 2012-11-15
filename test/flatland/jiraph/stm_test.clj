@@ -1,7 +1,7 @@
 (ns flatland.jiraph.stm-test
   (:use clojure.test flatland.jiraph.graph flatland.jiraph.stm-layer
-        [retro.core :as retro :only [at-revision current-revision]]
-        [useful.map :only [keyed]])
+        [flatland.retro.core :as retro :only [at-revision current-revision]]
+        [flatland.useful.map :only [keyed]])
   (:require [flatland.jiraph.layer :as layer]))
 
 ;; STMLayer can't optimize anything, so add reference/testing implementations.

@@ -1,7 +1,7 @@
 (ns flatland.jiraph.layer.encoded-key
   (:use flatland.jiraph.wrapped-layer
-        [useful.map :only [update-each]]
-        [useful.utils :only [map-entry]])
+        [flatland.useful.map :only [update-each]]
+        [flatland.useful.utils :only [map-entry]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update same?]]
             [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.jiraph.masai-common :refer [bytes->long long->bytes]]))

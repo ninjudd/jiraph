@@ -1,7 +1,7 @@
 (ns flatland.jiraph.debug
   (:use flatland.jiraph.layer
-        [useful.datatypes :only [assoc-record]])
-  (:require [retro.core :as retro :refer [Transactional txn-begin! txn-commit! txn-rollback!
+        [flatland.useful.datatypes :only [assoc-record]])
+  (:require [flatland.retro.core :as retro :refer [Transactional txn-begin! txn-commit! txn-rollback!
                                           OrderedRevisions max-revision touch
                                           Revisioned current-revision at-revision]]
             [flatland.jiraph.wrapped-layer :as wrapper]

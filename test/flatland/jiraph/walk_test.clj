@@ -2,12 +2,12 @@
   (:use clojure.test
         flatland.jiraph.core
         [flatland.jiraph.walk :only [defwalk path paths *parallel-follow* intersection]]
-        [useful.utils :only [adjoin]]
+        [flatland.useful.utils :only [adjoin]]
         [flatland.jiraph.walk.predicates :only [at-limit]])
   (:require [flatland.jiraph.stm-layer :as stm]
             [flatland.jiraph.masai-layer :as masai]
             [flatland.jiraph.masai-sorted-layer :as sorted])
-  (:import [jiraph Test$Node]))
+  (:import (flatland.jiraph Test$Node)))
 
 (defn test-graph []
   {:foo (masai/make-temp)

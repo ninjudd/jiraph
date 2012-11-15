@@ -3,12 +3,12 @@
   (:use [flatland.jiraph.layer :only [Enumerate Basic Layer Optimized ChangeLog get-revisions close]]
         [flatland.jiraph.graph :as graph :only [with-action get-node]]
         [flatland.jiraph.utils :only [meta-id meta-id? base-id]]
-        [retro.core :only [WrappedTransactional Revisioned OrderedRevisions
+        [flatland.retro.core :only [WrappedTransactional Revisioned OrderedRevisions
                            max-revision at-revision current-revision]]
-        [useful.fn :only [given fix]]
-        [useful.seq :only [assert-length]]
-        [useful.utils :only [returning or-min]]
-        [useful.datatypes :only [assoc-record]])
+        [flatland.useful.fn :only [given fix]]
+        [flatland.useful.seq :only [assert-length]]
+        [flatland.useful.utils :only [returning or-min]]
+        [flatland.useful.datatypes :only [assoc-record]])
   (:import (java.io FileNotFoundException)))
 
 (comment

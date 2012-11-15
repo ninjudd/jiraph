@@ -1,8 +1,8 @@
 (ns flatland.jiraph.masai-common
-  (:use [useful.utils :only [or-max]]
-        [useful.state :only [put!]])
+  (:use [flatland.useful.utils :only [or-max]]
+        [flatland.useful.state :only [put!]])
   (:require [flatland.masai.db :as db]
-            [retro.core :as retro])
+            [flatland.retro.core :as retro])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream
             DataOutputStream DataInputStream]))
 

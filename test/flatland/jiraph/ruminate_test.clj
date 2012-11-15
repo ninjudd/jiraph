@@ -2,8 +2,8 @@
   (:use clojure.test flatland.jiraph.graph)
   (:require [flatland.jiraph.masai-layer :as masai]
             [flatland.jiraph.layer.ruminate :as ruminate]
-            [retro.core :refer [at-revision]]
-            [useful.utils :refer [adjoin]]))
+            [flatland.retro.core :refer [at-revision]]
+            [flatland.useful.utils :refer [adjoin]]))
 
 (deftest indexing-works
   (let [base (masai/make-temp)

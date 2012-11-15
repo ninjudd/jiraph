@@ -3,11 +3,11 @@
         [flatland.jiraph.layer :only [Basic Optimized Parent get-node]]
         [flatland.jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped]]
-        [retro.core :only [at-revision current-revision]]
-        [useful.map :only [map-vals-with-keys update update-in*]]
-        [useful.fn :only [fix fixing]]
-        [useful.utils :only [adjoin]]
-        [useful.datatypes :only [assoc-record]])
+        [flatland.retro.core :only [at-revision current-revision]]
+        [flatland.useful.map :only [map-vals-with-keys update update-in*]]
+        [flatland.useful.fn :only [fix fixing]]
+        [flatland.useful.utils :only [adjoin]]
+        [flatland.useful.datatypes :only [assoc-record]])
   (:require [flatland.jiraph.graph :as graph :refer [unsafe-txn]]))
 
 (declare node-deleted?)

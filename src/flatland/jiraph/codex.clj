@@ -9,7 +9,7 @@ the byte arrays into ByteBuffer sequences. There is an additional implementation
 looks in the :read and :write keys for encode and decode functions going directly from objects to
 byte-arrays. For performance, there is also a Codex record holding :read and :write keys that
 behaves similarly."
-  (:use [io.core :only [bufseq->bytes]])
+  (:use [flatland.io.core :only [bufseq->bytes]])
   (:require [gloss.io :as gloss])
   (:import java.nio.ByteBuffer))
 

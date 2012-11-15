@@ -1,12 +1,12 @@
 (ns flatland.jiraph.core
-  (:use [useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
-        [useful.map :only [update into-map]]
-        [useful.macro :only [macro-do]]
+  (:use [flatland.useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
+        [flatland.useful.map :only [update into-map]]
+        [flatland.useful.macro :only [macro-do]]
         slingshot.slingshot)
   (:require [flatland.jiraph.graph :as graph]
             [flatland.jiraph.layer :as layer]
             [clojure.string :as s]
-            [retro.core :as retro])
+            [flatland.retro.core :as retro])
   (:import java.io.IOException))
 
 (def ^{:dynamic true} *graph*    nil)

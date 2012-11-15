@@ -4,22 +4,22 @@
         [flatland.jiraph.utils :only [keyseq->str meta-str?]]
         [flatland.jiraph.codex :as codex :only [encode decode]]
         [flatland.jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
-        [retro.core :only [Transactional Revisioned OrderedRevisions
+        [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                            txn-begin! txn-commit! txn-rollback!]]
-        [useful.utils :only [if-ns adjoin returning empty-coll? switch]]
-        [useful.seq :only [prefix-of? single? remove-prefix glue take-until assert-length]]
-        [useful.state :only [volatile put!]]
-        [useful.map :only [update assoc-in* merge-in keyed]]
-        [useful.fn :only [as-fn any to-fix]]
-        [useful.io :only [compare-bytes]]
-        [useful.datatypes :only [assoc-record]]
-        useful.debug)
+        [flatland.useful.utils :only [if-ns adjoin returning empty-coll? switch]]
+        [flatland.useful.seq :only [prefix-of? single? remove-prefix glue take-until assert-length]]
+        [flatland.useful.state :only [volatile put!]]
+        [flatland.useful.map :only [update assoc-in* merge-in keyed]]
+        [flatland.useful.fn :only [as-fn any to-fix]]
+        [flatland.useful.io :only [compare-bytes]]
+        [flatland.useful.datatypes :only [assoc-record]]
+        flatland.useful.debug)
   (:require [flatland.masai.db :as db]
             [flatland.masai.cursor :as cursor]
             [flatland.jiraph.graph :as graph :refer [with-action]]
-            [cereal.core :as cereal]
+            [flatland.cereal.core :as cereal]
             [flatland.jiraph.formats :as formats]
-            [schematic.core :as schema]
+            [flatland.schematic.core :as schema]
             [clojure.string :as s])
   (:import [java.nio ByteBuffer]))
 
@@ -344,7 +344,7 @@
 (defmulti specialized-writer
   "If your update function has special semantics that allow it to be distributed over multiple
    paths more efficiently than reading the whole node, applying the function, and then writing to
-   each format, you can implement a method for specialized-writer. For example, useful.utils/adjoin
+   each format, you can implement a method for specialized-writer. For example, flatland.useful.utils/adjoin
    can be split up by matching up the paths in the adjoin-arg and in the layout.
 
    layout is a sequence of [path, format] pairs, which are computed for your convenience: if you

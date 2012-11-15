@@ -1,10 +1,10 @@
 (ns flatland.jiraph.core-test
   (:use clojure.test flatland.jiraph.core
-        [useful.utils :only [adjoin]])
+        [flatland.useful.utils :only [adjoin]])
   (:require [flatland.jiraph.stm-layer :as stm]
             [flatland.jiraph.graph :as graph]
             [flatland.jiraph.layer :as layer]
-            [retro.core :as retro]
+            [flatland.retro.core :as retro]
             [flatland.jiraph.layer.ruminate :as ruminate]
             [flatland.jiraph.wrapped-layer :as wrapped]
             [flatland.jiraph.null-layer :as null]

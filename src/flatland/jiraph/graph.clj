@@ -1,16 +1,16 @@
 (ns flatland.jiraph.graph
-  (:use [flatland.jiraph.utils :only [meta-id meta-id?]]
-        [useful.map :only [filter-keys-by-val assoc-in* update-in* keyed]]
-        [useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
-        [useful.fn :only [fix]]
-        [clojure.string :only [split join]]
-        useful.debug
-        [ego.core :only [type-key]]
-        (ordered [set :only [ordered-set]]
-                 [map :only [ordered-map]]))
+  (:use [clojure.string :only [split join]]
+        [flatland.jiraph.utils :only [meta-id meta-id?]]
+        [flatland.useful.map :only [filter-keys-by-val assoc-in* update-in* keyed]]
+        [flatland.useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
+        [flatland.useful.fn :only [fix]]
+        [flatland.ego.core :only [type-key]]
+        [flatland.ordered.set :only [ordered-set]]
+        [flatland.ordered.map :only [ordered-map]]
+        flatland.useful.debug)
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
             [flatland.jiraph.wrapped-layer :as wrapped]
-            [retro.core :as retro]))
+            [flatland.retro.core :as retro]))
 
 (def ^{:private true :dynamic true} *compacting* false)
 (def ^{:private true :dynamic true} *use-outer-cache* nil)
@@ -86,7 +86,7 @@
   specified keyseq, to become (apply f current-value args)."
   [layer write-keyseq f args]
   (fn [read]
-    (fn [layer' read-keyseq & [not-found]]      
+    (fn [layer' read-keyseq & [not-found]]
       (let [[f [read-path update-path get-path :as paths]]
             (when (same? layer layer')
               (dispatch-update write-keyseq f args
@@ -96,7 +96,7 @@
                                (fn dissoc* [id]
                                  [(constantly not-found)
                                   (path-parts read-keyseq [id])])
-                               (fn update* [_ _]                                       
+                               (fn update* [_ _]
                                  [#(apply f % args)
                                   (path-parts read-keyseq write-keyseq)])))]
         (if paths
