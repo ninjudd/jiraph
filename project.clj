@@ -1,4 +1,4 @@
-(defproject jiraph "0.8.3-beta1"
+(defproject jiraph "0.8.3-beta2"
   :description "embedded graph db library for clojure"
   :url "https://github.com/flatland/jiraph"
   :license {:name "Eclipse Public License - v 1.0"
@@ -13,7 +13,7 @@
                  [io "0.2.1"]
                  [ego "0.1.7"]
                  [slingshot "0.10.3"]
-                 [org.clojure/core.match "0.2.0-alpha9"]
+                 [org.clojure/core.match "0.2.0-alpha10"]
                  [protobuf "0.6.2-alpha2"]]
   :plugins [[lein-protobuf "0.2.1"]]
   :profiles {:1.5 {:dependencies [[org.clojure/clojure "1.5.0-master-SNAPSHOT"]]}
