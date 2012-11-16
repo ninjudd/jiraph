@@ -5,11 +5,11 @@
         [flatland.jiraph.codex :as codex :only [encode decode]]
         [flatland.jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
-                           txn-begin! txn-commit! txn-rollback!]]
+                                    txn-begin! txn-commit! txn-rollback!]]
         [flatland.useful.utils :only [if-ns adjoin returning empty-coll? switch]]
         [flatland.useful.seq :only [prefix-of? single? remove-prefix glue take-until assert-length]]
         [flatland.useful.state :only [volatile put!]]
-        [flatland.useful.map :only [update assoc-in* merge-in keyed]]
+        [flatland.useful.map :only [update assoc-in* merge-in keyed into-map]]
         [flatland.useful.fn :only [as-fn any to-fix]]
         [flatland.useful.io :only [compare-bytes]]
         [flatland.useful.datatypes :only [assoc-record]]
@@ -511,16 +511,18 @@
 (let [default-layout-fn (wrap-revisioned
                          (constantly [{:pattern [:edges :*] :format default-format}
                                       {:pattern []          :format default-format}]))]
-  (defn make [db & {:keys [assoc-mode layout-fn key-codec]
-                    :or {assoc-mode :append
-                         layout-fn default-layout-fn
-                         key-codec default-key-codec}}]
-    (MasaiSortedLayer. (make-db db) nil (volatile nil)
-                       (case assoc-mode
-                         :append true
-                         :overwrite false)
-                       (as-fn layout-fn)
-                       key-codec)))
+  (defn make [db & opts]
+    (let [{:keys [assoc-mode layout-fn key-codec]
+           :or {assoc-mode :append
+                layout-fn default-layout-fn
+                key-codec default-key-codec}}
+          (into-map opts)]
+      (MasaiSortedLayer. (make-db db) nil (volatile nil)
+                         (case assoc-mode
+                           :append true
+                           :overwrite false)
+                         (as-fn layout-fn)
+                         key-codec))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.

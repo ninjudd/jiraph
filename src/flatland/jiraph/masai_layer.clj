@@ -7,7 +7,7 @@
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                            at-revision txn-begin! txn-commit! txn-rollback!]]
         [flatland.useful.utils :only [if-ns adjoin returning map-entry]]
-        [flatland.useful.map :only [update-in*]]
+        [flatland.useful.map :only [update-in* into-map]]
         [flatland.useful.seq :only [find-with assert-length]]
         [flatland.useful.state :only [volatile put!]]
         [flatland.useful.fn :only [as-fn fix given]]
@@ -193,16 +193,18 @@
   ;; format-fn should be a function:
   ;; - accept as arg: a map containing {revision and node-id}
   ;; - return: a format (see doc for formats at the top of this file)
-  (defn make [db & {:keys [assoc-mode format-fn key-codec]
-                    :or {assoc-mode :append
-                         format-fn default-format-fn
-                         key-codec default-key-codec}}]
-    (MasaiLayer. (make-db db) nil (volatile nil)
-                 (case assoc-mode
-                   :append true
-                   :overwrite false)
-                 (as-fn format-fn)
-                 key-codec)))
+  (defn make [db & opts]
+    (let [{:keys [assoc-mode format-fn key-codec]
+           :or {assoc-mode :append
+                format-fn default-format-fn
+                key-codec default-key-codec}}
+          (into-map opts)]
+      (MasaiLayer. (make-db db) nil (volatile nil)
+                   (case assoc-mode
+                     :append true
+                     :overwrite false)
+                   (as-fn format-fn)
+                   key-codec))))
 
 (defn temp-layer
   "Create a masai layer on a temporary file, deleting the file when the JVM exits.
