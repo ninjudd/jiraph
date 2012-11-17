@@ -133,7 +133,7 @@
            (assoc m k v)))
        (f m))))
 
-(defn inc-last-byte [^bytes b]
+(defn- inc-last-byte [^bytes b]
   (let [index (dec (alength b))]
     (when-not (neg? index)
       (aset b index
@@ -141,6 +141,13 @@
                  (unchecked-inc)
                  (unchecked-byte)))
       b)))
+
+
+(defn- broaden-bound [key test change-test]
+  (when key
+    (if-let [new-test (change-test test)]
+      [(inc-last-byte key) new-test]
+      [key test])))
 
 (defn bounds
   "Compute the bounds for fetching db records under prefix. Valid options are:
@@ -156,12 +163,12 @@
                                    :end-test start-test
                                    :end start})
          (let [[start end] (for [key [start end]]
-                             (encode key-codec (if key
-                                                 (concat prefix [key])
-                                                 prefix)))
-               [end end-test] (if (= end-test <=)
-                                [(inc-last-byte end) <]
-                                [end end-test])]
+                             (when-let [keyseq (seq (if key
+                                                      (concat prefix [key])
+                                                      prefix))]
+                               (encode key-codec keyseq)))
+               [start start-test] (broaden-bound start start-test {> >=})
+               [end end-test] (broaden-bound end end-test {<= <})]
            (keyed [start end start-test end-test]))))))
 
 (defn fetch
