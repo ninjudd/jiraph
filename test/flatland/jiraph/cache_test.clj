@@ -4,7 +4,7 @@
          [defwalk path paths *parallel-follow* intersection enable-walk-cache! reset-walk-cache!]]
         [flatland.jiraph.walk.predicates :only [at-limit]]
         [flatland.jiraph.formats.protobuf :only [protobuf-format]]
-        [fogus.unk :only [memo-lru snapshot]])
+        [clojure.core.memoize :only [memo-lru snapshot]])
   (:require [flatland.jiraph.masai-layer :as bal]
             [flatland.jiraph.stm-layer :as stm]
             [flatland.masai.tokyo :as tokyo])

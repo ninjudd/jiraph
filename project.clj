@@ -18,7 +18,7 @@
   :plugins [[lein-protobuf "0.2.1"]]
   :profiles {:1.5 {:dependencies [[org.clojure/clojure "1.5.0-master-SNAPSHOT"]]}
              :dev {:dependencies [[org.flatland/tokyocabinet "1.24.6"]
-                                  [unk "0.9.3"]]}}
+                                  [org.clojure/core.memoize "0.5.2"]]}}
   :aliases {"testall" ["with-profile" "dev,default:dev,1.5,default" "test"]}
   :repositories {"sonatype-snapshots" {:url "http://oss.sonatype.org/content/repositories/snapshots"
                                        :snapshots true
