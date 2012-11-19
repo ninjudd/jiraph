@@ -184,26 +184,26 @@
 (defn- fetch-range
   "Fetch a range of node chunks beneath prefix. Returns a seq of sparse maps at the top level of the
   graph. Valid options are:
-   :reverse?    - fetch chunks in reverse
+   :reverse     - fetch chunks in reverse
    :codec-type  - which codec type to use for decoding values (default :codec)
    :layout      - layout to use for looking up codecs (optimization)
    :start-test, :start, :end-test, :end - options passed to bounds"
   [layer prefix opts]
   (let [{:keys [key-codec db]} layer
         {:keys [start end start-test end-test]} (bounds key-codec prefix opts)
-        {:keys [reverse? ids-only? codec-type layout] :or {codec-type :codec}} opts
+        {:keys [reverse ids-only? codec-type layout] :or {codec-type :codec}} opts
         fetch (if end
                 (fn [subseq-fn] (subseq-fn db start-test start end-test end))
                 (fn [subseq-fn] (subseq-fn db start-test start)))]
     (if ids-only?
-      (for [key (fetch (if reverse? db/fetch-key-rsubseq db/fetch-key-subseq))
+      (for [key (fetch (if reverse db/fetch-key-rsubseq db/fetch-key-subseq))
             :when (not (revision-key? key))]
         ;; TODO optimize to use cursor to jump to next id
         (decode key-codec key))
       (let [codec (if layout
                     (partial find-codec layout codec-type)
                     (codec-finder layer :read codec-type))]
-        (for [[key val] (fetch (if reverse? db/fetch-rsubseq db/fetch-subseq))
+        (for [[key val] (fetch (if reverse db/fetch-rsubseq db/fetch-subseq))
               :when (not (revision-key? key))
               :let [keyseq (decode key-codec key)
                     val-codec (codec keyseq)]
@@ -263,9 +263,9 @@
     (let [node-entries (partial get-node-seq layer keyseq)]
       (when-let [node-subseq (switch f
                                seq #(node-entries {})
-                               rseq #(node-entries {:reverse? true})
+                               rseq #(node-entries {:reverse true})
                                subseq (subseq-fn node-entries {})
-                               rsubseq (subseq-fn node-entries {:reverse? true}))]
+                               rsubseq (subseq-fn node-entries {:reverse true}))]
         (fn [& args]
           (or (seq (apply node-subseq args))
               (when (empty? (node-entries {}))
