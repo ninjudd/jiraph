@@ -8,16 +8,12 @@
 (def ^:dynamic *warn-on-fallback* false)
 
 (defprotocol Enumerate
-  (node-id-seq [layer]
-    "A seq of all node ids in this layer.")
-  (node-seq [layer]
-    "A seq of all [id, node] entries in this layer."))
+  (node-seq [layer opts]
+    "A seq of nodes in this layer."))
 
-(defprotocol SortedEnumerate
-  (node-id-subseq [layer opts]
-    "An ordered, bounded seq of all node ids in this layer.")
-  (node-subseq [layer opts]
-    "An ordered, bounded seq of all nodes in this layer."))
+(defprotocol EnumerateIds
+  (node-id-seq [layer opts]
+    "Get a seq of node ids in this layer."))
 
 (defprotocol Schema
   (schema [layer id]
@@ -126,17 +122,13 @@
   (node-valid? [layer attrs] true)
 
   Enumerate
-  (node-id-seq [layer]
-    (node-id-subseq layer {}))
-  (node-seq [layer]
-    (node-subseq layer {}))
-
-  SortedEnumerate
-  (node-subseq [layer opts]
-    (for [id (node-id-subseq layer opts)]
+  (node-seq [layer opts]
+    (for [id (node-id-seq layer opts)]
       (map-entry id (get-node layer id nil))))
-  ;; intentionally unimplemented - this blows up if you don't support it
-  ;; (node-id-subseq [layer opts])
+
+  EnumerateIds
+  (node-id-seq [layer opts]
+    (map first (node-seq layer opts)))
 
   Optimized
   ;; can't optimize anything
@@ -184,3 +176,7 @@
               (format "Can't perform function %s at top level"
                       f))))
     (update-fn (first keyseq) (rest keyseq))))
+
+(defn deny-sorted-seq [opts]
+  (when (seq opts)
+    (throw (IllegalArgumentException. "bounded or ordered node seqs not supported"))))

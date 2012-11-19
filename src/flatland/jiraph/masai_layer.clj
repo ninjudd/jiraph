@@ -1,11 +1,10 @@
 (ns flatland.jiraph.masai-layer
   (:use [flatland.jiraph.layer :as layer
-         :only [Enumerate Optimized Historical Basic Layer ChangeLog Schema
-                node-id-seq]]
+         :only [EnumerateIds Optimized Historical Basic Layer ChangeLog Schema]]
         [flatland.jiraph.codex :only [encode decode]]
         [flatland.jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
-                           at-revision txn-begin! txn-commit! txn-rollback!]]
+                                    at-revision txn-begin! txn-commit! txn-rollback!]]
         [flatland.useful.utils :only [if-ns adjoin returning map-entry]]
         [flatland.useful.map :only [update-in* into-map]]
         [flatland.useful.seq :only [find-with assert-length]]
@@ -62,22 +61,16 @@
                            data)))
       not-found))
 
-(defn- key-seq [layer]
-  (remove revision-key? (db/key-seq (:db layer))))
-
 (defrecord MasaiLayer [db revision max-written-revision append-only? format-fn key-codec]
   Object
   (toString [this]
     (pr-str this))
 
-  Enumerate
-  (node-id-seq [this]
+  EnumerateIds
+  (node-id-seq [this opts]
+    (layer/deny-sorted-seq opts)
     (map (partial decode key-codec)
-         (key-seq this)))
-  (node-seq [this]
-    (for [key (key-seq this)]
-      (let [id (decode key-codec key)]
-        (map-entry id (get-node* this id key nil)))))
+         (remove revision-key? (db/key-seq db))))
 
   Basic
   (get-node [this id not-found]

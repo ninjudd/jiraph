@@ -38,19 +38,14 @@
   (query-fn [this keyseq not-found f]
     (layer/query-fn layer (update-keyseq-id keyseq encode) not-found f))
 
-  layer/SortedEnumerate
-  (node-id-subseq [this opts]
-    (map decode (layer/node-id-subseq layer (update-subseq-opts opts encode))))
-  (node-subseq [this opts]
-    (for [[id attrs] (layer/node-subseq layer (update-subseq-opts opts encode))]
+  layer/Enumerate
+  (node-seq [this opts]
+    (for [[id attrs] (layer/node-seq layer (update-subseq-opts opts encode))]
       (map-entry (decode id) attrs)))
 
-  layer/Enumerate
-  (node-id-seq [this]
-    (map decode (layer/node-id-seq layer)))
-  (node-seq [this]
-    (for [[id attrs] (layer/node-seq layer)]
-      (map-entry (decode id) attrs)))
+  layer/EnumerateIds
+  (node-id-seq [this opts]
+    (map decode (layer/node-id-seq layer (update-subseq-opts opts encode))))
 
   layer/ChangeLog
   (get-revisions [this id]

@@ -46,16 +46,14 @@
        (child    [this# kind#] (child ~layer-sym kind#))
 
        Enumerate
-       (node-id-seq [this#] (filter #(keep-node? this# %)
-                                    (node-id-seq ~layer-sym)))
-       (node-seq    [this#] (filter #(keep-node? this# (first %))
-                                    (node-seq ~layer-sym)))
+       (node-seq [this# opts#]
+                 (filter #(keep-node? this# (first %))
+                         (node-seq ~layer-sym opts#)))
 
-       SortedEnumerate
-       (node-id-subseq [this# opts#] (filter #(keep-node? this# %)
-                                             (node-id-subseq ~layer-sym opts#)))
-       (node-subseq    [this# opts#] (filter #(keep-node? this# (first %))
-                                             (node-subseq ~layer-sym opts#)))
+       EnumerateIds
+       (node-id-seq [this# opts#]
+                    (filter #(keep-node? this# %)
+                            (node-id-seq ~layer-sym opts#)))
 
        Basic
        (get-node [this# id# not-found#] (get-node ~layer-sym id# not-found#))

@@ -3,9 +3,8 @@
 
 ;; a layer object like /dev/null - it ignores all writes, and returns nil for all reads
 (defrecord NullLayer []
-  SortedEnumerate
-  (node-id-subseq [this opts] ())
-  (node-subseq    [this opts] ())
+  Enumerate
+  (node-seq [this opts] ())
 
   Basic
   (get-node [this id not-found] not-found)

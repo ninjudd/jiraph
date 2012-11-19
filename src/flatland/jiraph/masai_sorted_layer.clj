@@ -1,6 +1,6 @@
 (ns flatland.jiraph.masai-sorted-layer
   (:use [flatland.jiraph.layer :as layer
-         :only [SortedEnumerate Optimized Basic Layer ChangeLog Schema node-id-seq]]
+         :only [Enumerate EnumerateIds Optimized Basic Layer ChangeLog Schema]]
         [flatland.jiraph.utils :only [keyseq->str meta-str?]]
         [flatland.jiraph.codex :as codex :only [encode decode]]
         [flatland.jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
@@ -381,11 +381,13 @@
         (write! layer' keyseq arg)))))
 
 (defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn key-codec]
-  SortedEnumerate
-  (node-id-subseq [layer opts]
-    (get-id-seq layer [] opts))
-  (node-subseq [layer opts]
+  Enumerate
+  (node-seq [layer opts]
     (get-node-seq layer [] opts))
+
+  EnumerateIds
+  (node-id-seq [layer opts]
+    (get-id-seq layer [] opts))
 
   Basic
   (get-node [this id not-found]

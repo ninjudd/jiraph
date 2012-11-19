@@ -1,10 +1,11 @@
 (ns flatland.jiraph.stm-layer
   (:refer-clojure :exclude [meta])
-  (:use [flatland.jiraph.layer :only [Enumerate Basic Layer Optimized ChangeLog get-revisions close]]
+  (:use [flatland.jiraph.layer :as layer
+         :only [Enumerate EnumerateIds Basic Layer Optimized ChangeLog]]
         [flatland.jiraph.graph :as graph :only [with-action get-node]]
         [flatland.jiraph.utils :only [meta-id meta-id? base-id]]
         [flatland.retro.core :only [WrappedTransactional Revisioned OrderedRevisions
-                           max-revision at-revision current-revision]]
+                                    max-revision at-revision current-revision]]
         [flatland.useful.fn :only [given fix]]
         [flatland.useful.seq :only [assert-length]]
         [flatland.useful.utils :only [returning or-min]]
@@ -59,10 +60,14 @@
     (pr-str this))
 
   Enumerate
-  (node-id-seq [this]
-    (-> this nodes keys))
-  (node-seq [this]
+  (node-seq [this opts]
+    (layer/deny-sorted-seq opts)
     (-> this nodes seq))
+  
+  EnumerateIds
+  (node-id-seq [this opts]
+    (layer/deny-sorted-seq opts)
+    (-> this nodes keys))
 
   Basic
   (get-node [this k not-found]
@@ -71,7 +76,7 @@
       (let [n (-> this nodes (get k not-found))]
         (if-not (identical? n not-found)
           n
-          (let [touched-revisions (get-revisions (at-revision this nil) k)
+          (let [touched-revisions (layer/get-revisions (at-revision this nil) k)
                 most-recent (or (first (if revision
                                          (drop-while #(> % revision) touched-revisions)
                                          touched-revisions))
@@ -124,7 +129,7 @@
     (when filename
       (spit filename @store)))
   (sync! [this]
-    (close this))
+    (layer/close this))
   (truncate! [this]
     (dosync
      (ref-set store empty-store)))
