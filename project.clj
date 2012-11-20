@@ -1,4 +1,4 @@
-(defproject org.flatland/jiraph "0.9.2"
+(defproject org.flatland/jiraph "0.9.3"
   :description "embedded graph db library for clojure"
   :url "https://github.com/flatland/jiraph"
   :license {:name "Eclipse Public License - v 1.0"
@@ -15,7 +15,7 @@
                  [org.flatland/ego "0.2.0"]
                  [org.flatland/protobuf "0.7.0"]
                  [slingshot "0.10.3"]]
-  :plugins [[lein-protobuf "0.3.0"]]
+  :plugins [[lein-protobuf "0.3.1"]]
   :profiles {:1.5 {:dependencies [[org.clojure/clojure "1.5.0-master-SNAPSHOT"]]}
              :dev {:dependencies [[org.flatland/tokyocabinet "1.24.6"]
                                   [org.clojure/core.memoize "0.5.2"]]}}
