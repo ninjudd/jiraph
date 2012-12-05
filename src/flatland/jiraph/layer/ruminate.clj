@@ -88,7 +88,7 @@
   on the corresponding incoming edge."
   ([outgoing-layer incoming-layer]
      (incoming outgoing-layer incoming-layer (fn [edge]
-                                               (select-keys edge [:exists]))))
+                                               (not-empty (select-keys edge [:exists])))))
   ([outgoing-layer incoming-layer incoming->outgoing]
      (make outgoing-layer [[:incoming incoming-layer]]
            (fn [outgoing [incoming] keyseq f args]
@@ -101,9 +101,11 @@
                                                (read outgoing-layer [id :edges])))]
                    (->> (if (and (seq keyseq) (= f adjoin))
                           (let [[from-id & keys] keyseq]
-                            (for [[to-id edge] (apply edges-map keys (assert-length 1 args))]
+                            (for [[to-id edge] (apply edges-map keys (assert-length 1 args))
+                                  :let [incoming-edge (incoming->outgoing edge)]
+                                  :when incoming-edge]
                               ((update-in-node incoming [to-id :edges from-id]
-                                               adjoin (incoming->outgoing edge))
+                                               adjoin incoming-edge)
                                read')))
                           (let [[from-id new-edges] (dispatch-update keyseq f args
                                                                      (fn [id val] ;; top-level assoc
@@ -113,9 +115,11 @@
                                                                      (fn [id keys] ;; anything else
                                                                        [id (read-new id)]))
                                 old-edges (read-old from-id)]
-                            (concat (for [[to-id edge] new-edges]
+                            (concat (for [[to-id edge] new-edges
+                                          :let [incoming-edge (incoming->outgoing edge)]
+                                          :when incoming-edge]
                                       ((update-in-node incoming [to-id :edges from-id]
-                                                       (constantly (incoming->outgoing edge)))
+                                                       (constantly incoming-edge))
                                        read'))
                                     (for [to-id (keys old-edges)
                                           :when (not (contains? new-edges to-id))]
