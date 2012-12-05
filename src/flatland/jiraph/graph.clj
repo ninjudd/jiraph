@@ -457,14 +457,14 @@
   [layer id]
   (into (ordered-map)
         (for [[node-id edge] (get-incoming-edges layer id)]
-          [node-id (not (get edge :deleted false))])))
+          [node-id (:exists edge)])))
 
 (defn ^{:dynamic true} get-incoming
   "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
   [layer id]
   (into (ordered-set)
-        (for [[node-id {:keys [deleted]}] (get-incoming-edges layer id)
-              :when (not deleted)]
+        (for [[node-id {:keys [exists]}] (get-incoming-edges layer id)
+              :when exists]
           node-id)))
 
 (defn wrap-bindings

@@ -82,46 +82,48 @@
         (= :edges (first keys)) (assoc-in* {} (rest keys) val)
         :else                   {}))
 
-;; TODO accept transform function from outgoing->incoming edge so we can store other data.
 (defn incoming
-  "Wrap outgoing-layer with a ruminating layer that stores incoming edges on
-incoming-layer. Currently does not support storing any data on incoming edges other than :deleted
-true/false."
-  [outgoing-layer incoming-layer]
-  (make outgoing-layer [[:incoming incoming-layer]]
-        (fn [outgoing [incoming] keyseq f args]
-          (let [source-update (apply update-in-node outgoing keyseq f args)]
-            (fn [read]
-              (let [source-actions (source-update read)
-                    read' (graph/advance-reader read source-actions)
-                    [read-old read-new] (for [read [read read']]
-                                          (fn [id]
-                                            (read outgoing-layer [id :edges])))]
-                (->> (if (and (seq keyseq) (= f adjoin))
-                       (let [[from-id & keys] keyseq]
-                         (for [[to-id edge] (apply edges-map keys (assert-length 1 args))]
-                           ((update-in-node incoming [to-id :edges from-id]
-                                            adjoin edge)
-                            read')))
-                       (let [[from-id new-edges] (dispatch-update keyseq f args
-                                                                  (fn [id val] ;; top-level assoc
-                                                                    [id (:edges val)])
-                                                                  (fn [id] ;; top-level dissoc
-                                                                    [id {}])
-                                                                  (fn [id keys] ;; anything else
-                                                                    [id (read-new id)]))
-                             old-edges (read-old from-id)]
-                         (concat (for [[to-id edge] new-edges]
-                                   ((update-in-node incoming [to-id :edges from-id]
-                                                    (constantly edge))
-                                    read'))
-                                 (for [to-id (keys old-edges)
-                                       :when (not (contains? new-edges to-id))]
-                                   ((update-in-node incoming [to-id :edges]
-                                                    dissoc from-id)
-                                    read')))))
-                     (apply concat)
-                     (into source-actions))))))))
+  "Wrap outgoing-layer with a ruminating layer that stores incoming edges on incoming-layer. If
+  provided, incoming->outgoing is called on each outgoing edge's data to decide what data to write
+  on the corresponding incoming edge."
+  ([outgoing-layer incoming-layer]
+     (incoming outgoing-layer incoming-layer (fn [edge]
+                                               (select-keys edge [:exists]))))
+  ([outgoing-layer incoming-layer incoming->outgoing]
+     (make outgoing-layer [[:incoming incoming-layer]]
+           (fn [outgoing [incoming] keyseq f args]
+             (let [source-update (apply update-in-node outgoing keyseq f args)]
+               (fn [read]
+                 (let [source-actions (source-update read)
+                       read' (graph/advance-reader read source-actions)
+                       [read-old read-new] (for [read [read read']]
+                                             (fn [id]
+                                               (read outgoing-layer [id :edges])))]
+                   (->> (if (and (seq keyseq) (= f adjoin))
+                          (let [[from-id & keys] keyseq]
+                            (for [[to-id edge] (apply edges-map keys (assert-length 1 args))]
+                              ((update-in-node incoming [to-id :edges from-id]
+                                               adjoin (incoming->outgoing edge))
+                               read')))
+                          (let [[from-id new-edges] (dispatch-update keyseq f args
+                                                                     (fn [id val] ;; top-level assoc
+                                                                       [id (:edges val)])
+                                                                     (fn [id] ;; top-level dissoc
+                                                                       [id {}])
+                                                                     (fn [id keys] ;; anything else
+                                                                       [id (read-new id)]))
+                                old-edges (read-old from-id)]
+                            (concat (for [[to-id edge] new-edges]
+                                      ((update-in-node incoming [to-id :edges from-id]
+                                                       (constantly (incoming->outgoing edge)))
+                                       read'))
+                                    (for [to-id (keys old-edges)
+                                          :when (not (contains? new-edges to-id))]
+                                      ((update-in-node incoming [to-id :edges]
+                                                       dissoc from-id)
+                                       read')))))
+                        (apply concat)
+                        (into source-actions)))))))))
 
 (defn top-level-indexer [source index field index-fieldname]
   (make source [[field index]]
