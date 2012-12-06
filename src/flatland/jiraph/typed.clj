@@ -2,7 +2,6 @@
   (:use [flatland.jiraph.core :only [layer]]
         [flatland.jiraph.layer :only [Basic Optimized Schema
                                       get-node schema update-in-node query-fn]]
-        [flatland.jiraph.utils :only [edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
         [flatland.jiraph.wrapped-layer :only [defwrapped update-wrap-read forward-reads]]
         [clojure.core.match :only [match]]
         [flatland.useful.map :only [map-vals-with-keys update update-in*]]
