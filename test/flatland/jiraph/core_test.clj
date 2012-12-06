@@ -172,6 +172,7 @@
                  (assoc-node "8" {:foo 9})))
         (is (= 8 (:foo (get-node layer-name "8"))))))))
 
+;; have to explicitly use :exists for incoming to work
 (deftest revisioned-incoming
   (with-graph (make-graph)
     (test-each-layer []
@@ -179,14 +180,14 @@
       (at-revision 100 (is (empty? (get-incoming layer-name "11"))))
       (at-revision 99 ;; txn-> writes the next revision (ie, 100)
         (txn-> layer-name
-               (assoc-node "10" {:edges {"11" {:a "one"}}})))
+               (assoc-node "10" {:edges {"11" {:a "one" :exists true}}})))
 
       (is (= #{"10"} (get-incoming layer-name "11")))
       (is (empty?    (at-revision  99 (get-incoming layer-name "11"))))
       (is (= #{"10"} (at-revision 100 (get-incoming layer-name "11"))))
 
       (at-revision 200 ;; assoc-node! writes its at-revision directly
-        (assoc-node! layer-name "12" {:edges {"11" {:a "one"}}}))
+        (assoc-node! layer-name "12" {:edges {"11" {:a "one" :exists true}}}))
 
       (is (= #{"10" "12"} (get-incoming layer-name "11")))
       (is (= #{"10"}      (at-revision 199 (get-incoming layer-name "11"))))
@@ -194,7 +195,7 @@
 
       (at-revision 200
         (txn-> layer-name
-               (assoc-node "13" {:edges {"11" {:a "one"}}})))
+               (assoc-node "13" {:edges {"11" {:a "one" :exists true}}})))
 
       (is (= #{"10" "12" "13"}                  (get-incoming layer-name "11")))
       (at-revision 200 (is (= #{"10" "12"}      (get-incoming layer-name "11"))))
@@ -214,8 +215,8 @@
         (let [history (node-history layer-name "13")]
           (is (sorted? history))
           (is (map? history))
-          (is (= (seq history) [[201 {:edges {"11" {:a "one"}}}]
-                                [202 {:edges {"11" {:a "1"}}}]])))))))
+          (is (= (seq history) [[201 {:edges {"11" {:a "one" :exists true}}}]
+                                [202 {:edges {"11" {:a "1" :exists true}}}]])))))))
 
 (deftest test-current-revision
   (with-graph (make-graph)
