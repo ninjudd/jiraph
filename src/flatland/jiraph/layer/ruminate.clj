@@ -15,11 +15,20 @@
 (defwrapped RuminatingLayer [input-layer output-layers ruminate]
   layer/Basic
   (update-in-node [this keyseq f args]
-    (-> (let [rev (current-revision this)]
-          (ruminate (at-revision input-layer rev)
-                    (for [[name layer] output-layers]
-                      (at-revision layer rev))
-                    keyseq f args))
+    (-> (let [rev (current-revision this)
+              revisioned-layers (cons (at-revision input-layer rev)
+                                      (for [[name layer] output-layers]
+                                        (at-revision layer rev)))
+              ioval (ruminate (first revisioned-layers) ;; input layer
+                              (rest revisioned-layers)  ;; output layers
+                              keyseq f args)]
+          (fn [read]
+            (let [actions (ioval read)
+                  written-layers (set (map :layer actions))]
+              (into actions
+                    (for [layer revisioned-layers
+                          :when (not (contains? written-layers layer))]
+                      {:layer layer, :write (constantly nil), :wrap-read identity})))))
         (update-wrap-read forward-reads this input-layer)))
 
   layer/Parent
