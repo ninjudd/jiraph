@@ -107,7 +107,7 @@
                        read' (graph/advance-reader read source-actions)
                        [read-old read-new] (for [read [read read']]
                                              (fn [id]
-                                               (read outgoing-layer [id :edges])))]
+                                               (read outgoing [id :edges])))]
                    (->> (if (and (seq keyseq) (= f adjoin))
                           (let [[from-id & keys] keyseq]
                             (for [[to-id edge] (apply edges-map keys (assert-length 1 args))
