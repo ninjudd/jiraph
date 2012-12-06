@@ -12,8 +12,8 @@
         layer (cache/make c)
         from-id "profile-1"
         to-id "profile-2"
-        existing {:edges {to-id {:deleted false}}}
-        deleted {:edges {to-id {:deleted true}}}]
+        existing {:edges {to-id {:exists true}}}
+        deleted {:edges {to-id {:exists false}}}]
     (graph/open layer)
     (graph/assoc-node! c from-id existing)
     (is (= existing (graph/get-node layer from-id)))
