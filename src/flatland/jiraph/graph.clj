@@ -455,14 +455,15 @@
 
 (defn ^{:dynamic true} get-incoming-map
   "Return a map of incoming edges, where the value for each key indicates whether an edge is
-   incoming from that node."
+   incoming from that node. Excludes edges without :exists true."
   [layer id]
   (into (ordered-map)
         (for [[node-id edge] (get-incoming-edges layer id)]
           [node-id (:exists edge)])))
 
 (defn ^{:dynamic true} get-incoming
-  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+  "Return the ids of all nodes that have incoming edges on this layer to this node.
+  Excludes edges without :exists true."
   [layer id]
   (into (ordered-set)
         (for [[node-id {:keys [exists]}] (get-incoming-edges layer id)
