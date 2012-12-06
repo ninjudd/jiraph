@@ -287,14 +287,16 @@
                     (for [{:keys [keyseq f args] :as action} actions]
                       (update-in action [:write]
                                  (fn [write]
-                                   (fn debug [layer]
-                                     (printf "Before %s: %s\n"
-                                             (list 'update-in-node
-                                                   (:path (:opts (:db (unwrap-all layer))))
-                                                   keyseq f args)
-                                             (get-in-node layer keyseq f args))
-                                     (write layer)
-                                     (printf "After: %s\n" (get-in-node layer keyseq f args))))))))]
+                                   (if (empty? keyseq)
+                                     write ;; top-level stuff is too hard to debug-print
+                                     (fn debug [layer]
+                                       (printf "Before %s: %s\n"
+                                               (list 'update-in-node
+                                                     (:path (:opts (:db (unwrap-all layer))))
+                                                     keyseq f args)
+                                               (get-in-node layer keyseq f args))
+                                       (write layer)
+                                       (printf "After: %s\n" (get-in-node layer keyseq f args)))))))))]
     (retro/with-actions nil
       (reduce (fn [retro-ioval {:keys [layer write]}]
                 (update-in retro-ioval [layer] (fnil conj []) write))
