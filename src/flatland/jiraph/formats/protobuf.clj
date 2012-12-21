@@ -74,15 +74,24 @@
 
   (defn slice
     "Given a vector of buffer offsets, returns a [start length] pair describing
-     what offsets into the buffer must be read to obtain the requested data."
+     what piece of the buffer must be read to obtain the requested data."
     [offsets]
     (let [[_ begin] (first offsets)
           [_ _ end] (peek offsets)]
       [begin (- end begin)]))
 
+  (defn defines-field? [^PersistentProtocolBufferMap$Def proto, field-num]
+    (-> proto
+        (.type)
+        (.findFieldByNumber field-num)))
+
   (defn protobuf-format [proto]
     (let [proto (protodef proto)
           {:keys [codec] :as proto-format} (proto-format* proto)]
+      (when (defines-field? proto field-number)
+        (throw (IllegalArgumentException.
+                (format "Can't encode protobuf that defines field %d, as we reserve it to encode revisions."
+                        field-number))))
       (fn [{:keys [revision]}]
         (letfn [(offsets [buf]
                   (offsets-for-revision (revision-offsets buf)
