@@ -76,9 +76,11 @@
     "Given a vector of buffer offsets, returns a [start length] pair describing
      what piece of the buffer must be read to obtain the requested data."
     [offsets]
-    (let [[_ begin] (first offsets)
-          [_ _ end] (peek offsets)]
-      [begin (- end begin)]))
+    (if (empty? offsets)
+      [0 0]
+      (let [[_ begin] (first offsets)
+            [_ _ end] (peek offsets)]
+        [begin (- end begin)])))
 
   (defn defines-field? [^PersistentProtocolBufferMap$Def proto, field-num]
     (-> proto
