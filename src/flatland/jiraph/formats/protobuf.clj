@@ -1,7 +1,8 @@
 (ns flatland.jiraph.formats.protobuf
   (:use [flatland.useful.seq :only [lazy-loop]]
-        [flatland.useful.map :only [keyed]]
+        [flatland.useful.map :only [keyed update]]
         [flatland.useful.utils :only [adjoin]]
+        [flatland.useful.experimental :only [lift-meta]]
         [flatland.protobuf.core :only [protodef protobuf? protobuf protobuf-load]])
   (:require [flatland.protobuf.codec :as protobuf]
             [flatland.jiraph.codex :as codex]
@@ -18,6 +19,23 @@
         codec (protobuf/protobuf-codec proto)
         reduce-fn adjoin]
     (keyed [codec schema reduce-fn])))
+
+(defn basic-protobuf-format
+  "A protobuf format which keeps track of revisions by making them part of the encoded protobuf
+   data. Not intended to be used in append-only mode; instead, the :revisions key is manually
+   curated to contain both its old values and the new one."
+  [proto]
+  (let [format (proto-format* proto)
+        format (-> format
+                   (assoc :revisions ;; set the revision-reading codec
+                     (codex/wrap (:codec format) identity :revisions))
+                   (update :codec codex/wrap identity #(lift-meta % [:revisions])))]
+    (fn [{:keys [revision]}]
+      (if-not revision
+        format
+        (update format :codec codex/wrap
+                #(update % :revisions conj revision)
+                identity)))))
 
 ;; the header for each revision-chunk is:
 ;; 1) the magic byte 0x7a, which means "field #15, a length-delimited struct". By using 15 here, we
