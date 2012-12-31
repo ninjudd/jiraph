@@ -105,7 +105,10 @@
                              (use-offsets bytes bounds)))})
                 (writer [reset?]
                   {:write (if-not revision
-                            (:write (codex/wrap codec identity identity))
+                            (:write (codex/wrap codec identity identity)) ; a silly way to convert a
+                                                                          ; gloss codec into just
+                                                                          ; the writer half of a
+                                                                          ; jiraph codex
                             (fn [node]
                               (let [^PersistentProtocolBufferMap val (if (protobuf? node)
                                                                        node
