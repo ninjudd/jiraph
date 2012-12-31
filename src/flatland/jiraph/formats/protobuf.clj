@@ -1,108 +1,150 @@
 (ns flatland.jiraph.formats.protobuf
-  (:use [flatland.jiraph.formats :only [revisioned-format tidy-node add-revisioning-modes]]
-        [flatland.jiraph.codex :only [encode decode] :as codex]
-        [flatland.useful.utils :only [adjoin]]
+  (:use [flatland.useful.seq :only [lazy-loop]]
         [flatland.useful.map :only [keyed update]]
-        [flatland.io.core :only [catbytes]]
-        [flatland.protobuf.core :only [protodef protobuf-dump]])
-  (:require [gloss.core :as gloss]
-            [flatland.protobuf.codec :as protobuf]
-            [flatland.schematic.core :as schema]))
+        [flatland.useful.utils :only [adjoin]]
+        [flatland.useful.experimental :only [lift-meta]]
+        [flatland.protobuf.core :only [protodef protobuf? protobuf protobuf-load]])
+  (:require [flatland.protobuf.codec :as protobuf]
+            [flatland.jiraph.codex :as codex]
+            [flatland.schematic.core :as schema])
+  (:import java.nio.ByteBuffer
+           com.google.protobuf.CodedOutputStream
+           flatland.protobuf.PersistentProtocolBufferMap
+           flatland.protobuf.PersistentProtocolBufferMap$Def))
 
-(def ^:private ^:const len-key :proto_length)
-
-(defn- wrap-tidying [f]
-  (fn [opts]
-    (-> (f opts)
-        (update :codec codex/wrap identity tidy-node))))
-
-(defn- wrap-revisioning-modes [f]
-  (fn [opts]
-    (-> (f opts)
-        (add-revisioning-modes))))
-
-(defn- num-bytes-to-encode-length [proto]
-  (let [proto (protodef proto)
-        min   (alength (protobuf-dump proto {len-key 0}))
-        max   (alength (protobuf-dump proto {len-key Integer/MAX_VALUE}))]
-    (letfn [(check [test msg]
-              (when-not test
-                (throw (Exception. (format "In %s: %s %s"
-                                           (.getFullName proto) (name len-key) msg)))))]
-      (check (pos? min)
-             "field is required for repeated protobufs")
-      (check (= min max)
-             "must be of type fixed32 or fixed64")
-      max)))
-
-;; NB doesn't currently work if you do a full/optimized read with _reset keys.
-;; plan is to fall back to non-optimized reads in that case, but support an
-;; option to protobuf-codec to never try an optimized read if you expect _resets
-
-(defn- length-for-revision [node goal-revision header-len]
-  (loop [target-len 0,
-         [[rev len] :as pairs] (map vector
-                                    (:revisions node)
-                                    (len-key node))]
-    (if (or (not pairs)
-            (> rev goal-revision))
-      target-len
-      (recur (+ len target-len header-len)
-             (next pairs)))))
-
-(defn- proto-format*
-  [proto]
+(defn- proto-format* [proto]
   (let [schema (-> (protobuf/codec-schema proto)
                    (schema/dissoc-fields :revisions))
-        codec (protobuf/protobuf-codec proto)]
-    (keyed [codec schema])))
+        codec (protobuf/protobuf-codec proto)
+        reduce-fn adjoin]
+    (keyed [codec schema reduce-fn])))
 
 (defn basic-protobuf-format
-  "This is a format that can be used for :assoc-mode :overwrite while still keeping track of
-  revisions."
+  "A protobuf format which keeps track of revisions by making them part of the encoded protobuf
+   data. Not intended to be used in append-only mode; instead, the :revisions key is manually
+   curated to contain both its old values and the new one."
   [proto]
-  (let [proto-format (proto-format* proto)]
-    (wrap-revisioning-modes
-     (wrap-tidying
-      (fn [{:keys [revision]}]
-        (if (nil? revision)
-          proto-format
-          (-> proto-format
-              (update :codec codex/wrap
-                (fn [node]
-                  (assoc node :revisions
-                         (conj (:revisions (meta node))
-                               revision)))
-                identity))))))))
+  (let [format (proto-format* proto)
+        format (-> format
+                   (assoc :revisions ;; set the revision-reading codec
+                     (codex/wrap (:codec format) identity :revisions))
+                   (update :codec codex/wrap identity #(lift-meta % [:revisions])))]
+    (fn [{:keys [revision]}]
+      (if-not revision
+        format
+        (update format :codec codex/wrap
+                #(update % :revisions conj revision)
+                identity)))))
 
-;; TODO temporarily threw away code for handling non-adjoin reduce-fn
-(defn protobuf-format
-  ([proto]
-     (protobuf-format proto adjoin))
-  ([proto reduce-fn]
-     (when-not (= reduce-fn adjoin)
-       (throw (IllegalArgumentException. (format "Unsupported reduce-fn %s" reduce-fn))))
-     (let [proto-format (-> (proto-format* proto)
-                            (assoc :reduce-fn reduce-fn))
-           header-len (num-bytes-to-encode-length proto)]
-       (wrap-revisioning-modes
-        (wrap-tidying
-         (fn [{:keys [revision] :as opts}]
-           (if (nil? revision)
-             proto-format
-             (update proto-format :codec
-                     (fn [codec]
-                       {:read (fn [^bytes bytes]
-                                (let [full-node (decode codec bytes)
-                                      goal-length (length-for-revision full-node
-                                                                       revision header-len)]
-                                  (if (= goal-length (alength bytes))
-                                    full-node
-                                    (let [read-target (byte-array goal-length)]
-                                      (System/arraycopy bytes 0 read-target 0 goal-length)
-                                      (decode codec read-target)))))
-                        :write (fn [node]
-                                 (let [node (assoc node :revisions revision)
-                                       ^bytes encoded (encode codec node)]
-                                   (catbytes (encode codec {len-key (alength encoded)})
-                                             encoded)))})))))))))
+;; the header for each revision-chunk is:
+;; 1) the magic byte 0x7a, which means "field #15, a length-delimited struct". By using 15 here, we
+;;    are effectively reserving it: no revisioned protobuf can use field #15 for anything else.
+;;    protobuf skips fields it doesn't know about, and we're using this to skip the header.
+;; 2) The byte 0x0c (decimal 12), telling protobuf the struct to skip is 12 bytes long
+;; 3) 8 bytes of revision number. If the revision number is negative, it indicates that a "codec
+;;    reset" was performed at that revision, meaning that all previous data should be
+;;    discarded. Then, negate the number to see the actual revision.
+;; 4) 4 bytes indicating the byte-length of the data written for this revision.
+;;
+;; So, to read the data at a given revision, we must skip through the encoded bytes, reading each
+;; header, and find the start and end offset to ask protobuf to decode. Start will be either 0, or
+;; the offset of the codec-reset written most recently before the requested revision; end will be
+;; either the end of the encoded data, or the offset at which data for that revision ends.
+(let [field-number 15
+      wire-type 2
+      fieldno-byte (unchecked-byte (bit-or (bit-shift-left field-number 3)
+                                           wire-type))
+      content-length 12
+      length-byte (byte content-length)
+      magic-header (short (bit-or (bit-shift-left fieldno-byte 8)
+                                  length-byte))
+      total-header-size (+ 2 content-length)]
+  (defn revision-offsets
+    "Return a lazy sequence of tuples: [revision-number, start-offset, end-offset, is-reset]."
+    [^ByteBuffer buffer]
+    (lazy-loop []
+      (when (>= (.remaining buffer) total-header-size)
+        (assert (= magic-header (.getShort buffer)))
+        (let [revision (.getLong buffer)
+              length (.getInt buffer)
+              [revision reset?] (if (neg? revision)
+                                  [(- revision) true]
+                                  [revision false])
+              start-offset (.position buffer)
+              end-offset (+ start-offset length)]
+          (.position buffer end-offset) ;; skip over the data for that revision
+          (cons [revision start-offset end-offset reset?]
+                (lazy-recur))))))
+
+  (defn offsets-for-revision [buffer-offsets read-rev]
+    (loop [ret [], offsets (seq buffer-offsets)]
+      (if offsets
+        (let [[revision begin end reset? :as offset] (first offsets)]
+          (if (> revision read-rev)
+            ret
+            (recur (if reset? [offset], (conj ret offset))
+                   (next offsets))))
+        ret)))
+
+  (defn revisions [offsets]
+    (map first offsets))
+
+  (defn slice
+    "Given a vector of buffer offsets, returns a [start length] pair describing
+     what piece of the buffer must be read to obtain the requested data."
+    [offsets]
+    (if (empty? offsets)
+      [0 0]
+      (let [[_ begin] (first offsets)
+            [_ _ end] (peek offsets)]
+        [begin (- end begin)])))
+
+  (defn defines-field? [^PersistentProtocolBufferMap$Def proto, field-num]
+    (-> proto
+        (.type)
+        (.findFieldByNumber field-num)))
+
+  (defn protobuf-format [proto]
+    (let [proto (protodef proto)
+          {:keys [codec] :as proto-format} (proto-format* proto)]
+      (when (defines-field? proto field-number)
+        (throw (IllegalArgumentException.
+                (format "Can't encode protobuf that defines field %d, as we reserve it to encode revisions."
+                        field-number))))
+      (fn [{:keys [revision]}]
+        (letfn [(offsets [buf]
+                  (offsets-for-revision (revision-offsets buf)
+                                        (or revision Double/POSITIVE_INFINITY)))
+                (reader [use-offsets]
+                  {:read (fn [^bytes bytes]
+                           (let [buf (ByteBuffer/wrap bytes)
+                                 bounds (offsets buf)]
+                             (use-offsets bytes bounds)))})
+                (writer [reset?]
+                  {:write (if-not revision
+                            (:write (codex/wrap codec identity identity)) ; a silly way to convert a
+                                                                          ; gloss codec into just
+                                                                          ; the writer half of a
+                                                                          ; jiraph codex
+                            (fn [node]
+                              (let [^PersistentProtocolBufferMap val (if (protobuf? node)
+                                                                       node
+                                                                       (protobuf proto node))
+                                    message (.message val)
+                                    len (.getSerializedSize message)
+                                    ary (byte-array (+ len total-header-size))
+                                    out (CodedOutputStream/newInstance ary total-header-size len)
+                                    buf (ByteBuffer/wrap ary)]
+                                (.putShort buf magic-header)
+                                (.putLong buf (if reset? (- revision), revision))
+                                (.putInt buf len)
+                                (.writeTo message out)
+                                ary)))})]
+          (assoc proto-format
+            :codec (merge (writer false)
+                          (reader (fn [bytes bounds]
+                                    (-> (apply protobuf-load proto bytes (slice bounds))
+                                        (vary-meta assoc :revisions (revisions bounds))))))
+            :reset (writer true) ;; no reader, so will break if anyone reads with it
+            :revisions (reader (fn [bytes bounds]
+                                 (revisions bounds)))))))))

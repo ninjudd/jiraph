@@ -15,10 +15,6 @@ message Foo {
   optional Foo nested = 7;
 
   optional int32 rev = 8;
-
-  repeated fixed32 proto_length = 13;
-  repeated int64 revisions = 14;
-  optional bool codec_reset = 15;
 }
 
 message Item {
@@ -47,8 +43,4 @@ message Node {
   optional string bar     = 7;
   repeated int32  baz     = 8;
   optional Entry  bap     = 9;
-
-  optional fixed32 proto_length = 13;
-  repeated int64 revisions = 14;
-  optional bool codec_reset = 15;
 }
