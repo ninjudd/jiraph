@@ -12,8 +12,7 @@
            flatland.protobuf.PersistentProtocolBufferMap
            flatland.protobuf.PersistentProtocolBufferMap$Def))
 
-(defn- proto-format*
-  [proto]
+(defn- proto-format* [proto]
   (let [schema (-> (protobuf/codec-schema proto)
                    (schema/dissoc-fields :revisions))
         codec (protobuf/protobuf-codec proto)
