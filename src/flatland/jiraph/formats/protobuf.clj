@@ -60,43 +60,53 @@
                                   length-byte))
       total-header-size (+ 2 content-length)]
   (defn revision-offsets
-    "Return a lazy sequence of tuples: [revision-number, start-offset, end-offset, is-reset]."
+    "Return a lazy sequence of tuples: [revision-number, start-offset, end-offset, is-reset].
+     They are in descending order by revision number: the latest revision comes first."
     [^ByteBuffer buffer]
+    (.position buffer (.limit buffer))  ; start at the end and read backwards
     (lazy-loop []
-      (when (>= (.remaining buffer) total-header-size)
-        (assert (= magic-header (.getShort buffer)))
-        (let [revision (.getLong buffer)
-              length (.getInt buffer)
-              [revision reset?] (if (neg? revision)
-                                  [(- revision) true]
-                                  [revision false])
-              start-offset (.position buffer)
-              end-offset (+ start-offset length)]
-          (.position buffer end-offset) ;; skip over the data for that revision
-          (cons [revision start-offset end-offset reset?]
-                (lazy-recur))))))
+      (let [pos (.position buffer)
+            end-offset (- pos total-header-size)]
+        (when-not (neg? end-offset)     ; more data to read, so
+          (.position buffer end-offset) ; skip backwards over it
+          (assert (= magic-header (.getShort buffer)))
+          (let [revision (.getLong buffer)
+                length (.getInt buffer)
+                [revision reset?] (if (neg? revision)
+                                    [(- revision) true]
+                                    [revision false])
+                start-offset (- end-offset length)]
+            (.position buffer start-offset) ;; skip backwards over the data for that revision
+            (cons [revision start-offset end-offset reset?]
+                  (lazy-recur)))))))
 
-  (defn offsets-for-revision [buffer-offsets read-rev]
-    (loop [ret [], offsets (seq buffer-offsets)]
-      (if offsets
-        (let [[revision begin end reset? :as offset] (first offsets)]
-          (if (> revision read-rev)
-            ret
-            (recur (if reset? [offset], (conj ret offset))
-                   (next offsets))))
-        ret)))
+  (defn offsets-for-revision
+    "Given some offsets (as produced by revision-offsets), returns only those offsets which are
+     necessary to read the data at some particular revision. Basically, this entails dropping any
+     offsets which were written after that revision, and any that were written before a later
+     reset."
+    [buffer-offsets read-rev]
+    (lazy-loop [offsets (seq buffer-offsets)]
+      (when offsets
+        (let [[revision begin end reset? :as offset] (first offsets)
+              more (next offsets)]
+          (cond (> revision read-rev) (recur more) ;; in the future: pretend it doesn't exist
+                reset? [offset]
+                :else (cons offset (lazy-recur more)))))))
 
-  (defn revisions [offsets]
+  (defn revisions
+    "Get just the revision numbers from a sequence of revision offsets."
+    [offsets]
     (map first offsets))
 
   (defn slice
-    "Given a vector of buffer offsets, returns a [start length] pair describing
+    "Given a sequence of buffer offsets, returns a [start length] pair describing
      what piece of the buffer must be read to obtain the requested data."
     [offsets]
     (if (empty? offsets)
       [0 0]
-      (let [[_ begin] (first offsets)
-            [_ _ end] (peek offsets)]
+      (let [[_ _ end] (first offsets)
+            [_ begin] (last offsets)]
         [begin (- end begin)])))
 
   (defn defines-field? [^PersistentProtocolBufferMap$Def proto, field-num]
@@ -133,12 +143,13 @@
                                     message (.message val)
                                     len (.getSerializedSize message)
                                     ary (byte-array (+ len total-header-size))
-                                    out (CodedOutputStream/newInstance ary total-header-size len)
+                                    out (CodedOutputStream/newInstance ary 0 len)
                                     buf (ByteBuffer/wrap ary)]
+                                (.writeTo message out)
+                                (.position buf len)
                                 (.putShort buf magic-header)
                                 (.putLong buf (if reset? (- revision), revision))
                                 (.putInt buf len)
-                                (.writeTo message out)
                                 ary)))})]
           (assoc proto-format
             :codec (merge (writer false)
