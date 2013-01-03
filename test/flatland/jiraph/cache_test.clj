@@ -3,16 +3,16 @@
         [flatland.jiraph.walk :only
          [defwalk path paths *parallel-follow* intersection enable-walk-cache! reset-walk-cache!]]
         [flatland.jiraph.walk.predicates :only [at-limit]]
-        [flatland.jiraph.formats.protobuf :only [protobuf-format]]
         [clojure.core.memoize :only [memo-lru snapshot]])
   (:require [flatland.jiraph.masai-layer :as bal]
             [flatland.jiraph.stm-layer :as stm]
+            [flatland.jiraph.formats.protobuf :as protobuf]
             [flatland.masai.tokyo :as tokyo])
   (:import (flatland.jiraph Test$Node)))
 
 (def test-graph
   {:foo (bal/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                  :format-fn (protobuf-format Test$Node))})
+                  :format-fn (protobuf/basic-protobuf-format Test$Node))})
 
 (defwalk full-walk
   :add?      true
