@@ -5,19 +5,23 @@
         [flatland.useful.datatypes :only [assoc-record]]
         [flatland.useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
 
-(defn update-wrap-read [ioval f & args]
+(defn update-wrap-read
+  "Given an ioval and a read-wrapper, return a new ioval which has had the read wrapper applied to
+   its wrap-read entry. Accepts extra &args like other update functions."
+  [ioval f & args]
   (fn [read]
     (let [actions (ioval read)]
       (update-peek actions update :wrap-read
-                   (fn [wrapper]
-                     (fn [read]
-                       (let [read (wrapper read)]
-                         (apply f read args))))))))
+                   #(fn [read]
+                      (apply f (% read) args))))))
 
-(defn forward-reads [read master slave]
+(defn forward-reads
+  "A read-wrapper (thus suitable for passing to update-wrap-read) which \"hijacks\" any reads to
+   the source and passes them to the destination instead (leaving unrelated reads alone)."
+  [read source destination]
   (fn [layer keyseq & [not-found]]
-    (read (if (same? master layer)
-            slave, layer)
+    (read (if (same? source layer)
+            destination, layer)
           keyseq, not-found)))
 
 (defprotocol Wrapped
