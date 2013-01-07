@@ -120,7 +120,7 @@
 
 (def ^:private sentinel (Object.))
 
-(declare wrap-read-with-merging with-merging)
+(declare with-merging wrap-merging)
 
 (defn merge-node
   "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
@@ -156,7 +156,7 @@
                                              :edges {head-id {:deleted false
                                                               :revision revision
                                                               :position (+ 1 pos merge-count)}}})))
-                (update-wrap-read with-merging merge-layer)
+                (wrap-merging merge-layer)
                 (invoke read))))))))
 
 (defn merge-node!
@@ -198,7 +198,7 @@
                  (for [id tail-ids]
                    (compose (delete-merges-after merge-layer merge-rev id (read merge-layer [id]))
                             (graph/update-node merge-layer id adjoin {:head tail-id}))))
-          (update-wrap-read with-merging merge-layer)
+          (wrap-merging merge-layer)
           (invoke read)))))
 
 (defn unmerge-node!
@@ -215,12 +215,12 @@
 (defwrapped MergeableLayer [layer merge-layer]
   Basic
   (get-node [this id not-found]
-    ((wrap-read-with-merging graph/get-in-node)
+    ((with-merging graph/get-in-node)
      this [id] not-found))
 
   (update-in-node [this keyseq f args]
     (-> (update-in-node layer keyseq f args)
-        (update-wrap-read with-merging merge-layer)))
+        (wrap-merging merge-layer)))
 
   Layer
   (same? [this other]
@@ -257,7 +257,7 @@
   (keep-node? [this id]
     (= id (merge-head merge-layer id))))
 
-(defn wrap-read-with-merging
+(defn with-merging
   "Returns a new version of read that merges nodes.
   Assumes that the layer passed is a MergeableLayer."
   [read]
@@ -269,12 +269,12 @@
         not-found
         (merge-nodes merge-layer keyseq nodes)))))
 
-(def ^{:arglists '([read merge-layer])} with-merging
-  "A conditional version of wrap-read-with-merging that only wraps reads
-  for layers of type MergeableLayer with a matching merge-layer."
-  (conditional-read-wrapper
-   (match-sublayer MergeableLayer :merge-layer)
-   wrap-read-with-merging))
+(defn wrap-merging
+  "Wrap an ioval so that reads to any layer which has the given merge layer have merging applied."
+  [ioval sublayer]
+  (update-wrap-read ioval fix-read
+                    (sublayer-matcher MergeableLayer :merge-layer sublayer)
+                    with-merging))
 
 (defn make [layer merge-layer]
   (MergeableLayer. layer merge-layer))
