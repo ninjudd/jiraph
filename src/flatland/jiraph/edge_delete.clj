@@ -1,4 +1,4 @@
-(ns flatland.jiraph.delete
+(ns flatland.jiraph.edge-delete
   (:use [flatland.jiraph.core :only [layer]]
         [flatland.jiraph.layer :only [Basic Optimized Parent get-node]]
         [flatland.jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
