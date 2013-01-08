@@ -16,7 +16,7 @@
 
 (declare merge-ids merge-head merge-position)
 
-(def ^{:dynamic true} *default-merge-layer-name* :id)
+(def ^:dynamic *default-merge-layer-name* :id)
 
 (defn- merge-edges [merge-layer keyseq edges-seq]
   (letfn [(edge-sort-order [i id edge]
@@ -118,26 +118,9 @@
            0
            (get-in node [:edges head :position]))))))
 
-(def ^{:private true} sentinel (Object.))
+(def ^:private sentinel (Object.))
 
-(defn read-merged
-  ([layer keyseq not-found]
-     (read-merged graph/get-in-node layer keyseq not-found))
-  ([read {:keys [merge-layer layer]} keyseq not-found]
-     (let [nodes (->> (expand-keyseq-merges read merge-layer keyseq)
-                      (map #(read layer % sentinel))
-                      (remove #(identical? % sentinel)))]
-       (if (empty? nodes)
-         not-found
-         (merge-nodes merge-layer keyseq nodes)))))
-
-(declare merge-layer?)
-
-(defn merge-reads [read merge-layer]
-  (fn [layer' keyseq & [not-found]]
-    (if (merge-layer? layer' merge-layer)
-      (read-merged read layer' keyseq not-found)
-      (read layer' keyseq not-found))))
+(declare wrap-read-with-merging with-merging)
 
 (defn merge-node
   "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
@@ -173,7 +156,7 @@
                                              :edges {head-id {:deleted false
                                                               :revision revision
                                                               :position (+ 1 pos merge-count)}}})))
-                (update-wrap-read merge-reads merge-layer)
+                (update-wrap-read with-merging merge-layer)
                 (invoke read))))))))
 
 (defn merge-node!
@@ -215,7 +198,7 @@
                  (for [id tail-ids]
                    (compose (delete-merges-after merge-layer merge-rev id (read merge-layer [id]))
                             (graph/update-node merge-layer id adjoin {:head tail-id}))))
-          (update-wrap-read merge-reads merge-layer)
+          (update-wrap-read with-merging merge-layer)
           (invoke read)))))
 
 (defn unmerge-node!
@@ -227,14 +210,17 @@
        (unsafe-txn
          (unmerge-node merge-layer head-id tail-id)))))
 
+(def ^:private get-in-node* )
+
 (defwrapped MergeableLayer [layer merge-layer]
   Basic
   (get-node [this id not-found]
-    (read-merged this [id] not-found))
+    ((wrap-read-with-merging graph/get-in-node)
+     this [id] not-found))
 
   (update-in-node [this keyseq f args]
     (-> (update-in-node layer keyseq f args)
-        (update-wrap-read merge-reads merge-layer)))
+        (update-wrap-read with-merging merge-layer)))
 
   Layer
   (same? [this other]
@@ -271,10 +257,24 @@
   (keep-node? [this id]
     (= id (merge-head merge-layer id))))
 
-(defn merge-layer? [layer merge-layer]
-  (and (instance? MergeableLayer layer)
-       (same? (:merge-layer layer)
-              merge-layer)))
+(defn wrap-read-with-merging
+  "Returns a new version of read that merges nodes.
+  Assumes that the layer passed is a MergeableLayer."
+  [read]
+  (fn [{:keys [merge-layer layer]} keyseq not-found]
+    (let [nodes (->> (expand-keyseq-merges read merge-layer keyseq)
+                     (map #(read layer % sentinel))
+                     (remove #(identical? % sentinel)))]
+      (if (empty? nodes)
+        not-found
+        (merge-nodes merge-layer keyseq nodes)))))
 
-(defn mergeable-layer [layer merge-layer]
+(def ^{:arglists '([read merge-layer])} with-merging
+  "A conditional version of wrap-read-with-merging that only wraps reads
+  for layers of type MergeableLayer with a matching merge-layer."
+  (conditional-read-wrapper
+   (match-sublayer MergeableLayer :merge-layer)
+   wrap-read-with-merging))
+
+(defn make [layer merge-layer]
   (MergeableLayer. layer merge-layer))

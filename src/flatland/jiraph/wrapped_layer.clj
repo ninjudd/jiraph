@@ -20,6 +20,21 @@
             slave, layer)
           keyseq, not-found)))
 
+(defn conditional-read-wrapper [pred? wrapper]
+  (fn [read & args]
+    (fn [layer keyseq & [not-found]]
+      ((if (apply pred? layer args)
+         (wrapper read)
+         read)
+       layer keyseq not-found))))
+
+; (read-fixer (sublayer-pred sublayer-type get-sublayer sublayer) wrapper)
+
+(defn match-sublayer [sublayer-type get-sublayer]
+  (fn [layer sublayer]
+    (and (instance? sublayer-type layer)
+         (same? (get-sublayer layer) sublayer))))
+
 (defprotocol Wrapped
   "For layers which provide additional functionality by wrapping other layers."
   (unwrap [layer]
