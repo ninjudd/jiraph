@@ -246,10 +246,11 @@
 
   ;; TODO this will likely need a way to configure whether to wrap certain kinds of children
   (child [this name]
-    (when-let [child (if (= :merge name)
-                       merge-layer
-                       (MergeableLayer. (child layer name) merge-layer))]
-      (retro/at-revision child (retro/current-revision this))))
+    (if (= :merge name)
+      merge-layer
+      (when-let [child (child layer name)]
+        (retro/at-revision (MergeableLayer. child merge-layer)
+                           (retro/current-revision this)))))
 
   NodeFilter
   (keep-node? [this id]
