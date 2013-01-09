@@ -3,7 +3,7 @@
                              children child query-fn get-node update-in-node]]
         [flatland.jiraph.core :only [layer unsafe-txn]]
         [flatland.jiraph.utils :only [edges-keyseq]]
-        [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped update-wrap-read]]
+        [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped fix-read update-wrap-read sublayer-matcher]]
         [flatland.useful.map :only [dissoc-in* assoc-in* update-in*]]
         [flatland.useful.seq :only [merge-sorted indexed]]
         [flatland.useful.fn :only [fix given]]
@@ -209,8 +209,6 @@
      (let [merge-layer (fix merge-layer keyword? layer)]
        (unsafe-txn
          (unmerge-node merge-layer head-id tail-id)))))
-
-(def ^:private get-in-node* )
 
 (defwrapped MergeableLayer [layer merge-layer]
   Basic

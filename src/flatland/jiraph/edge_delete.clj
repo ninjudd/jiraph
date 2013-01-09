@@ -1,93 +1,81 @@
 (ns flatland.jiraph.edge-delete
   (:use [flatland.jiraph.core :only [layer]]
         [flatland.jiraph.layer :only [Basic Optimized Parent get-node]]
-        [flatland.jiraph.utils :only [meta-keyseq? edges-keyseq deleted-edge-keyseq deleted-node-keyseq]]
-        [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped]]
+        [flatland.jiraph.utils :only [edges-keyseq keyseq-edge-id]]
+        [flatland.jiraph.wrapped-layer :only [defwrapped]]
         [flatland.retro.core :only [at-revision current-revision]]
-        [flatland.useful.map :only [map-vals-with-keys update update-in*]]
-        [flatland.useful.fn :only [fix fixing]]
-        [flatland.useful.utils :only [adjoin]]
-        [flatland.useful.datatypes :only [assoc-record]])
+        [flatland.useful.map :only [remove-keys update-in*]]
+        [flatland.useful.fn :only [fix]]
+        [flatland.useful.utils :only [adjoin]])
   (:require [flatland.jiraph.graph :as graph :refer [unsafe-txn]]))
-
-(declare node-deleted?)
 
 (def ^{:dynamic true} *default-delete-layer* :id)
 
-(letfn [(exists?  [delete-layer id exists]  (and exists (not (node-deleted? delete-layer id))))
-        (deleted? [delete-layer id deleted] (or deleted (node-deleted? delete-layer id) deleted))]
-
-  (defn mark-edges-deleted [delete-layer keyseq node]
-    (if-let [ks (edges-keyseq keyseq)]
-      (update-in* node ks fixing map? map-vals-with-keys
-                  (if (meta-keyseq? keyseq)
-                    (partial exists? delete-layer)
-                    (fn [id edge]
-                      (update edge :deleted (partial deleted? delete-layer id)))))
-      (if-let [ks (deleted-edge-keyseq keyseq)]
-        (update-in* node ks
-                    (if (meta-keyseq? keyseq)
-                      (partial exists?  delete-layer (second keyseq))
-                      (partial deleted? delete-layer (first  keyseq))))
-        node)))
-
-  (defn mark-deleted [delete-layer keyseq node]
-    (->> (if-let [ks (deleted-node-keyseq keyseq)]
-           (update-in* node ks (partial deleted? delete-layer (first keyseq)))
-           node)
-         (mark-edges-deleted delete-layer keyseq))))
-
-(defn node-deleted?
-  "Returns true if the specified node has been deleted."
+(defn edges-deleted?
+  "Returns true if the specified node has been marked deleted."
   ([id]
-     (node-deleted? *default-delete-layer* id))
+     (edges-deleted? *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (:deleted (graph/get-node delete-layer id)))))
 
-(defn delete-node
-  "Functional version of delete-node!"
+(defn delete-edges
+  "Mark the specified node as deleted. This will have the effect of deleting all edges to and from
+  this node for all edge-delete wrappers using the same delete layer."
   ([id]
-     (delete-node *default-delete-layer* id))
+     (delete-edges *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (graph/update-node delete-layer id adjoin {:deleted true}))))
 
-(defn delete-node!
-  "Mark the specified node as deleted."
+(defn delete-edges!
+  "Mutable version of delete-edges!"
   ([id]
-     (delete-node! *default-delete-layer* id))
+     (delete-edges! *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (unsafe-txn
-         (delete-node delete-layer id)))))
+         (delete-edges delete-layer id)))))
 
-(defn undelete-node
-  "Functional version of undelete-node!"
+(defn undelete-edges
+  "Mark the specified node as not deleted. This will have the effect of undeleting all edges to and from
+  this node for all edge-delete wrappers using the same delete layer."
   ([id]
-     (delete-node *default-delete-layer* id))
+     (undelete-edges *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (graph/update-node delete-layer id adjoin {:deleted false}))))
 
-(defn undelete-node!
-  "Mark the specified node as not deleted."
+(defn undelete-edges!
+  "Mutable version of undelete-edges!"
   ([id]
-     (undelete-node! *default-delete-layer* id))
+     (undelete-edges! *default-delete-layer* id))
   ([delete-layer id]
      (let [delete-layer (fix delete-layer keyword? layer)]
        (unsafe-txn
-         (undelete-node delete-layer id)))))
+         (undelete-edges delete-layer id)))))
+
+(defn- mark-edges-deleted [delete-layer keyseq node]
+  (let [edge-deleted? (if (edges-deleted? delete-layer (first keyseq))
+                        (constantly true)
+                        (partial edges-deleted? delete-layer))]
+    (if-let [ks (edges-keyseq keyseq)]
+      (update-in* node ks remove-keys edge-deleted?)
+      (if-let [edge-id (keyseq-edge-id keyseq)]
+        (when-not (edge-deleted? edge-id)
+          node)
+        node))))
 
 (def ^{:private true} sentinel (Object.))
 
-(defwrapped DeletableLayer [layer delete-layer]
+(defwrapped EdgeDeletableLayer [layer delete-layer]
   Basic
   (get-node [this id not-found]
     (let [node (get-node layer id sentinel)]
       (if (= node sentinel)
         not-found
-        (mark-deleted delete-layer [id] node))))
+        (mark-edges-deleted delete-layer [id] node))))
+
   ;; TODO needs update-in-node to set a read-wrapper that knows about the delete
 
   Optimized
@@ -96,11 +84,7 @@
       (let [node (apply graph/query-in-node* layer keyseq sentinel f args)]
         (if (= node sentinel)
           not-found
-          (mark-deleted delete-layer keyseq node)))))
-
-  NodeFilter
-  (keep-node? [this id]
-    (not (node-deleted? delete-layer id)))
+          (mark-edges-deleted delete-layer keyseq node)))))
 
   Parent
   (children [this]
@@ -108,5 +92,5 @@
   (child [this name]
     ({:delete (at-revision delete-layer (current-revision this))} name)))
 
-(defn deletable-layer [layer delete-layer]
-  (DeletableLayer. layer delete-layer))
+(defn make [layer delete-layer]
+  (EdgeDeletableLayer. layer delete-layer))

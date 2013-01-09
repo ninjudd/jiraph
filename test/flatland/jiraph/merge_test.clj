@@ -9,7 +9,7 @@
         id-with-incoming (ruminate/incoming id-base id-incoming)
         people-with-incoming (ruminate/incoming people-base people-incoming)]
     (with-graph {:id     id-with-incoming
-                 :people (mergeable-layer people-with-incoming id-with-incoming)}
+                 :people (make people-with-incoming id-with-incoming)}
       (f))))
 
 (use-fixtures :each empty-graph)
