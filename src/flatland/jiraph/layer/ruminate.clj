@@ -93,12 +93,12 @@
 
 (defn incoming
   "Wrap outgoing-layer with a ruminating layer that stores incoming edges on incoming-layer. If
-  provided, incoming->outgoing is called on each outgoing edge's data to decide what data to write
+  provided, outgoing->incoming is called on each outgoing edge's data to decide what data to write
   on the corresponding incoming edge."
   ([outgoing-layer incoming-layer]
      (incoming outgoing-layer incoming-layer (fn [edge]
                                                (not-empty (select-keys edge [:exists])))))
-  ([outgoing-layer incoming-layer incoming->outgoing]
+  ([outgoing-layer incoming-layer outgoing->incoming]
      (make outgoing-layer [[:incoming incoming-layer]]
            (fn [outgoing [incoming] keyseq f args]
              (let [source-update (apply update-in-node outgoing keyseq f args)]
@@ -111,7 +111,7 @@
                    (->> (if (and (seq keyseq) (= f adjoin))
                           (let [[from-id & keys] keyseq]
                             (for [[to-id edge] (apply edges-map keys (assert-length 1 args))
-                                  :let [incoming-edge (incoming->outgoing edge)]
+                                  :let [incoming-edge (outgoing->incoming edge)]
                                   :when incoming-edge]
                               ((update-in-node incoming [to-id :edges from-id]
                                                adjoin incoming-edge)
@@ -125,7 +125,7 @@
                                                                        [id (read-new id)]))
                                 old-edges (read-old from-id)]
                             (concat (for [[to-id edge] new-edges
-                                          :let [incoming-edge (incoming->outgoing edge)]
+                                          :let [incoming-edge (outgoing->incoming edge)]
                                           :when incoming-edge]
                                       ((update-in-node incoming [to-id :edges from-id]
                                                        (constantly incoming-edge))
