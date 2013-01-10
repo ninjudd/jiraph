@@ -19,12 +19,12 @@
     (is (= A (get-node :people "A")))
     (is (= B (get-node :people "B")))
     (is (not (edges-deleted? "A")))
-    
+
     (at-revision 2 (delete-edges! "A"))
     (is (= (assoc A :edges {}) (get-node :people "A")))
     (is (= (dissoc-in* B [:edges "A"]) (get-node :people "B")))
     (is (edges-deleted? "A"))
-    
+
     (at-revision 3 (undelete-edges! "A"))
     (is (= A (get-node :people "A")))
     (is (= B (get-node :people "B")))

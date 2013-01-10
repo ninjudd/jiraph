@@ -12,15 +12,19 @@
         [flatland.ordered.set :only [ordered-set]]
         [flatland.ego.core :only [type-key]])
   (:require [flatland.jiraph.graph :as graph :refer [compose same?]]
+            [flatland.jiraph.layer.ruminate :as ruminate]
             [flatland.retro.core :as retro]))
 
 (declare merge-ids merge-head merge-position)
 
 (def ^:dynamic *default-merge-layer-name* :id)
 
+(defn- deleted? [edge]
+  (not (:exists edge)))
+
 (defn- merge-edges [merge-layer keyseq edges-seq]
   (letfn [(edge-sort-order [i id edge]
-            [(:deleted edge) i (merge-position merge-layer id)])]
+            [(deleted? edge) i (merge-position merge-layer id)])]
     (->> (for [[i edges] (indexed (reverse edges-seq))
                [id edge] edges]
            (let [head-id (or (merge-head merge-layer id) id)]
@@ -29,9 +33,8 @@
          (sort-by first #(compare %2 %1))
          (map second)
          (reduce (fn [edges [id edge]]
-                   (if (and (:deleted edge)
-                            (get edges id))
-                     edges
+                   (if (deleted? (get edges id))
+                     (assoc edges id edge)
                      (adjoin edges {id edge})))
                  {}))))
 
@@ -86,7 +89,7 @@
   ([read merge-layer id]
      (let [merge-layer (fix merge-layer keyword? layer)]
        (->> (read (child merge-layer :incoming) [id :edges])
-            (remove (comp :deleted val))
+            (remove (comp deleted? val))
             (sort-by (comp :position val))
             (keys)
             (into (ordered-set))))))
@@ -135,29 +138,27 @@
           head-merged (fix (:head head) #{head-id} nil)
           tail-merged (fix (merge-head read merge-layer tail-id) #{tail-id} nil)]
       (if (= head-id tail-merged)
-        (do (printf "warning: %s is already merged into %s\n" tail-id head-id)
-            [])
-        (do
-          (verify (not head-merged)
-                  (format "cannot merge %s into %s because %2$s is already merged into %s"
-                          tail-id head-id head-merged))
-          (verify (not tail-merged)
-                  (format "cannot merge %s into %s because %1$s is already merged into %s"
-                          tail-id head-id tail-merged))
-          (let [revision (retro/current-revision merge-layer)
-                tail-ids (cons tail-id (merged-into read merge-layer tail-id))]
-            (-> (apply compose
-                       (graph/update-node merge-layer head-id adjoin
-                                          {:head head-id
-                                           :merge-count (+ merge-count (count tail-ids))})
-                       (for [[pos id] (indexed tail-ids)]
-                         (graph/update-node merge-layer id adjoin
+        (do (printf "warning: %s is already merged into %s\n" tail-id head-id) [])
+        (do (verify (not head-merged)
+                    (format "cannot merge %s into %s because %2$s is already merged into %s"
+                            tail-id head-id head-merged))
+            (verify (not tail-merged)
+                    (format "cannot merge %s into %s because %1$s is already merged into %s"
+                            tail-id head-id tail-merged))
+            (let [revision (retro/current-revision merge-layer)
+                  tail-ids (cons tail-id (merged-into read merge-layer tail-id))]
+              (-> (apply compose
+                         (graph/update-node merge-layer head-id adjoin
                                             {:head head-id
-                                             :edges {head-id {:deleted false
-                                                              :revision revision
-                                                              :position (+ 1 pos merge-count)}}})))
-                (wrap-merging merge-layer)
-                (invoke read))))))))
+                                             :merge-count (+ merge-count (count tail-ids))})
+                         (for [[pos id] (indexed tail-ids)]
+                           (graph/update-node merge-layer id adjoin
+                                              {:head head-id
+                                               :edges {head-id {:exists true
+                                                                :revision revision
+                                                                :position (+ 1 pos merge-count)}}})))
+                  (wrap-merging merge-layer)
+                  (invoke read))))))))
 
 (defn merge-node!
   "Mutable version of merge-node."
@@ -174,9 +175,9 @@
   (graph/update-node merge-layer id adjoin
                      {:edges
                       (into {} (for [[to-id edge] (:edges node)
-                                     :when (and (not (:deleted edge))
+                                     :when (and (:exists edge)
                                                 (<= revision (:revision edge)))]
-                                 [to-id {:deleted true}]))}))
+                                 [to-id {:exists false}]))}))
 
 ;; TODO update merge-count on unmerge-node
 (defn unmerge-node
@@ -257,8 +258,7 @@
     (= id (merge-head merge-layer id))))
 
 (defn with-merging
-  "Returns a new version of read that merges nodes.
-  Assumes that the layer passed is a MergeableLayer."
+  "Returns a new version of read that merges nodes. Assumes that the layer passed is a MergeableLayer."
   [read]
   (fn [{:keys [merge-layer layer]} keyseq not-found]
     (let [nodes (->> (expand-keyseq-merges read merge-layer keyseq)
@@ -270,10 +270,17 @@
 
 (defn wrap-merging
   "Wrap an ioval so that reads to any layer which has the given merge layer have merging applied."
-  [ioval sublayer]
-  (update-wrap-read ioval fix-read
-                    (sublayer-matcher MergeableLayer :merge-layer sublayer)
-                    with-merging))
+  [ioval merge-layer]
+  (let [merge-layer? (sublayer-matcher MergeableLayer :merge-layer merge-layer)]
+    (update-wrap-read ioval fix-read merge-layer? with-merging)))
 
 (defn make [layer merge-layer]
   (MergeableLayer. layer merge-layer))
+
+(defn merge-layer
+  "Merge layers have to have an :incoming child layer and propagate :position to it. This is a
+  helper method that takes care of that for you."
+  [layer incoming-layer]
+  (ruminate/incoming layer incoming-layer
+                     (fn [edge]
+                       (not-empty (select-keys edge [:exists :position])))))
