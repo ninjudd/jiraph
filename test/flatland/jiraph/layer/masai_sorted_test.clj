@@ -1,8 +1,8 @@
-(ns flatland.jiraph.masai-sorted-test
+(ns flatland.jiraph.layer.masai-sorted-test
   (:use clojure.test flatland.jiraph.graph
         [flatland.useful.utils :only [adjoin]])
   (:require [gloss.core :as gloss]
-            [flatland.jiraph.masai-sorted-layer :as masai]
+            [flatland.jiraph.layer.masai-sorted :as masai]
             [flatland.jiraph.layer :as layer]
             [clojure.walk :as walk]))
 

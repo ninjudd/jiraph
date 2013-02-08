@@ -1,4 +1,4 @@
-(ns flatland.jiraph.stm-layer
+(ns flatland.jiraph.layer.stm
   (:refer-clojure :exclude [meta])
   (:use [flatland.jiraph.layer :as layer
          :only [Enumerate EnumerateIds Basic Layer Optimized ChangeLog]]

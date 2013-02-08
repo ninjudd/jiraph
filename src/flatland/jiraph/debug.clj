@@ -1,10 +1,10 @@
 (ns flatland.jiraph.debug
-  (:use flatland.jiraph.layer
-        [flatland.useful.datatypes :only [assoc-record]])
+  (:use flatland.jiraph.layer)
   (:require [flatland.retro.core :as retro :refer [Transactional txn-begin! txn-commit! txn-rollback!
                                           OrderedRevisions max-revision touch
                                           Revisioned current-revision at-revision]]
-            [flatland.jiraph.wrapped-layer :as wrapper]
+            [flatland.jiraph.wrapped-layer :refer [Wrapped]]
+            [flatland.useful.datatypes :refer [assoc-record]]
             [clojure.string :as s]))
 
 (defn- log [layer f-name display-name args thunk]
@@ -27,7 +27,7 @@
   Object
   (toString [this] (pr-str this))
 
-  wrapper/Wrapped
+  Wrapped
   (unwrap [this] layer)
 
   Enumerate

@@ -3,7 +3,7 @@
         [flatland.io.core :only [catbytes]]
         [flatland.retro.core :only [at-revision]]
         [flatland.useful.utils :only [adjoin]])
-  (:require [flatland.jiraph.masai-layer :as masai]
+  (:require [flatland.jiraph.layer.masai :as masai]
             [flatland.jiraph.layer :as layer]
             [flatland.jiraph.graph :as graph :refer [txn]]
             [flatland.jiraph.codex :as codex]

@@ -1,4 +1,4 @@
-(ns flatland.jiraph.layer.hidden
+(ns flatland.jiraph.hidden
   (:use flatland.jiraph.wrapped-layer)
   (:require [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.jiraph.layer :as layer]))

@@ -3,10 +3,9 @@
         [flatland.retro.core :as retro :only [at-revision]])
   (:require ;[flatland.jiraph.stm-layer :as stm]
             [flatland.jiraph.layer :as layer]
-            [flatland.jiraph.layer.ruminate :as ruminate]
-            [flatland.jiraph.layer.encoded-key :as encoded]
-            [flatland.jiraph.masai-layer :as masai]
-            [flatland.jiraph.masai-sorted-layer :as sorted]))
+            [flatland.jiraph.ruminate :as ruminate]
+            [flatland.jiraph.layer.masai :as masai]
+            [flatland.jiraph.layer.masai-sorted :as sorted]))
 
 (defmacro actions [layer & forms]
   (let [layer-sym (gensym 'layer)]
@@ -104,13 +103,13 @@
           (is (nil?   (get-node (rev 6) "profile-6"))))))))
 
 (deftest layer-impls
+  ;; add more layers as they're implemented
   (doseq [layer-fn [#(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]},
                                                                    {:pattern []}])
                                                       (sorted/wrap-default-formats)
                                                       (sorted/wrap-revisioned)))
-                    #(masai/make-temp)] ;; add more layers as they're implemented
-          wrap [identity #(encoded/single-type-layer % :profile)]]
-    (let [layer (ruminate/incoming (wrap (layer-fn)) (layer-fn))]
+                    #(masai/make-temp)]]
+    (let [layer (ruminate/incoming (layer-fn) (layer-fn))]
       (layer/open layer)
       (try
         (test-layer layer)

@@ -1,6 +1,6 @@
 (ns flatland.jiraph.delete-test
   (:use clojure.test flatland.jiraph.core flatland.jiraph.delete)
-  (:require [flatland.jiraph.masai-layer :as masai]))
+  (:require [flatland.jiraph.layer.masai :as masai]))
 
 (defn empty-graph [f]
   (let [id-layer (masai/make-temp)]

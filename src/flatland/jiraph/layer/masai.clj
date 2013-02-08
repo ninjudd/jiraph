@@ -1,8 +1,8 @@
-(ns flatland.jiraph.masai-layer
+(ns flatland.jiraph.layer.masai
   (:use [flatland.jiraph.layer :as layer
          :only [EnumerateIds Optimized Historical Basic Layer ChangeLog Schema]]
         [flatland.jiraph.codex :only [encode decode]]
-        [flatland.jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
+        [flatland.jiraph.layer.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                                     at-revision txn-begin! txn-commit! txn-rollback!]]
         [flatland.useful.utils :only [if-ns adjoin returning map-entry]]

@@ -4,9 +4,9 @@
         [flatland.jiraph.walk :only [defwalk path paths *parallel-follow* intersection]]
         [flatland.useful.utils :only [adjoin]]
         [flatland.jiraph.walk.predicates :only [at-limit]])
-  (:require [flatland.jiraph.stm-layer :as stm]
-            [flatland.jiraph.masai-layer :as masai]
-            [flatland.jiraph.masai-sorted-layer :as sorted])
+  (:require [flatland.jiraph.layer.stm :as stm]
+            [flatland.jiraph.layer.masai :as masai]
+            [flatland.jiraph.layer.masai-sorted :as sorted])
   (:import (flatland.jiraph Test$Node)))
 
 (defn test-graph []

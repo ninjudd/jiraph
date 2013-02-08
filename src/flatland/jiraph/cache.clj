@@ -1,4 +1,4 @@
-(ns flatland.jiraph.layer.cache
+(ns flatland.jiraph.cache
   (:use flatland.jiraph.wrapped-layer
         [flatland.useful.map :only [update-each]]
         [flatland.useful.utils :only [map-entry]])

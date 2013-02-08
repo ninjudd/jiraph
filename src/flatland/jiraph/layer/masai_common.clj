@@ -1,4 +1,4 @@
-(ns flatland.jiraph.masai-common
+(ns flatland.jiraph.layer.masai-common
   (:use [flatland.useful.utils :only [or-max]]
         [flatland.useful.state :only [put!]])
   (:require [flatland.masai.db :as db]

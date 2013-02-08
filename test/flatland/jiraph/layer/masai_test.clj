@@ -1,7 +1,7 @@
-(ns flatland.jiraph.masai-test
+(ns flatland.jiraph.layer.masai-test
   (:use clojure.test flatland.jiraph.graph)
   (:require [gloss.core :as gloss]
-            [flatland.jiraph.masai-layer :as masai]
+            [flatland.jiraph.layer.masai :as masai]
             [flatland.jiraph.layer :as layer]))
 
 (deftest id-based-formats

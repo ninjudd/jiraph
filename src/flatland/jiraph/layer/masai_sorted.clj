@@ -1,9 +1,9 @@
-(ns flatland.jiraph.masai-sorted-layer
+(ns flatland.jiraph.layer.masai-sorted
   (:use [flatland.jiraph.layer :as layer
          :only [Enumerate EnumerateIds Optimized Basic Layer ChangeLog Schema]]
         [flatland.jiraph.utils :only [keyseq->str meta-str?]]
         [flatland.jiraph.codex :as codex :only [encode decode]]
-        [flatland.jiraph.masai-common :only [implement-ordered revision-to-read revision-key?]]
+        [flatland.jiraph.layer.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                                     txn-begin! txn-commit! txn-rollback!]]
         [flatland.useful.utils :only [if-ns adjoin returning empty-coll? switch]]

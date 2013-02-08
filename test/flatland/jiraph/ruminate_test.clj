@@ -1,7 +1,7 @@
 (ns flatland.jiraph.ruminate-test
   (:use clojure.test flatland.jiraph.graph)
-  (:require [flatland.jiraph.masai-layer :as masai]
-            [flatland.jiraph.layer.ruminate :as ruminate]
+  (:require [flatland.jiraph.layer.masai :as masai]
+            [flatland.jiraph.ruminate :as ruminate]
             [flatland.retro.core :refer [at-revision]]
             [flatland.useful.utils :refer [adjoin]]))
 

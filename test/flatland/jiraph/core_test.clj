@@ -1,15 +1,15 @@
 (ns flatland.jiraph.core-test
   (:use clojure.test flatland.jiraph.core
         [flatland.useful.utils :only [adjoin]])
-  (:require [flatland.jiraph.stm-layer :as stm]
+  (:require [flatland.retro.core :as retro]
             [flatland.jiraph.graph :as graph]
-            [flatland.jiraph.layer :as layer]
-            [flatland.retro.core :as retro]
-            [flatland.jiraph.layer.ruminate :as ruminate]
+            [flatland.jiraph.layer :as layer]            
+            [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.wrapped-layer :as wrapped]
-            [flatland.jiraph.null-layer :as null]
-            [flatland.jiraph.masai-layer :as masai]
-            [flatland.jiraph.masai-sorted-layer :as sorted]))
+            [flatland.jiraph.layer.null :as null]
+            [flatland.jiraph.layer.stm :as stm]
+            [flatland.jiraph.layer.masai :as masai]
+            [flatland.jiraph.layer.masai-sorted :as sorted]))
 
 (let [masai  masai/make-temp
       sorted #(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]}

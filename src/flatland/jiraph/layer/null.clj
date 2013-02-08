@@ -1,4 +1,4 @@
-(ns flatland.jiraph.null-layer
+(ns flatland.jiraph.layer.null
   (:use flatland.jiraph.layer flatland.retro.core))
 
 ;; a layer object like /dev/null - it ignores all writes, and returns nil for all reads

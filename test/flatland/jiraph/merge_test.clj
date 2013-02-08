@@ -1,7 +1,7 @@
 (ns flatland.jiraph.merge-test
   (:use clojure.test flatland.jiraph.core flatland.jiraph.merge)
-  (:require [flatland.jiraph.masai-layer :as masai]
-            [flatland.jiraph.layer.ruminate :as ruminate]
+  (:require [flatland.jiraph.layer.masai :as masai]
+            [flatland.jiraph.ruminate :as ruminate]
             [flatland.useful.utils :refer [adjoin]]))
 
 (defn empty-graph [f]

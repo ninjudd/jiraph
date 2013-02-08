@@ -1,11 +1,11 @@
-(ns flatland.jiraph.stm-test
-  (:use clojure.test flatland.jiraph.graph flatland.jiraph.stm-layer
+(ns flatland.jiraph.layer.stm-test
+  (:use clojure.test flatland.jiraph.graph flatland.jiraph.layer.stm
         [flatland.retro.core :as retro :only [at-revision current-revision]]
         [flatland.useful.map :only [keyed]])
   (:require [flatland.jiraph.layer :as layer]))
 
 ;; STMLayer can't optimize anything, so add reference/testing implementations.
-(extend-type flatland.jiraph.stm_layer.STMLayer
+(extend-type flatland.jiraph.layer.stm.STMLayer
   flatland.jiraph.layer/Optimized
   (query-fn [this keyseq not-found f]
     (when (= 'specialized-count f)

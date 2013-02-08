@@ -1,4 +1,4 @@
-(ns flatland.jiraph.layer.ruminate
+(ns flatland.jiraph.ruminate
   (:use flatland.jiraph.wrapped-layer
         flatland.useful.debug
         [flatland.useful.utils :only [returning adjoin]]
