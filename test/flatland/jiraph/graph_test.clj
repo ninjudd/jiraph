@@ -17,7 +17,7 @@
   (testing (str (class (unwrap-all master)))
     (truncate! master)
     (let [rev (memoize (fn [revision] (at-revision master revision)))
-          mike-node {:age 21 :edges {"profile-2" {:rel :mom}}}
+          mike-node {:age 21 :edges {"profile-2" {:rel :mom :exists true}}}
           carla-node {:age 48}]
       (txn (actions (rev 0)
                     (assoc-node "profile-1" mike-node)
@@ -37,7 +37,8 @@
         (is (empty? (get-incoming (rev 1) "profile-1"))))
 
       (let [action-map (actions (rev 1)
-                                (assoc-node "profile-3" {:edges {"profile-2" {:rel :mom}}})
+                                (assoc-node "profile-3" {:edges {"profile-2" {:rel :mom
+                                                                              :exists true}}})
                                 (update-node "profile-3" assoc :age 18)
                                 (update-in-node ["profile-1" :age] inc))]
         (testing "Writes can't be seen while queueing"
@@ -55,7 +56,7 @@
                (get-node master "profile-1"))))
 
       (testing "Updates see previous writes"
-        (is (= {:age 18 :edges {"profile-2" {:rel :mom}}}
+        (is (= {:age 18 :edges {"profile-2" {:rel :mom :exists true}}}
                (get-node (rev 2) "profile-3"))))
       (testing "Incoming is revisioned"
         (is (= #{"profile-1"} (get-incoming (rev 1) "profile-2")))
@@ -96,7 +97,7 @@
         (is (nil? (retro/current-revision master))))
 
       (testing "dissoc at top level"
-        (let [node {:age 21 :edges {"profile-7" {:rel :mom}}}]
+        (let [node {:age 21 :edges {"profile-7" {:rel :mom :exists true}}}]
           (txn (assoc-node  (rev 4) "profile-6" node))
           (txn (dissoc-node (rev 5) "profile-6"))
           (is (= node (get-node (rev 5) "profile-6")))

@@ -3,7 +3,8 @@
         [flatland.useful.utils :only [update-peek]]
         [flatland.useful.map :only [merge-in update]]
         [flatland.useful.datatypes :only [assoc-record]]
-        [flatland.useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]]))
+        [flatland.useful.experimental.delegate :only [parse-deftype-specs emit-deftype-specs]])
+  (:use flatland.useful.debug))
 
 (defn update-wrap-read
   "Given an ioval and a read-wrapper, return a new ioval which has had the read wrapper applied to
@@ -23,6 +24,18 @@
     (read (if (same? source layer)
             destination, layer)
           keyseq, not-found)))
+
+(defn fix-read [read pred wrapper]
+  (fn [layer keyseq & [not-found]]
+    ((if (pred layer)
+       (wrapper read)
+       read)
+     layer keyseq not-found)))
+
+(defn sublayer-matcher [layer-class get-sublayer sublayer]
+  (fn [layer]
+    (and (= layer-class (class layer))
+         (same? sublayer (get-sublayer layer)))))
 
 (defprotocol Wrapped
   "For layers which provide additional functionality by wrapping other layers."

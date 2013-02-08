@@ -287,14 +287,16 @@
                     (for [{:keys [keyseq f args] :as action} actions]
                       (update-in action [:write]
                                  (fn [write]
-                                   (fn debug [layer]
-                                     (printf "Before %s: %s\n"
-                                             (list 'update-in-node
-                                                   (:path (:opts (:db (unwrap-all layer))))
-                                                   keyseq f args)
-                                             (get-in-node layer keyseq f args))
-                                     (write layer)
-                                     (printf "After: %s\n" (get-in-node layer keyseq f args))))))))]
+                                   (if (empty? keyseq)
+                                     write ;; top-level stuff is too hard to debug-print
+                                     (fn debug [layer]
+                                       (printf "Before %s: %s\n"
+                                               (list 'update-in-node
+                                                     (:path (:opts (:db (unwrap-all layer))))
+                                                     keyseq f args)
+                                               (get-in-node layer keyseq f args))
+                                       (write layer)
+                                       (printf "After: %s\n" (get-in-node layer keyseq f args)))))))))]
     (retro/with-actions nil
       (reduce (fn [retro-ioval {:keys [layer write]}]
                 (update-in retro-ioval [layer] (fnil conj []) write))
@@ -453,18 +455,19 @@
 
 (defn ^{:dynamic true} get-incoming-map
   "Return a map of incoming edges, where the value for each key indicates whether an edge is
-   incoming from that node."
+   incoming from that node. Excludes edges without :exists true."
   [layer id]
   (into (ordered-map)
         (for [[node-id edge] (get-incoming-edges layer id)]
-          [node-id (not (get edge :deleted false))])))
+          [node-id (:exists edge)])))
 
 (defn ^{:dynamic true} get-incoming
-  "Return the ids of all nodes that have incoming edges on this layer to this node (excludes edges marked :deleted)."
+  "Return the ids of all nodes that have incoming edges on this layer to this node.
+  Excludes edges without :exists true."
   [layer id]
   (into (ordered-set)
-        (for [[node-id {:keys [deleted]}] (get-incoming-edges layer id)
-              :when (not deleted)]
+        (for [[node-id {:keys [exists]}] (get-incoming-edges layer id)
+              :when exists]
           node-id)))
 
 (defn wrap-bindings

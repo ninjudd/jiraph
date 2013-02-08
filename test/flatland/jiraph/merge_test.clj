@@ -6,10 +6,10 @@
 
 (defn empty-graph [f]
   (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)
-        id-with-incoming (ruminate/incoming id-base id-incoming)
+        id-with-incoming (merge-layer id-base id-incoming)
         people-with-incoming (ruminate/incoming people-base people-incoming)]
     (with-graph {:id     id-with-incoming
-                 :people (mergeable-layer people-with-incoming id-with-incoming)}
+                 :people (make people-with-incoming id-with-incoming)}
       (f))))
 
 (use-fixtures :each empty-graph)
@@ -87,11 +87,12 @@
 (deftest readable-merge-update
   (let [val (promise)]
     (at-revision 1
-      (txn (flatland.jiraph.graph/compose (merge-node (layer :id) "A" "B")
-                                 (update-in-node :people ["A"] adjoin {:foo 1})
-                                 (fn [read]
-                                   (do (deliver val (read (layer :people) ["B" :foo]))
-                                       [])))))
+      (txn (flatland.jiraph.graph/compose
+            (merge-node (layer :id) "A" "B")
+            (update-in-node :people ["A"] adjoin {:foo 1})
+            (fn [read]
+              (do (deliver val (read (layer :people) ["B" :foo]))
+                  [])))))
     (is (= 1 @val))
     (is (= 1 (get-in-node :people ["A" :foo])))
     (is (= 1 (get-in-node :people ["B" :foo])))))
@@ -99,11 +100,12 @@
 (deftest readable-update-merge
   (let [val (promise)]
     (at-revision 1
-      (txn (flatland.jiraph.graph/compose (update-in-node :people ["A"] adjoin {:foo 1})
-                                 (merge-node (layer :id) "A" "B")
-                                 (fn [read]
-                                   (do (deliver val (read (layer :people) ["B" :foo]))
-                                       [])))))
+      (txn (flatland.jiraph.graph/compose
+            (update-in-node :people ["A"] adjoin {:foo 1})
+            (merge-node (layer :id) "A" "B")
+            (fn [read]
+              (do (deliver val (read (layer :people) ["B" :foo]))
+                  [])))))
     (is (= 1 @val))
     (is (= 1 (get-in-node :people ["A" :foo])))
     (is (= 1 (get-in-node :people ["B" :foo])))))
@@ -111,12 +113,13 @@
 (deftest readable-merge-update-unmerge
   (let [val (promise)]
     (at-revision 1
-      (txn (flatland.jiraph.graph/compose (merge-node (layer :id) "A" "B")
-                                 (update-in-node :people ["A"] adjoin {:foo 1})
-                                 (unmerge-node (layer :id) "A" "B")
-                                 (fn [read]
-                                   (do (deliver val (read (layer :people) ["B" :foo]))
-                                       [])))))
+      (txn (flatland.jiraph.graph/compose
+            (merge-node (layer :id) "A" "B")
+            (update-in-node :people ["A"] adjoin {:foo 1})
+            (unmerge-node (layer :id) "A" "B")
+            (fn [read]
+              (do (deliver val (read (layer :people) ["B" :foo]))
+                  [])))))
     (is (= nil @val))
     (is (= 1   (get-in-node :people ["A" :foo])))
     (is (= nil (get-in-node :people ["B" :foo])))))
@@ -145,55 +148,56 @@
     (is (= #{"B"} (merged-into (layer :id) "A")))))
 
 (deftest edge-merging
-  (at-revision 1 (assoc-in-node! :people ["A" :edges] {"B" {:foo 1} "C" {:foo 2}}))
+  (at-revision 1 (assoc-in-node! :people ["A" :edges] {"B" {:foo 1 :exists true}
+                                                       "C" {:foo 2 :exists true}}))
   (at-revision 2 (merge-node! "C" "B"))
 
-  (is (= {"C" {:foo 2}} (get-in-node :people ["A" :edges])))
+  (is (= {"C" {:foo 2 :exists true}} (get-in-node :people ["A" :edges])))
   (is (= #{"A"} (get-incoming :people "C")))
   (is (= #{"A"} (get-incoming :people "B")))
 
   (at-revision 3 (unmerge-node! "C" "B"))
   (at-revision 4 (merge-node! "B" "C"))
 
-  (is (= {"B" {:foo 1}} (get-in-node :people ["A" :edges])))
+  (is (= {"B" {:foo 1 :exists true}} (get-in-node :people ["A" :edges])))
   (is (= #{"A"} (get-incoming :people "C")))
 
-  (at-revision 5 (assoc-node! :people "D" {:a 1 :edges {"F" {:foo 3 :baz nil}}}))
-  (at-revision 6 (assoc-node! :people "E" {:a 2 :edges {"G" {:foo 1 :bar 2 :baz 3}}}))
+  (at-revision 5 (assoc-node! :people "D" {:a 1 :edges {"F" {:foo 3 :exists true :baz nil}}}))
+  (at-revision 6 (assoc-node! :people "E" {:a 2 :edges {"G" {:foo 1 :exists true :bar 2 :baz 3}}}))
   (at-revision 7 (merge-node! "D" "E"))
   (at-revision 8 (merge-node! "G" "F"))
 
-  (is (= {:a 1 :edges {"G" {:foo 3 :bar 2 :baz nil}}} (get-node :people "D")))
-  (is (= {:a 1 :edges {"G" {:foo 3 :bar 2 :baz nil}}} (get-node :people "E")))
+  (is (= {:a 1 :edges {"G" {:foo 3 :exists true :bar 2 :baz nil}}} (get-node :people "D")))
+  (is (= {:a 1 :edges {"G" {:foo 3 :exists true :bar 2 :baz nil}}} (get-node :people "E")))
   (is (= #{"D"} (get-incoming :people "G")))
   (is (= #{"D"} (get-incoming :people "F")))
 
   (at-revision 9  (unmerge-node! "D" "E"))
   (at-revision 10 (unmerge-node! "G" "F"))
 
-  (is (= {:a 1 :edges {"F" {:foo 3 :baz nil}}}      (get-node :people "D")))
-  (is (= {:a 2 :edges {"G" {:foo 1 :bar 2 :baz 3}}} (get-node :people "E")))
+  (is (= {:a 1 :edges {"F" {:foo 3 :exists true :baz nil}}}      (get-node :people "D")))
+  (is (= {:a 2 :edges {"G" {:foo 1 :exists true :bar 2 :baz 3}}} (get-node :people "E")))
   (is (= #{"E"} (get-incoming :people "G")))
   (is (= #{"D"} (get-incoming :people "F"))))
 
 (deftest deleted-edge-merging-opposite-direction
-  (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:deleted true}}}))
-  (at-revision 2 (assoc-node! :people "B" {:edges {"D" {:deleted false}}}))
+  (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:exists false}}}))
+  (at-revision 2 (assoc-node! :people "B" {:edges {"D" {:exists true}}}))
   (at-revision 3 (merge-node! "A" "B"))
   (at-revision 4 (merge-node! "D" "C"))
 
-  (is (= {:edges {"D" {:deleted false}}} (get-node :people "A")))
-  (is (= {:edges {"D" {:deleted false}}} (get-node :people "B")))
+  (is (= {:edges {"D" {:exists true}}} (get-node :people "A")))
+  (is (= {:edges {"D" {:exists true}}} (get-node :people "B")))
   (is (= {"A" true} (get-incoming-map :people "C")))
   (is (= {"A" true} (get-incoming-map :people "D"))))
 
 (deftest deleted-edge-merging-same-direction
-  (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:deleted true}}}))
-  (at-revision 2 (assoc-node! :people "B" {:edges {"D" {:deleted false}}}))
+  (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:exists false}}}))
+  (at-revision 2 (assoc-node! :people "B" {:edges {"D" {:exists true}}}))
   (at-revision 3 (merge-node! "A" "B"))
   (at-revision 4 (merge-node! "C" "D"))
 
-  (is (= {:edges {"C" {:deleted false}}} (get-node :people "A")))
-  (is (= {:edges {"C" {:deleted false}}} (get-node :people "B")))
+  (is (= {:edges {"C" {:exists true}}} (get-node :people "A")))
+  (is (= {:edges {"C" {:exists true}}} (get-node :people "B")))
   (is (= {"A" true} (get-incoming-map :people "C")))
   (is (= {"A" true} (get-incoming-map :people "D"))))

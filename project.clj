@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License - v 1.0"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]
-                 [org.clojure/core.match "0.2.0-alpha10"]
+                 [org.clojure/core.match "0.2.0-alpha11"]
                  [org.flatland/masai "0.8.0"]
                  [org.flatland/useful "0.9.0"]
                  [org.flatland/cereal "0.3.0"]

@@ -3,7 +3,7 @@
                              children child query-fn get-node update-in-node]]
         [flatland.jiraph.core :only [layer unsafe-txn]]
         [flatland.jiraph.utils :only [edges-keyseq]]
-        [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped update-wrap-read]]
+        [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped fix-read update-wrap-read sublayer-matcher]]
         [flatland.useful.map :only [dissoc-in* assoc-in* update-in*]]
         [flatland.useful.seq :only [merge-sorted indexed]]
         [flatland.useful.fn :only [fix given]]
@@ -12,15 +12,19 @@
         [flatland.ordered.set :only [ordered-set]]
         [flatland.ego.core :only [type-key]])
   (:require [flatland.jiraph.graph :as graph :refer [compose same?]]
+            [flatland.jiraph.ruminate :as ruminate]
             [flatland.retro.core :as retro]))
 
 (declare merge-ids merge-head merge-position)
 
-(def ^{:dynamic true} *default-merge-layer-name* :id)
+(def ^:dynamic *default-merge-layer-name* :id)
+
+(defn- deleted? [edge]
+  (not (:exists edge)))
 
 (defn- merge-edges [merge-layer keyseq edges-seq]
   (letfn [(edge-sort-order [i id edge]
-            [(:deleted edge) i (merge-position merge-layer id)])]
+            [(deleted? edge) i (merge-position merge-layer id)])]
     (->> (for [[i edges] (indexed (reverse edges-seq))
                [id edge] edges]
            (let [head-id (or (merge-head merge-layer id) id)]
@@ -29,9 +33,8 @@
          (sort-by first #(compare %2 %1))
          (map second)
          (reduce (fn [edges [id edge]]
-                   (if (and (:deleted edge)
-                            (get edges id))
-                     edges
+                   (if (deleted? (get edges id))
+                     (assoc edges id edge)
                      (adjoin edges {id edge})))
                  {}))))
 
@@ -86,7 +89,7 @@
   ([read merge-layer id]
      (let [merge-layer (fix merge-layer keyword? layer)]
        (->> (read (child merge-layer :incoming) [id :edges])
-            (remove (comp :deleted val))
+            (remove (comp deleted? val))
             (sort-by (comp :position val))
             (keys)
             (into (ordered-set))))))
@@ -118,26 +121,9 @@
            0
            (get-in node [:edges head :position]))))))
 
-(def ^{:private true} sentinel (Object.))
+(def ^:private sentinel (Object.))
 
-(defn read-merged
-  ([layer keyseq not-found]
-     (read-merged graph/get-in-node layer keyseq not-found))
-  ([read {:keys [merge-layer layer]} keyseq not-found]
-     (let [nodes (->> (expand-keyseq-merges read merge-layer keyseq)
-                      (map #(read layer % sentinel))
-                      (remove #(identical? % sentinel)))]
-       (if (empty? nodes)
-         not-found
-         (merge-nodes merge-layer keyseq nodes)))))
-
-(declare merge-layer?)
-
-(defn merge-reads [read merge-layer]
-  (fn [layer' keyseq & [not-found]]
-    (if (merge-layer? layer' merge-layer)
-      (read-merged read layer' keyseq not-found)
-      (read layer' keyseq not-found))))
+(declare with-merging wrap-merging)
 
 (defn merge-node
   "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
@@ -152,29 +138,27 @@
           head-merged (fix (:head head) #{head-id} nil)
           tail-merged (fix (merge-head read merge-layer tail-id) #{tail-id} nil)]
       (if (= head-id tail-merged)
-        (do (printf "warning: %s is already merged into %s\n" tail-id head-id)
-            [])
-        (do
-          (verify (not head-merged)
-                  (format "cannot merge %s into %s because %2$s is already merged into %s"
-                          tail-id head-id head-merged))
-          (verify (not tail-merged)
-                  (format "cannot merge %s into %s because %1$s is already merged into %s"
-                          tail-id head-id tail-merged))
-          (let [revision (retro/current-revision merge-layer)
-                tail-ids (cons tail-id (merged-into read merge-layer tail-id))]
-            (-> (apply compose
-                       (graph/update-node merge-layer head-id adjoin
-                                          {:head head-id
-                                           :merge-count (+ merge-count (count tail-ids))})
-                       (for [[pos id] (indexed tail-ids)]
-                         (graph/update-node merge-layer id adjoin
+        (do (printf "warning: %s is already merged into %s\n" tail-id head-id) [])
+        (do (verify (not head-merged)
+                    (format "cannot merge %s into %s because %2$s is already merged into %s"
+                            tail-id head-id head-merged))
+            (verify (not tail-merged)
+                    (format "cannot merge %s into %s because %1$s is already merged into %s"
+                            tail-id head-id tail-merged))
+            (let [revision (retro/current-revision merge-layer)
+                  tail-ids (cons tail-id (merged-into read merge-layer tail-id))]
+              (-> (apply compose
+                         (graph/update-node merge-layer head-id adjoin
                                             {:head head-id
-                                             :edges {head-id {:deleted false
-                                                              :revision revision
-                                                              :position (+ 1 pos merge-count)}}})))
-                (update-wrap-read merge-reads merge-layer)
-                (invoke read))))))))
+                                             :merge-count (+ merge-count (count tail-ids))})
+                         (for [[pos id] (indexed tail-ids)]
+                           (graph/update-node merge-layer id adjoin
+                                              {:head head-id
+                                               :edges {head-id {:exists true
+                                                                :revision revision
+                                                                :position (+ 1 pos merge-count)}}})))
+                  (wrap-merging merge-layer)
+                  (invoke read))))))))
 
 (defn merge-node!
   "Mutable version of merge-node."
@@ -191,9 +175,9 @@
   (graph/update-node merge-layer id adjoin
                      {:edges
                       (into {} (for [[to-id edge] (:edges node)
-                                     :when (and (not (:deleted edge))
+                                     :when (and (:exists edge)
                                                 (<= revision (:revision edge)))]
-                                 [to-id {:deleted true}]))}))
+                                 [to-id {:exists false}]))}))
 
 ;; TODO update merge-count on unmerge-node
 (defn unmerge-node
@@ -215,7 +199,7 @@
                  (for [id tail-ids]
                    (compose (delete-merges-after merge-layer merge-rev id (read merge-layer [id]))
                             (graph/update-node merge-layer id adjoin {:head tail-id}))))
-          (update-wrap-read merge-reads merge-layer)
+          (wrap-merging merge-layer)
           (invoke read)))))
 
 (defn unmerge-node!
@@ -230,11 +214,12 @@
 (defwrapped MergeableLayer [layer merge-layer]
   Basic
   (get-node [this id not-found]
-    (read-merged this [id] not-found))
+    ((with-merging graph/get-in-node)
+     this [id] not-found))
 
   (update-in-node [this keyseq f args]
     (-> (update-in-node layer keyseq f args)
-        (update-wrap-read merge-reads merge-layer)))
+        (wrap-merging merge-layer)))
 
   Layer
   (same? [this other]
@@ -262,19 +247,40 @@
 
   ;; TODO this will likely need a way to configure whether to wrap certain kinds of children
   (child [this name]
-    (when-let [child (if (= :merge name)
-                       merge-layer
-                       (MergeableLayer. (child layer name) merge-layer))]
-      (retro/at-revision child (retro/current-revision this))))
+    (if (= :merge name)
+      merge-layer
+      (when-let [child (child layer name)]
+        (retro/at-revision (MergeableLayer. child merge-layer)
+                           (retro/current-revision this)))))
 
   NodeFilter
   (keep-node? [this id]
     (= id (merge-head merge-layer id))))
 
-(defn merge-layer? [layer merge-layer]
-  (and (instance? MergeableLayer layer)
-       (same? (:merge-layer layer)
-              merge-layer)))
+(defn with-merging
+  "Returns a new version of read that merges nodes. Assumes that the layer passed is a MergeableLayer."
+  [read]
+  (fn [{:keys [merge-layer layer]} keyseq not-found]
+    (let [nodes (->> (expand-keyseq-merges read merge-layer keyseq)
+                     (map #(read layer % sentinel))
+                     (remove #(identical? % sentinel)))]
+      (if (empty? nodes)
+        not-found
+        (merge-nodes merge-layer keyseq nodes)))))
 
-(defn mergeable-layer [layer merge-layer]
+(defn wrap-merging
+  "Wrap an ioval so that reads to any layer which has the given merge layer have merging applied."
+  [ioval merge-layer]
+  (let [merge-layer? (sublayer-matcher MergeableLayer :merge-layer merge-layer)]
+    (update-wrap-read ioval fix-read merge-layer? with-merging)))
+
+(defn make [layer merge-layer]
   (MergeableLayer. layer merge-layer))
+
+(defn merge-layer
+  "Merge layers have to have an :incoming child layer and propagate :position to it. This is a
+  helper method that takes care of that for you."
+  [layer incoming-layer]
+  (ruminate/incoming layer incoming-layer
+                     (fn [edge]
+                       (not-empty (select-keys edge [:exists :position])))))

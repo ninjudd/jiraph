@@ -45,24 +45,11 @@
               (map name keys))))
 
 (defn edges-keyseq [keyseq]
-  (if (meta-keyseq? keyseq)
-    (match keyseq
-      [_]           [:incoming]
-      [_ :incoming] [])
-    (match keyseq
-      [_]        [:edges]
-      [_ :edges] [])))
+  (match keyseq
+    [_]        [:edges]
+    [_ :edges] []))
 
-(defn deleted-edge-keyseq [keyseq]
-  (if (meta-keyseq? keyseq)
-    (match keyseq
-      [_ :incoming] [])
-    (match keyseq
-      [_ :edges _]          [:deleted]
-      [_ :edges _ :deleted] [])))
-
-(defn deleted-node-keyseq [keyseq]
-  (when-not (meta-keyseq? keyseq)
-    (match keyseq
-      [_]          [:deleted]
-      [_ :deleted] [])))
+(defn keyseq-edge-id [keyseq]
+  (match keyseq
+    [_ :edges edge-id & _] edge-id
+    [_ & _] nil))
