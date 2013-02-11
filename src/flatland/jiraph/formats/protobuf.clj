@@ -111,9 +111,9 @@
                 :else (cons offset (lazy-recur more)))))))
 
   (defn revisions
-    "Get just the revision numbers from a sequence of revision offsets."
+    "Get just the revision numbers (from oldest to newest) from a sequence of revision offsets. "
     [offsets]
-    (map first offsets))
+    (map first (reverse offsets)))
 
   (defn slice
     "Given a sequence of buffer offsets, returns a [start length] pair describing
