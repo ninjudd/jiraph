@@ -96,8 +96,7 @@
   provided, outgoing->incoming is called on each outgoing edge's data to decide what data to write
   on the corresponding incoming edge."
   ([outgoing-layer incoming-layer]
-     (incoming outgoing-layer incoming-layer (fn [edge]
-                                               (not-empty (select-keys edge [:exists])))))
+     (incoming outgoing-layer incoming-layer #(select-keys % [:exists])))
   ([outgoing-layer incoming-layer outgoing->incoming]
      (make outgoing-layer [[:incoming incoming-layer]]
            (fn [outgoing [incoming] keyseq f args]
@@ -112,7 +111,7 @@
                           (let [[from-id & keys] keyseq]
                             (for [[to-id edge] (apply edges-map keys (assert-length 1 args))
                                   :let [incoming-edge (outgoing->incoming edge)]
-                                  :when incoming-edge]
+                                  :when (seq incoming-edge)]
                               ((update-in-node incoming [to-id :edges from-id]
                                                adjoin incoming-edge)
                                read')))

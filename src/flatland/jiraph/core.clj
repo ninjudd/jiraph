@@ -2,6 +2,7 @@
   (:use [flatland.useful.utils :only [returning memoize-deref map-entry adjoin invoke]]
         [flatland.useful.map :only [update into-map]]
         [flatland.useful.macro :only [macro-do]]
+        [flatland.useful.fn :only [fix !]]
         slingshot.slingshot)
   (:require [flatland.jiraph.graph :as graph]
             [flatland.jiraph.layer :as layer]
@@ -12,17 +13,22 @@
 (def ^{:dynamic true} *graph*    nil)
 (def ^{:dynamic true} *revision* nil)
 
-(defn get-layer [layer-name]
-  (when-let [layer (get *graph* layer-name)]
-    (retro/at-revision layer *revision*)))
+(defn get-layer [layer-spec]
+  (let [layer-spec (fix layer-spec (! vector?) vector)]
+    (when-let [layer (reduce (fn [layer child-name]
+                               (when layer
+                                 (graph/child layer child-name)))
+                             (get *graph* (first layer-spec))
+                             (rest layer-spec))]
+      (retro/at-revision layer *revision*))))
 
 (defn layer
   "Return the layer for a given name from *graph*."
-  [layer-name]
+  [layer-spec]
   (if *graph*
-    (or (get-layer layer-name)
+    (or (get-layer layer-spec)
         (throw (IOException.
-                (format "cannot find layer %s in open graph" layer-name))))
+                (format "cannot find layer %s in open graph" layer-spec))))
     (throw (IOException. (format "attempt to use a layer without an open graph")))))
 
 (defn layer-entries
@@ -35,6 +41,7 @@
   "Return the names of all layers in the current graph."
   ([]     (keys *graph*))
   ([type] (map key (layer-entries type))))
+
 (defn layers
   "Return all layers in the current graph."
   ([]     (map layer (layer-names)))
@@ -53,8 +60,8 @@
       (into {} (for [name names]
                  [name (layer name)])))))
 
-(defmacro dotxn [layer-name & forms]
-  `(graph/dotxn [(layer ~layer-name)]
+(defmacro dotxn [layer-spec & forms]
+  `(graph/dotxn [(layer ~layer-spec)]
      (do ~@forms)))
 
 (macro-do [fname]
@@ -64,9 +71,9 @@
   txn* txn
   unsafe-txn* unsafe-txn)
 
-(defmacro txn-> [layer-name & forms]
+(defmacro txn-> [layer-spec & forms]
   (let [name (gensym 'name)]
-    `(let [~name ~layer-name]
+    `(let [~name ~layer-spec]
        (do (graph/txn (graph/compose ~@(for [form forms]
                                          `(-> ~name ~form))))
            ~name))))
@@ -86,20 +93,20 @@
 (defn- fix-meta [meta]
   (update meta :arglists (partial list 'quote)))
 
-;; define forwarders to resolve keyword layer-names in *graph*
+;; define forwarders to resolve keyword layer-spec in *graph*
 (macro-do [name]
   (let [{:keys [varname meta]} (graph-impl name)]
     `(def ~(with-meta name (fix-meta meta))
-       (fn ~name [layer-name# & args#]
-         (apply ~varname (layer layer-name#) args#))))
+       (fn ~name [layer-spec# & args#]
+         (apply ~varname (layer layer-spec#) args#))))
   update-in-node  update-node  dissoc-node  assoc-node  assoc-in-node
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
   node-seq node-rseq node-subseq node-rsubseq node-id-seq node-id-rseq
   node-id-subseq node-id-rsubseq fields node-valid? verify-node
-  get-node find-node query-in-node get-in-node get-edges get-edge
+  get-node find-node query-in-node get-in-node get-edges get-edge-ids get-edge
   get-revisions node-history get-incoming get-incoming-map)
 
-;; these point directly at flatland.jiraph.graph functions, without layer-name resolution
+;; these point directly at flatland.jiraph.graph functions, without layer-spec resolution
 ;; or any indirection, because they can't meaningfully work with layer names but
 ;; we don't want to make the "simple" uses of flatland.jiraph.core have to mention
 ;; flatland.jiraph.graph at all
@@ -156,8 +163,8 @@
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"
-  [layer-name]
-  (contains? *graph* layer-name))
+  [layer-spec]
+  (not (nil? (get-layer layer-spec))))
 
 (defn schema-by-layer
   "Get the schema for a node-type across all layers, indexed by layer.

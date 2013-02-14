@@ -260,6 +260,11 @@
   [layer id]
   (get-in-node layer [id :edges] nil))
 
+(defn get-edge-ids
+  "Fetch the existing edge ids for a node on this layer."
+  [layer id]
+  (filter-keys-by-val :exists (get-edges layer id)))
+
 (defn get-in-edge
   "Fetch data from inside an edge."
   [layer [id to-id & keys] & [not-found]]
@@ -382,8 +387,8 @@
 (defn child
   "Find a layer which is related in some way to this one. For example, pass :incoming to get the
     layer (if any) on which incoming edges from this layer are stored."
-  [layer name]
-  (layer/child layer name))
+  [layer child-name]
+  (layer/child layer child-name))
 
 (defn schema
   [layer id-or-type]

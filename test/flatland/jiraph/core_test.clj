@@ -22,7 +22,7 @@
 
 (defmacro each-layer [layers & forms]
   `(with-each-layer ~(vec (if (empty? layers)
-                            (remove #{:masai.incoming :sorted.incoming} (keys *graph*))
+                            (keys *graph*)
                             layers))
      ~@forms))
 
@@ -118,18 +118,24 @@
       (truncate! layer-name)
       (testing "keeps track of incoming edges"
         (is (empty? (get-incoming layer-name "1")))
+        (is (empty? (get-edge-ids [layer-name :incoming] "1")))
         (assoc-node! layer-name "4" {:edges {"1" {:a "one" :exists true}}})
         (is (= #{"4"} (get-incoming layer-name "1")))
-        (is (= #{"1"} (set (keys (get-edges layer-name "4")))))
+        (is (= #{"4"} (set (get-edge-ids [layer-name :incoming] "1"))))
+        (is (= #{"1"} (set (get-edge-ids layer-name "4"))))
         (assoc-node! layer-name "5" {:edges {"1" {:b "two" :exists true}}})
         (is (= #{"4" "5"} (get-incoming layer-name "1")))
+        (is (= #{"4" "5"} (set (get-edge-ids [layer-name :incoming] "1"))))
         (update-node! layer-name "5" adjoin {:edges {"1" {:exists false}}})
         (is (= #{"4"} (get-incoming layer-name "1")))
+        (is (= #{"4"} (set (get-edge-ids [layer-name :incoming] "1"))))
         (update-node! layer-name "4" merge {:edges {"2" {:a "1" :exists true}
                                                     "3" {:b "2" :exists true}}})
         (is (= #{"4"} (get-incoming layer-name "2")))
         (is (= #{"4"} (get-incoming layer-name "3")))
-        (is (= #{"2" "3"} (set (keys (get-edges layer-name "4")))))))))
+        (is (= #{"4"}     (set (get-edge-ids [layer-name :incoming] "2"))))
+        (is (= #{"4"}     (set (get-edge-ids [layer-name :incoming] "3"))))
+        (is (= #{"2" "3"} (set (get-edge-ids layer-name "4"))))))))
 
 (deftest non-transactional-revisions
   (with-graph (make-graph)
