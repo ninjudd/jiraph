@@ -24,16 +24,7 @@
               (format "%s can't have edges to %s on layer %s"
                       from-id (pr-str broken-edges) (pr-str layer)))))))
 
-;; TODO can't figure out how to do this with core.match
-(defn writeable-area?* [layer keyseq]
-  (let [lookup (:type-lookup layer)]
-    (match keyseq
-      ([id :edges to-id & more] :seq) (when-let [edge-types (lookup id)]
-                                        (edge-types to-id))
-      ([id & more] :seq) (lookup id)
-      ([] :seq) true)))
-
-(defn writeable-area? [layer keyseq]
+(defn writable-area? [layer keyseq]
   (or (empty? keyseq)
       (let [lookup (:type-lookup layer)
             edge-checker (lookup (first keyseq))]
@@ -53,7 +44,7 @@
 (defwrapped TypedLayer [layer type-multimap type-lookup]
   Basic
   (get-node [this id not-found]
-    (if (writeable-area? this [id])
+    (if (writable-area? this [id])
       (get-node layer id not-found)
       not-found))
   (update-in-node [this keyseq f args]
@@ -79,7 +70,7 @@
 
   Optimized
   (query-fn [this keyseq not-found f]
-    (if (writeable-area? this keyseq)
+    (if (writable-area? this keyseq)
       (query-fn layer keyseq not-found f)
       (fn [& args]
         (apply f not-found args))))
