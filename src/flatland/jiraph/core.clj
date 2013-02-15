@@ -26,9 +26,7 @@
   "Return the layer for a given name from *graph*."
   [layer-spec]
   (if *graph*
-    (or (get-layer layer-spec)
-        (throw (IOException.
-                (format "cannot find layer %s in open graph" layer-spec))))
+    (get-layer layer-spec)
     (throw (IOException. (format "attempt to use a layer without an open graph")))))
 
 (defn layer-entries
@@ -98,13 +96,24 @@
   (let [{:keys [varname meta]} (graph-impl name)]
     `(def ~(with-meta name (fix-meta meta))
        (fn ~name [layer-spec# & args#]
-         (apply ~varname (layer layer-spec#) args#))))
+         (if-let [layer# (layer layer-spec#)]
+           (apply ~varname layer# args#)
+           (throw (IOException.
+                   (format "cannot find layer %s in open graph" layer-spec#)))))))
   update-in-node  update-node  dissoc-node  assoc-node  assoc-in-node
   update-in-node! update-node! dissoc-node! assoc-node! assoc-in-node!
-  node-seq node-rseq node-subseq node-rsubseq node-id-seq node-id-rseq
-  node-id-subseq node-id-rsubseq fields node-valid? verify-node
+  node-valid? verify-node)
+
+(macro-do [name]
+  (let [{:keys [varname meta]} (graph-impl name)]
+    `(def ~(with-meta name (fix-meta meta))
+       (fn ~name [layer-spec# & args#]
+         (when-let [layer# (layer layer-spec#)]
+           (apply ~varname layer# args#)))))
   get-node find-node query-in-node get-in-node get-edges get-edge-ids get-edge
-  get-revisions node-history get-incoming get-incoming-map)
+  get-revisions node-history get-incoming get-incoming-map
+  node-seq node-rseq node-subseq node-rsubseq node-id-seq node-id-rseq
+  node-id-subseq node-id-rsubseq fields)
 
 ;; these point directly at flatland.jiraph.graph functions, without layer-spec resolution
 ;; or any indirection, because they can't meaningfully work with layer names but
