@@ -24,4 +24,4 @@
                                   ["profile-2" :foo] adjoin {:bar "sdfa"})))
     (is (= "steve" (get-in-node base ["profile-1" :name])))
     (is (= {:bar "sdfa"} (get-in-node base ["profile-2" :foo])))
-    (is (= #{"profile-1" "profile-2"} (set (get-in-node changelog ["revision-1" :ids]))))))
+    (is (= #{"profile-1" "profile-2"} (set (keys (get-in-node changelog ["revision-1" :edges])))))))
