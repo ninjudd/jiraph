@@ -103,10 +103,7 @@
              (let [source-update (apply update-in-node outgoing keyseq f args)]
                (fn [read]
                  (let [source-actions (source-update read)
-                       read' (graph/advance-reader read source-actions)
-                       [read-old read-new] (for [read [read read']]
-                                             (fn [id]
-                                               (read outgoing [id :edges])))]
+                       read' (graph/advance-reader read source-actions)]
                    (->> (if (and (seq keyseq) (= f adjoin))
                           (let [[from-id & keys] keyseq]
                             (for [[to-id edge] (apply edges-map keys (assert-length 1 args))
@@ -121,8 +118,8 @@
                                                                      (fn [id] ;; top-level dissoc
                                                                        [id {}])
                                                                      (fn [id keys] ;; anything else
-                                                                       [id (read-new id)]))
-                                old-edges (read-old from-id)]
+                                                                       [id (read' outgoing [id :edges])]))
+                                old-edges (read outgoing [from-id :edges])]
                             (concat (for [[to-id edge] new-edges
                                           :let [incoming-edge (outgoing->incoming edge)]
                                           :when incoming-edge]
@@ -172,5 +169,6 @@
                                                                   (fn update* [id keys]
                                                                     id))])))))
 
+;; TODO
 ;; - eventually, switch from deleted to exists, but not yet
 ;; - until then, copy all data to incoming edges, whether using adjoin or not

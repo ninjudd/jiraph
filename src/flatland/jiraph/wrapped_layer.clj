@@ -9,12 +9,12 @@
 (defn update-wrap-read
   "Given an ioval and a read-wrapper, return a new ioval which has had the read wrapper applied to
    its wrap-read entry. Accepts extra &args like other update functions."
-  [ioval f & args]
+  [ioval wrapper & args]
   (fn [read]
     (let [actions (ioval read)]
       (update-peek actions update :wrap-read
                    #(fn [read]
-                      (apply f (% read) args))))))
+                      (apply wrapper (% read) args))))))
 
 (defn forward-reads
   "A read-wrapper (thus suitable for passing to update-wrap-read) which \"hijacks\" any reads to
@@ -25,14 +25,21 @@
             destination, layer)
           keyseq, not-found)))
 
-(defn fix-read [read pred wrapper]
+(defn fix-read
+  "A read-wrapper (thus suitable for passing to update-wrap-read) that only wraps reads when pred
+   returns true for the layer being read."
+  [read pred wrapper]
   (fn [layer keyseq & [not-found]]
     ((if (pred layer)
        (wrapper read)
        read)
      layer keyseq not-found)))
 
-(defn sublayer-matcher [layer-class get-sublayer sublayer]
+(defn sublayer-matcher
+  "Returns a layer predicate that...
+  TODO: discuss with Alan
+  - shouldn't this check :layer and :merge-layer?"
+  [layer-class get-sublayer sublayer]
   (fn [layer]
     (and (= layer-class (class layer))
          (same? sublayer (get-sublayer layer)))))
