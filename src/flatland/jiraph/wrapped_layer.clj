@@ -27,7 +27,7 @@
 
 (defn fix-read
   "A read-wrapper (thus suitable for passing to update-wrap-read) that only wraps reads when pred
-   returns true for the layer being read."
+   returns truthy for the layer being read."
   [read pred wrapper]
   (fn [layer keyseq & [not-found]]
     ((if (pred layer)

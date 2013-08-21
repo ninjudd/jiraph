@@ -2,9 +2,9 @@
   (:use flatland.jiraph.wrapped-layer
         flatland.useful.debug
         [flatland.useful.utils :only [returning adjoin]]
-        [flatland.useful.seq :only [assert-length]]
-        [flatland.useful.map :only [assoc-in*]])
+        [flatland.useful.seq :only [assert-length]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
+            [flatland.jiraph.utils :refer [edges-map]]
             [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.retro.core :as retro :refer [at-revision current-revision]]))
 
@@ -83,14 +83,6 @@
 (defn make [input outputs write]
   (RuminatingLayer. input (vec outputs) write))
 
-(defn edges-map
-  "Given a keyseq (not including a node-id, and possibly empty) and a value at that keyseq,
-   returns the the :edges attribute of the value, or {} if the keyseq does not match :edges."
-  [keys val]
-  (cond (empty? keys)           (get val :edges {})
-        (= :edges (first keys)) (assoc-in* {} (rest keys) val)
-        :else                   {}))
-
 (defn incoming
   "Wrap outgoing-layer with a ruminating layer that stores incoming edges on incoming-layer. If
   provided, outgoing->incoming is called on each outgoing edge's data to decide what data to write
@@ -113,12 +105,12 @@
                                                adjoin incoming-edge)
                                read')))
                           (let [[from-id new-edges] (dispatch-update keyseq f args
-                                                                     (fn [id val] ;; top-level assoc
-                                                                       [id (:edges val)])
-                                                                     (fn [id] ;; top-level dissoc
-                                                                       [id {}])
-                                                                     (fn [id keys] ;; anything else
-                                                                       [id (read' outgoing [id :edges])]))
+                                                      (fn [id val] ;; top-level assoc
+                                                        [id (:edges val)])
+                                                      (fn [id] ;; top-level dissoc
+                                                        [id {}])
+                                                      (fn [id keys] ;; anything else
+                                                        [id (read' outgoing [id :edges])]))
                                 old-edges (read outgoing [from-id :edges])]
                             (concat (for [[to-id edge] new-edges
                                           :let [incoming-edge (outgoing->incoming edge)]
@@ -131,8 +123,7 @@
                                       ((update-in-node incoming [to-id :edges]
                                                        dissoc from-id)
                                        read')))))
-                        (apply concat)
-                        (into source-actions)))))))))
+                        (reduce into source-actions)))))))))
 
 (defn top-level-indexer [source index field index-fieldname]
   (make source [[field index]]
@@ -168,7 +159,3 @@
                                                                     id)
                                                                   (fn update* [id keys]
                                                                     id))])))))
-
-;; TODO
-;; - eventually, switch from deleted to exists, but not yet
-;; - until then, copy all data to incoming edges, whether using adjoin or not

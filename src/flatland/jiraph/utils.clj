@@ -1,5 +1,6 @@
 (ns flatland.jiraph.utils
-  (:use [clojure.string :only [join]]
+  (:use [flatland.useful.map :only [assoc-in*]]
+        [clojure.string :only [join]]
         [clojure.core.match :only [match]]))
 
 (defn meta-id?
@@ -53,3 +54,11 @@
   (match keyseq
     [_ :edges edge-id & _] edge-id
     [_ & _] nil))
+
+(defn edges-map
+  "Given a keyseq (not including a node-id, and possibly empty) and a value at that keyseq,
+   returns the the :edges attribute of the value, or {} if the keyseq does not match :edges."
+  [keys val]
+  (cond (empty? keys)           (get val :edges {})
+        (= :edges (first keys)) (assoc-in* {} (rest keys) val)
+        :else                   {}))

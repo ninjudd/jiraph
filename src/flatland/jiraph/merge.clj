@@ -1,9 +1,10 @@
 (ns flatland.jiraph.merge
   (:use [flatland.jiraph.layer :only [Layer Basic Optimized Parent
-                             children child query-fn get-node update-in-node]]
+                                      children child query-fn get-node update-in-node]]
         [flatland.jiraph.core :only [layer unsafe-txn]]
-        [flatland.jiraph.utils :only [edges-keyseq]]
-        [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped fix-read update-wrap-read sublayer-matcher]]
+        [flatland.jiraph.utils :only [edges-keyseq edges-map]]
+        [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped sublayer-matcher
+                                              fix-read update-wrap-read]]
         [flatland.useful.map :only [dissoc-in* assoc-in* update-in*]]
         [flatland.useful.seq :only [merge-sorted indexed]]
         [flatland.useful.fn :only [fix given]]
@@ -218,7 +219,18 @@
      this [id] not-found))
 
   (update-in-node [this keyseq f args]
-    (-> (update-in-node layer keyseq f args)
+    (-> (fn [read]
+          ;; needs to wrap the ioval so that edge deletions propagate to edges from tail nodes
+          (let [actions ((update-in-node layer keyseq f args) read)
+                read' (graph/advance-reader read actions)]
+            (if (and (seq keyseq) (= f adjoin))
+              (let [[from-id & keys] keyseq]
+                (for [[to-id edge] (apply edges-map keys (assert-length 1 args))
+                      :when (false? (:exists edge))]
+
+                  ((update-in-node incoming [to-id :edges from-id]
+                                   adjoin incoming-edge)
+                   read'))))))
         (wrap-merging merge-layer)))
 
   Layer
@@ -228,18 +240,19 @@
 
   Optimized
   (query-fn [this keyseq not-found f]
-    (if-let [merge-data (merge-fn merge-layer keyseq f)]
-      (let [keyseqs (expand-keyseq-merges merge-layer keyseq)]
-        (fn [& args]
-          (let [nodes (->> keyseqs
-                           (map #(apply graph/query-in-node* layer % sentinel f args))
-                           (remove #(identical? % sentinel)))]
-            (if (empty? nodes)
-              not-found
-              (merge-data nodes)))))
-      (let [query (query-fn this keyseq not-found identity)]
-        (fn [& args]
-          (apply f (query) args)))))
+    (when (query-fn layer keyseq not-found f)
+      (if-let [merge-data (merge-fn merge-layer keyseq f)]
+        (let [keyseqs (expand-keyseq-merges merge-layer keyseq)]
+          (fn [& args]
+            (let [nodes (->> keyseqs
+                             (map #(apply graph/query-in-node* layer % sentinel f args))
+                             (remove #(identical? % sentinel)))]
+              (if (empty? nodes)
+                not-found
+                (merge-data nodes)))))
+        (let [query (query-fn this keyseq not-found identity)]
+          (fn [& args]
+            (apply f (query) args))))))
 
   Parent
   (children [this]
@@ -261,6 +274,8 @@
   "Returns a new version of read that merges nodes. Assumes that the layer passed is a MergeableLayer."
   [read]
   (fn [{:keys [merge-layer layer]} keyseq not-found]
+    ;; TODO skip O(N^2) work if (query-fn keyseq) is nil, by just reading the full from node(s)
+    ;; and then merging and filtering.
     (let [nodes (->> (expand-keyseq-merges read merge-layer keyseq)
                      (map #(read layer % sentinel))
                      (remove #(identical? % sentinel)))]
