@@ -18,6 +18,7 @@
   :profiles {:1.5 {:dependencies [[org.clojure/clojure "1.5.0"]]}
              :dev {:dependencies [[org.flatland/protobuf "0.7.2"]
                                   [org.flatland/tokyocabinet "1.24.6"]
+                                  [criterium "0.4.2"]
                                   [org.clojure/core.memoize "0.5.2"]]}}
   :aliases {"testall" ["with-profile" "dev,default:dev,1.5,default" "test"]}
   :repositories {"sonatype-snapshots" {:url "http://oss.sonatype.org/content/repositories/snapshots"
