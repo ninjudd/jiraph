@@ -2,12 +2,12 @@
   (:use [flatland.jiraph.layer :only [Layer Basic Optimized Parent
                              children child query-fn get-node update-in-node]]
         [flatland.jiraph.core :only [layer unsafe-txn]]
-        [flatland.jiraph.utils :only [edges-keyseq]]
+        [flatland.jiraph.utils :only [edges-keyseq keyseq-edge-id]]
         [flatland.jiraph.wrapped-layer :only [NodeFilter defwrapped fix-read update-wrap-read sublayer-matcher]]
-        [flatland.useful.map :only [dissoc-in* assoc-in* update-in*]]
+        [flatland.useful.map :only [dissoc-in* assoc-in* update-in* filter-vals update]]
         [flatland.useful.seq :only [merge-sorted indexed]]
         [flatland.useful.fn :only [fix given]]
-        [flatland.useful.utils :only [adjoin verify invoke]]
+        [flatland.useful.utils :only [adjoin verify invoke map-entry]]
         [flatland.useful.datatypes :only [assoc-record]]
         [flatland.ordered.set :only [ordered-set]]
         [flatland.ego.core :only [type-key]])
@@ -21,6 +21,84 @@
 
 (defn- deleted? [edge]
   (not (:exists edge)))
+
+(defn root-edge-finder [read layer]
+  (let [{:keys [merge-layer]} layer]
+    (memoize
+     (fn [id]
+       (when-let [merge-edges (read merge-layer [id :edges])]
+         (if (next merge-edges)
+           (throw (IllegalStateException.
+                   (format "Cannot read node %s, which appears to be a phantom, as it has edges to %s"
+                           (pr-str id) (pr-str (keys merge-edges)))))
+           (first merge-edges)))))))
+
+(defn leaf-finder [read layer]
+  (let [incoming (-> (:merge-layer layer)
+                     (child :incoming))]
+    (memoize
+     (fn [root-id]
+       (read incoming [root-id :edges])))))
+
+(defn head-finder [read layer]
+  (let [{:keys [merge-layer]} layer]
+    (memoize
+     (fn [root-id]
+       (read merge-layer [root-id :head])))))
+
+(defn M
+  "Merge two nodes, to the extent possible at write time. The result of this function will be
+  written to the merge-cache."
+  [head tail]
+  (letfn [(remove-deleted-edges [node]
+            (update node :edges filter-vals :exists))]
+    (apply adjoin (map remove-deleted-edges [tail head]))))
+
+(defn E
+  [edges find-root-edge root->head]
+  (->> edges
+       (map (fn [[to-id edge]]
+              (if-let [[root-id {:keys [position]}] (find-root-edge to-id)]
+                [position (root->head root-id) edge]
+                [0 to-id edge])))
+       (sort-by (comp - first))
+       (reduce (fn [edges [position head-id edge]]
+                 (update edges head-id adjoin edge))
+               {})))
+
+(defn R*
+  [read layer keyseq]
+  (adjoin (read (:cache-layer layer) keyseq)
+          (read (:layer layer) keyseq)))
+
+(defn R
+  [read layer find-root-edge [node-id & keys :as keyseq]]
+  (if-let [[root-id] (find-root-edge node-id)]
+    (R* read layer (cons root-id keys))
+    (read layer keyseq)))
+
+(defn read-one-edge [read layer from-id to-id]
+  (let [find-root-edge (root-edge-finder read layer)]
+    (if-let [[to-root] (find-root-edge to-id)]
+      (let [to-ids (keys (sort-by (comp - :position val)
+                                  ((leaf-finder read layer) to-root)))]
+        (reduce (fn [[id m] to-id]
+                  (let [edge (R read layer find-root-edge [from-id :edges to-id])]
+                    (when (:exists edge)
+                      (map-entry to-id
+                                 (adjoin m edge)))))
+                nil, to-ids))
+      (map-entry to-id
+                 (R read layer [from-id :edges to-id])))))
+
+(defn read-node [read layer [id & ks :as keyseq]]
+  (if-let [to-id (keyseq-edge-id keyseq)]
+    (when-let [edge (read-one-edge read layer id to-id)]
+      (get-in (val edge) (drop 2 ks))) ;; removing the :edges <id> part, because id might be a tail
+    (let [find-root-edge (root-edge-finder read layer)]
+      (-> (assoc-in* {} ks (R read layer find-root-edge keyseq))
+          (update :edges E find-root-edge (head-finder read layer))
+          (get-in ks)))))
 
 (defn- merge-edges [merge-layer keyseq edges-seq]
   (letfn [(edge-sort-order [i id edge]
