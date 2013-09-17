@@ -17,6 +17,8 @@
 
 (declare merge-ids merge-head merge-position)
 
+(def ^:private sentinel (Object.))
+
 (def ^:dynamic *default-merge-layer-name* :id)
 
 (defn- deleted? [edge]
@@ -67,15 +69,21 @@
                {})))
 
 (defn R*
-  [read layer keyseq]
-  (adjoin (read (:cache-layer layer) keyseq)
-          (read (:layer layer) keyseq)))
+  [read layer keyseq not-found]
+  (if-let [chunks (seq (remove #{sentinel}
+                               (map #(read (% layer) keyseq sentinel)
+                                    [:cache-layer :layer])))]
+    (reduce adjoin chunks)
+    not-found))
 
 (defn R
-  [read layer find-root-edge [node-id & keys :as keyseq]]
+  [read layer find-root-edge [node-id & keys :as keyseq] not-found]
   (if-let [[root-id] (find-root-edge node-id)]
-    (R* read layer (cons root-id keys))
-    (read layer keyseq)))
+    (R* read layer (cons root-id keys) not-found)
+    (read layer keyseq not-found)))
+
+(defn- edge-exists? [e]
+  (and (not= sentinel e) (:exists e)))
 
 (defn read-one-edge [read layer from-id to-id]
   (let [find-root-edge (root-edge-finder read layer)]
@@ -83,22 +91,30 @@
       (let [to-ids (keys (sort-by (comp - :position val)
                                   ((leaf-finder read layer) to-root)))]
         (reduce (fn [[id m] to-id]
-                  (let [edge (R read layer find-root-edge [from-id :edges to-id])]
-                    (when (:exists edge)
-                      (map-entry to-id
-                                 (adjoin m edge)))))
+                  (let [edge (R read layer find-root-edge [from-id :edges to-id] sentinel)]
+                    (when (edge-exists? edge)
+                      (map-entry to-id (adjoin m edge)))))
                 nil, to-ids))
-      (map-entry to-id
-                 (R read layer [from-id :edges to-id])))))
+      (let [edge (R read layer [from-id :edges to-id] sentinel)]
+        (when (edge-exists? edge)
+          (map-entry to-id edge))))))
 
-(defn read-node [read layer [id & ks :as keyseq]]
-  (if-let [to-id (keyseq-edge-id keyseq)]
-    (when-let [edge (read-one-edge read layer id to-id)]
-      (get-in (val edge) (drop 2 ks))) ;; removing the :edges <id> part, because id might be a tail
-    (let [find-root-edge (root-edge-finder read layer)]
-      (-> (assoc-in* {} ks (R read layer find-root-edge keyseq))
-          (update :edges E find-root-edge (head-finder read layer))
-          (get-in ks)))))
+(defn read-node
+  ([read layer keyseq]
+     (read-node read layer keyseq nil))
+  ([read layer [id & ks :as keyseq] not-found]
+     (if-let [to-id (keyseq-edge-id keyseq)]
+       (if-let [edge (read-one-edge read layer id to-id)]
+         (get-in (val edge) (drop 2 ks) ;; removing the :edges <id> part, because id might be a tail
+                 not-found)
+         not-found)
+       (let [find-root-edge (root-edge-finder read layer)
+             node (R read layer find-root-edge keyseq sentinel)]
+         (if (= node sentinel)
+           not-found
+           (-> (assoc-in* {} ks node)
+               (update :edges E find-root-edge (head-finder read layer))
+               (get-in ks)))))))
 
 (defn- merge-edges [merge-layer keyseq edges-seq]
   (letfn [(edge-sort-order [i id edge]
@@ -199,9 +215,7 @@
            0
            (get-in node [:edges head :position]))))))
 
-(def ^:private sentinel (Object.))
-
-(declare with-merging wrap-merging)
+(declare wrap-merging)
 
 (defn merge-node
   "Merge tail node into head node, merging all nodes that are currently merged into tail as well."
@@ -292,8 +306,7 @@
 (defwrapped MergeableLayer [layer merge-layer]
   Basic
   (get-node [this id not-found]
-    ((with-merging graph/get-in-node)
-     this [id] not-found))
+    (read-node graph/get-in-node this [id] not-found))
 
   (update-in-node [this keyseq f args]
     (-> (update-in-node layer keyseq f args)
@@ -335,22 +348,11 @@
   (keep-node? [this id]
     (= id (merge-head merge-layer id))))
 
-(defn with-merging
-  "Returns a new version of read that merges nodes. Assumes that the layer passed is a MergeableLayer."
-  [read]
-  (fn [{:keys [merge-layer layer]} keyseq not-found]
-    (let [nodes (->> (expand-keyseq-merges read merge-layer keyseq)
-                     (map #(read layer % sentinel))
-                     (remove #(identical? % sentinel)))]
-      (if (empty? nodes)
-        not-found
-        (merge-nodes merge-layer keyseq nodes)))))
-
 (defn wrap-merging
   "Wrap an ioval so that reads to any layer which has the given merge layer have merging applied."
   [ioval merge-layer]
   (let [merge-layer? (sublayer-matcher MergeableLayer :merge-layer merge-layer)]
-    (update-wrap-read ioval fix-read merge-layer? with-merging)))
+    (update-wrap-read ioval fix-read merge-layer? #(partial read-node %))))
 
 (defn make [layer merge-layer]
   (MergeableLayer. layer merge-layer))
