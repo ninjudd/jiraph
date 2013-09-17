@@ -29,7 +29,7 @@
        (when-let [merge-edges (read merge-layer [id :edges])]
          (if (next merge-edges)
            (throw (IllegalStateException.
-                   (format "Cannot read node %s, which appears to be a phantom, as it has edges to %s"
+                   (format "Can't read %s, which appears to be a phantom, as it has edges to %s"
                            (pr-str id) (pr-str (keys merge-edges)))))
            (first merge-edges)))))))
 
