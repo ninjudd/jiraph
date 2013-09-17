@@ -46,10 +46,10 @@
 
 (defn edges-keyseq [keyseq]
   (match keyseq
-    [_]        [:edges]
-    [_ :edges] []))
+    ([_] :seq) [:edges]
+    ([_ :edges] :seq) []))
 
 (defn keyseq-edge-id [keyseq]
   (match keyseq
-    [_ :edges edge-id & _] edge-id
-    [_ & _] nil))
+    ([_ :edges edge-id & _] :seq) edge-id
+    ([_ & _] :seq) nil))
