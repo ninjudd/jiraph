@@ -77,7 +77,8 @@
 
   Schema
   (schema [this node-id]
-    (when (type-lookup node-id)
+    (when (or (nil? node-id)
+              (type-lookup node-id))
       (schema layer node-id))))
 
 (defn typed-layer [base-layer types]
