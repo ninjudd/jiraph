@@ -172,6 +172,3 @@
                                                                 (fn update* [id keys]
                                                                   id))]
                                          adjoin {:exists true})))))
-
-;; - eventually, switch from deleted to exists, but not yet
-;; - until then, copy all data to incoming edges, whether using adjoin or not
