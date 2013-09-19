@@ -317,6 +317,25 @@
     (and (graph/same? layer (:layer other))
          (graph/same? merge-layer (:merge-layer other))))
 
+  ;; *** TODO ***
+  ;; we can't support seq-fn like seq/rseq (used for pagination) on a merged layer if we do the
+  ;; merging at read time. it would probably also break indexes on mergeable layers.
+  ;;
+  ;; so, we planned to do all merging at write time, by having a "merged" layer; this layer stores
+  ;; already-merged data for full nodes, including merging of their edges. however, this would
+  ;; require us to store only the most-recent data, meaning we couldn't give historical reads on
+  ;; layers with merging
+  ;;
+  ;; what if a merge layer were given *two* layers to store its caches on? one to store the value at
+  ;; the time of the merge, so that we can do fast historical reads, and one to store the most
+  ;; up-to-date version of the node, so that we can quickly update the to-ids of edges to nodes that
+  ;; become tails in a merge.
+  ;;
+  ;; what if a merge layer did its merging of edges only at read time? then you can't paginate, but
+  ;; you can do historical reads quickly. then you can wrap this in another layer that caches the
+  ;; current post-merge status of :edges, and use that for pagination. then historical reads
+  ;; delegate to the "lower" merge layer, but don't support pagination except of the most recent
+  ;; revision.
   Optimized
   (query-fn [this keyseq not-found f]
     (if-let [merge-data (merge-fn merge-layer keyseq f)]
