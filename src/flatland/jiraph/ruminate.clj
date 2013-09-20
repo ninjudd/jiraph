@@ -127,11 +127,11 @@
                                                adjoin incoming-edge)
                                read')))
                           (let [[from-id new-edges] (dispatch-update keyseq f args
-                                                                     (fn [id val] ;; top-level assoc
+                                                                     (fn assoc* [id val]
                                                                        [id (:edges val)])
-                                                                     (fn [id] ;; top-level dissoc
+                                                                     (fn dissoc* [id]
                                                                        [id {}])
-                                                                     (fn [id keys] ;; anything else
+                                                                     (fn update* [id keys]
                                                                        [id (read-new id)]))
                                 old-edges (read-old from-id)]
                             (concat (for [[to-id edge] new-edges

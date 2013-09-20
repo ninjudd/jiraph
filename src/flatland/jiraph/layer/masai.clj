@@ -1,12 +1,12 @@
 (ns flatland.jiraph.layer.masai
   (:use [flatland.jiraph.layer :as layer
-         :only [EnumerateIds Optimized Historical Basic Layer ChangeLog Schema]]
+         :only [EnumerateIds Optimized Historical Basic Layer ChangeLog Schema dispatch-update]]
         [flatland.jiraph.codex :only [encode decode]]
         [flatland.jiraph.layer.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                                     at-revision txn-begin! txn-commit! txn-rollback!]]
         [flatland.useful.utils :only [if-ns adjoin returning map-entry]]
-        [flatland.useful.map :only [update-in* into-map]]
+        [flatland.useful.map :only [update-in* assoc-in* into-map]]
         [flatland.useful.seq :only [find-with assert-length]]
         [flatland.useful.state :only [volatile put!]]
         [flatland.useful.fn :only [as-fn fix given]]
@@ -79,32 +79,28 @@
                not-found))
   (update-in-node [this keyseq f args]
     (let [ioval (graph/simple-ioval this keyseq f args)]
-      (ioval (if-let [[id & keys] (seq keyseq)]
-               (if (and append-only?
-                        (= f (:reduce-fn (write-format this id))))
-                 (let [[attrs] (assert-length 1 args)]
-                   (fn [layer]
-                     (->> (if keys
-                            (assoc-in {} keys attrs)
-                            attrs)
-                          (encode (:codec (write-format layer id)))
-                          (db/append! db (encode key-codec id)))))
-                 (fn [layer]
-                   (let [old (graph/get-node layer id)
-                         new (apply update-in* old keys f args)]
-                     (overwrite layer id new))))
-               (condp = f
-                 assoc (let [[id attrs] (assert-length 2 args)]
-                         (fn [layer]
-                           (overwrite layer id attrs)))
-                 dissoc (let [[id] (assert-length 1 args)]
-                          (if append-only?
-                            (fn [layer]
-                              (overwrite layer id {}))
-                            (fn [layer]
-                              (db/delete! db (encode key-codec id)))))
-                 (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
-                                                           f))))))))
+      (ioval (dispatch-update keyseq f args
+                              (fn assoc* [id value]
+                                (fn [layer]
+                                  (overwrite layer id value)))
+                              (fn dissoc* [id]
+                                (if append-only?
+                                  (fn [layer]
+                                    (overwrite layer id {}))
+                                  (fn [layer]
+                                    (db/delete! db (encode key-codec id)))))
+                              (fn update* [id keys]
+                                (if (and append-only?
+                                         (= f (:reduce-fn (write-format this id))))
+                                  (let [[attrs] (assert-length 1 args)]
+                                    (fn [layer]
+                                      (->> (assoc-in* {} keys attrs)
+                                           (encode (:codec (write-format layer id)))
+                                           (db/append! db (encode key-codec id)))))
+                                  (fn [layer]
+                                    (let [old (graph/get-node layer id)
+                                          new (apply update-in* old keys f args)]
+                                      (overwrite layer id new)))))))))
 
   Optimized
   (query-fn [this keyseq not-found f] nil)

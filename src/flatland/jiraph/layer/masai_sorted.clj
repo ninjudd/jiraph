@@ -1,6 +1,6 @@
 (ns flatland.jiraph.layer.masai-sorted
   (:use [flatland.jiraph.layer :as layer
-         :only [Enumerate EnumerateIds Optimized Basic Layer ChangeLog Schema]]
+         :only [Enumerate EnumerateIds Optimized Basic Layer ChangeLog Schema dispatch-update]]
         [flatland.jiraph.utils :only [keyseq->str meta-str?]]
         [flatland.jiraph.codex :as codex :only [encode decode]]
         [flatland.jiraph.layer.masai-common :only [implement-ordered revision-to-read revision-key?]]
@@ -394,19 +394,17 @@
     (get-in-node this [id] not-found))
   (update-in-node [this keyseq f args]
     (let [ioval (graph/simple-ioval this keyseq f args)]
-      (if (seq keyseq)
-        (let [layout (subnode-layout :read this keyseq)]
-          (assert (seq layout) "No codecs to write with")
-          (ioval (some #(% this layout keyseq f args)
-                       [specialized-writer optimized-writer simple-writer])))
-        (condp = f
-          dissoc (let [[node-id] (assert-length 1 args)]
-                   (ioval (fn [layer']
-                            (delete-range! layer' [node-id] :delete-exact? true))))
-          assoc (let [[node-id attrs] (assert-length 2 args)]
-                  (recur [node-id] (constantly attrs) nil))
-          (throw (IllegalArgumentException. (format "Can't apply function %s at top level"
-                                                    f)))))))
+      (dispatch-update keyseq f args
+                       (fn assoc* [id value]
+                         (layer/update-in-node this [id] (constantly value) nil))
+                       (fn dissoc* [id]
+                         (ioval (fn [layer']
+                                  (delete-range! layer' [id] :delete-exact? true))))
+                       (fn update* [id keys]
+                         (let [layout (subnode-layout :read this keyseq)]
+                           (assert (seq layout) "No codecs to write with")
+                           (ioval (some #(% this layout keyseq f args)
+                                        [specialized-writer optimized-writer simple-writer])))))))
 
   Optimized
   (query-fn [this keyseq not-found f]
