@@ -2,8 +2,8 @@
   (:use [clojure.string :only [split join]]
         [flatland.jiraph.utils :only [meta-id meta-id?]]
         [flatland.useful.map :only [filter-keys-by-val assoc-in* update-in* keyed]]
-        [flatland.useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
-        [flatland.useful.fn :only [fix]]
+        [flatland.useful.utils :only [memoize-deref adjoin into-set map-entry verify invoke]]
+        [flatland.useful.fn :only [fix fixing]]
         [flatland.ego.core :only [type-key]]
         [flatland.ordered.set :only [ordered-set]]
         [flatland.ordered.map :only [ordered-map]]
@@ -83,13 +83,18 @@
                        (rest read-path), (rest write-path)))))
 (defn read-wrapper
   "Create a simple wrap-read function representing a single update to the specified layer, at the
-  specified keyseq, to become (apply f current-value args)."
+  specified keyseq, to become (apply f current-value args). If args or write-keyseq is a function
+  rather than a seq, it will be called as (args layer'), so that it's possible to vary your updates
+  based on attributes (such as current revision) of the layer."
   [layer write-keyseq f args]
   (fn [read]
     (fn [layer' read-keyseq & [not-found]]
-      (let [[f [read-path update-path get-path :as paths]]
+      (let [[write-keyseq args] (map #(fixing % fn? invoke layer')
+                                     [write-keyseq args])
+            [f [read-path update-path get-path :as paths]]
             (when (same? layer layer')
               (dispatch-update write-keyseq f args
+                               (fixing args fn? invoke layer')
                                (fn assoc* [id value]
                                  [(constantly value)
                                   (path-parts read-keyseq [id])])
