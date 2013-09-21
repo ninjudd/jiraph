@@ -34,22 +34,24 @@
       not-found))
 
   (update-in-node [this keyseq f args]
-    (let [id (dispatch-update keyseq f args
-                              (fn assoc* [id _] id)
-                              (fn dissoc* [id] id)
-                              (fn update* [id keys] id))
+    (let [[id keyseq* f* args*] (dispatch-update keyseq f args
+                                                 (fn assoc* [id val] [id nil assoc [val]])
+                                                 (fn dissoc* [id] [id nil dissoc nil])
+                                                 (fn update* [id keys] [id keys f args]))
           revisioned-id (first (ids-for revisioning-layer id))]
-      ;; TODO everywhere that uses keyseq, f, or args needs to use info from dispatch-update
       (-> (if (reset? keyseq f)
+            ;; TODO everywhere that uses keyseq, f, or args needs to use info from dispatch-update
             (fn [read]
               (let [update-revisions (simple-ioval revisioning-layer
                                                    [id :ids] conj (fn [layer']
                                                                     [(current-revision layer')]))
-                    update-layer (simple-ioval layer [] assoc
-                                               (fn [layer']
-                                                 [(add-revision-to-id id (current-revision layer'))
-                                                  (apply update-in (read layer' [revisioned-id])
-                                                         (rest keyseq) f args)]))]
+                    update-layer (simple-ioval layer [] ({dissoc dissoc} f* assoc)
+                                               (fn write-args [layer']
+                                                 (cons
+                                                  (add-revision-to-id id (current-revision layer'))
+                                                  (when-not (= dissoc f*)
+                                                    (apply update-in* (read layer' [revisioned-id])
+                                                           keyseq* f* args*)))))]
                 (graph/compose update-revisions update-layer)))
-            (layer/update-in-node layer (cons revisioned-id (rest keyseq)) f args))
+            (layer/update-in-node layer (cons revisioned-id keyseq*) f* args*))
           (update-wrap-read (graph/read-wrapper this keyseq f args))))))
