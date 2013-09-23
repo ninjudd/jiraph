@@ -3,7 +3,7 @@
         flatland.useful.debug
         [flatland.useful.utils :only [returning adjoin verify]]
         [flatland.useful.seq :only [assert-length]]
-        [flatland.useful.map :only [assoc-in*]])
+        [flatland.useful.map :only [assoc-in* update-in*]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
             [flatland.jiraph.graph :as graph :refer [update-in-node get-in-node simple-ioval]]
             [flatland.retro.core :as retro :refer [at-revision current-revision]]))
@@ -35,7 +35,7 @@
 
   (update-in-node [this keyseq f args]
     (let [[id keyseq* f* args*] (dispatch-update keyseq f args
-                                                 (fn assoc* [id val] [id nil assoc [val]])
+                                                 (fn assoc* [id val] [id nil (constantly val) nil])
                                                  (fn dissoc* [id] [id nil dissoc nil])
                                                  (fn update* [id keys] [id keys f args]))
           revisioned-id (first (ids-for revisioning-layer id))]
