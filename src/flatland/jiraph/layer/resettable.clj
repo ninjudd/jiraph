@@ -46,7 +46,7 @@
                                                    [id :ids] conj (fn [layer']
                                                                     [(current-revision layer')]))
                     update-layer (simple-ioval layer [] ({dissoc dissoc} f* assoc)
-                                               (fn write-args [layer']
+                                               (fn args-to-update [layer']
                                                  (cons
                                                   (add-revision-to-id id (current-revision layer'))
                                                   (when-not (= dissoc f*)
