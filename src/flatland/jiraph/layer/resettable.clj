@@ -29,38 +29,36 @@
 (defwrapped ResettableLayer [layer revisioning-layer reset? add-revision-to-id]
   layer/Basic
   (get-node [this id not-found]
-    (if-let [ids (ids-for revisioning-layer id)]
-      (layer/get-node layer (current-id (current-revision this) ids) not-found)
-      not-found))
+    (let [current-counter (-> revisioning-layer
+                              (at-revision (current-revision this))
+                              (layer/get-node id not-found))]
+      (if (= not-found current-counter)
+        not-found
+        (-> layer
+            (at-revision (current-revision this))
+            (layer/get-node (add-revision-to-id id (:current current-counter))
+                            not-found)))))
 
   (update-in-node [this keyseq f args]
     (let [[id keyseq* f* args*] (dispatch-update keyseq f args
                                                  (fn assoc* [id val] [id nil (constantly val) nil])
                                                  (fn dissoc* [id] [id nil dissoc nil])
                                                  (fn update* [id keys] [id keys f args]))
-          revisioned-id (first (ids-for revisioning-layer id))]
+          revision (current-revision this)
+          old-counter (-> revisioning-layer
+                          (at-revision revision)
+                          (layer/get-node id 0))
+          old-id (add-revision-to-id id old-counter)]
       (-> (if (reset? keyseq f)
-            ;; TODO simple-ioval needs a write function; where on earth will we find one?
-            ;; it seems like simple-ioval was designed only for the "bottom-most" layers in the
-            ;; hierarchy, since only they know how to write, and we may need to figure out how to
-            ;; compose calls to update-in-node instead. the problem with that is, where do we find
-            ;; the current revision? only write functions are given layer', and we don't have one.
-            ;;
-            ;; thought: did we make this impossible on purpose? it seems like we're attempting to
-            ;; break the rule that you can't read what's on other layers in order to decide what to
-            ;; write to your own; that rule was put in place to ensure that maintaining consistency
-            ;; in case of a crash is possible, right?
-            (fn [read]
-              (let [update-revisions (simple-ioval revisioning-layer
-                                                   [id :ids] conj (fn [layer']
-                                                                    [(current-revision layer')]))
-                    update-layer (simple-ioval layer [] ({dissoc dissoc} f* assoc)
-                                               (fn args-to-update [layer']
-                                                 (cons
-                                                  (add-revision-to-id id (current-revision layer'))
-                                                  (when-not (= dissoc f*)
-                                                    (apply update-in* (read layer' [revisioned-id])
-                                                           keyseq* f* args*)))))]
-                ((graph/compose update-revisions update-layer) read)))
-            (layer/update-in-node layer (cons revisioned-id keyseq*) f* args*))
+            (graph/compose (layer/update-in-node (-> revisioning-layer (at-revision revision))
+                                                 [id :current] adjoin [(inc old-counter)])
+                           (fn [read]
+                             ((layer/update-in-node (-> layer (at-revision revision))
+                                                    [] ({dissoc dissoc} f* assoc)
+                                                    (cons (add-revision-to-id id (inc old-counter))
+                                                          (when-not (= dissoc f*)
+                                                            (apply update-in* (read layer [old-id])
+                                                                   keyseq* f* args*))))
+                              read)))
+            (layer/update-in-node layer (cons old-id keyseq*) f* args*))
           (update-wrap-read (graph/read-wrapper this keyseq f args))))))
