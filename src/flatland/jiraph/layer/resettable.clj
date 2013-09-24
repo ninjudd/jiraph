@@ -40,7 +40,16 @@
                                                  (fn update* [id keys] [id keys f args]))
           revisioned-id (first (ids-for revisioning-layer id))]
       (-> (if (reset? keyseq f)
-            ;; TODO everywhere that uses keyseq, f, or args needs to use info from dispatch-update
+            ;; TODO simple-ioval needs a write function; where on earth will we find one?
+            ;; it seems like simple-ioval was designed only for the "bottom-most" layers in the
+            ;; hierarchy, since only they know how to write, and we may need to figure out how to
+            ;; compose calls to update-in-node instead. the problem with that is, where do we find
+            ;; the current revision? only write functions are given layer', and we don't have one.
+            ;;
+            ;; thought: did we make this impossible on purpose? it seems like we're attempting to
+            ;; break the rule that you can't read what's on other layers in order to decide what to
+            ;; write to your own; that rule was put in place to ensure that maintaining consistency
+            ;; in case of a crash is possible, right?
             (fn [read]
               (let [update-revisions (simple-ioval revisioning-layer
                                                    [id :ids] conj (fn [layer']
