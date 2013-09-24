@@ -61,6 +61,6 @@
                                                   (when-not (= dissoc f*)
                                                     (apply update-in* (read layer' [revisioned-id])
                                                            keyseq* f* args*)))))]
-                (graph/compose update-revisions update-layer)))
+                ((graph/compose update-revisions update-layer) read)))
             (layer/update-in-node layer (cons revisioned-id keyseq*) f* args*))
           (update-wrap-read (graph/read-wrapper this keyseq f args))))))
