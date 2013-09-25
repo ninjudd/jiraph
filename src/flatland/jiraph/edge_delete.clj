@@ -68,7 +68,7 @@
 
 (def ^{:private true} sentinel (Object.))
 
-(defwrapped EdgeDeletableLayer [layer delete-layer]
+(defwrapped EdgeDeletableLayer [layer delete-layer] []
   Basic
   (get-node [this id not-found]
     (let [node (get-node layer id sentinel)]

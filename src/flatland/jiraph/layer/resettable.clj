@@ -18,7 +18,9 @@
 ;; note layer will need a key codec that supports revision markers somewhere.  can we wrap the key
 ;; codec of the underlying layer to prepend an int64? probably, but then we are tied to masai.
 ;; probably better to do that in the client, since it's responsible for picking key codecs.
-(defwrapped ResettableLayer [layer revisioning-layer reset? add-edition-to-id]
+(defwrapped ResettableLayer
+  [layer revisioning-layer reset? add-edition-to-id]
+  [layer [layer revisioning-layer]]
   layer/Basic
   (get-node [this id not-found]
     (let [revision (current-revision this)]

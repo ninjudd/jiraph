@@ -12,7 +12,9 @@
 ;;; their child layers (eg ruminate's outputs, and the id layer for merges). Add tests verifying
 ;;; that this works, as well.
 
-(defwrapped RuminatingLayer [read-layer input-layer output-layers ruminate]
+(defwrapped RuminatingLayer
+  [read-layer input-layer output-layers ruminate]
+  [read-layer (cons input-layer (map second output-layers))]
   layer/Basic
   (update-in-node [this keyseq f args]
     (-> (let [rev (current-revision this)
@@ -43,44 +45,10 @@
         (layer/child (at-revision read-layer (current-revision this)) child-name)))
 
   layer/Layer
-  (open [this]
-    (doseq [layer (cons input-layer (map second output-layers))]
-      (layer/open layer)))
-  (close [this]
-    (doseq [layer (cons input-layer (map second output-layers))]
-      (layer/close layer)))
-  (truncate! [this]
-    (doseq [layer (cons input-layer (map second output-layers))]
-      (layer/truncate! layer)))
-  (sync! [this]
-    (doseq [layer (cons input-layer (map second output-layers))]
-      (layer/sync! layer)))
-  (optimize! [this]
-    (doseq [layer (cons input-layer (map second output-layers))]
-      (layer/optimize! layer)))
   (same? [this other]
     (graph/same? input-layer (:input-layer other)))
 
-  retro/Transactional
-  (txn-begin! [this]
-    (returning (retro/txn-begin! input-layer)
-      (doseq [[name layer] output-layers]
-        (retro/txn-begin! layer))))
-  (txn-commit! [this]
-    (doseq [[name layer] (rseq output-layers)]
-      (retro/txn-commit! layer))
-    (retro/txn-commit! input-layer))
-  (txn-rollback! [this]
-    (doseq [[name layer] (rseq output-layers)]
-      (retro/txn-rollback! layer))
-    (retro/txn-rollback! input-layer))
-
   retro/OrderedRevisions
-  (max-revision [this]
-    (apply min (or (seq (remove #{Double/POSITIVE_INFINITY}
-                                (map retro/max-revision
-                                     (cons input-layer (map second output-layers)))))
-                   [0])))
   (touch [this]
     (doseq [layer (cons input-layer (map second output-layers))]
       (retro/touch (at-revision layer (current-revision this))))))

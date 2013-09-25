@@ -303,7 +303,7 @@
        (unsafe-txn
          (unmerge-node merge-layer head-id tail-id)))))
 
-(defwrapped MergeableLayer [layer merge-layer]
+(defwrapped MergeableLayer [layer merge-layer] []
   Basic
   (get-node [this id not-found]
     (read-node graph/get-in-node this [id] not-found))

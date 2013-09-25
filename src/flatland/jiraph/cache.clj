@@ -48,7 +48,7 @@
       (get-in `(~@keyseq :self ~[f args]))))
 
 ;; cache is an atom containing a map. the map has keys corresponding to node ids, and
-(defwrapped CachedLayer [layer cache cached-children]
+(defwrapped CachedLayer [layer cache cached-children] []
   layer/Basic
   (get-node [this id not-found]
     (let [cached (get-cached cache layer [id] identity nil)]

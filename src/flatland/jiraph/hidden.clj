@@ -3,7 +3,7 @@
   (:require [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.jiraph.layer :as layer]))
 
-(defwrapped HiddenLayer [layer]
+(defwrapped HiddenLayer [layer] []
   layer/Schema
   (schema [this id] nil))
 

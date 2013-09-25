@@ -46,7 +46,7 @@
   "Implement this to get automatic filtering of nodes and ids in node-[id-]seq."
   (keep-node? [layer id]))
 
-(defn default-specs [layer-sym]
+(defn default-specs [layer-sym all-layers]
   (let [layer-key (keyword layer-sym)]
     (parse-deftype-specs
      `(Object
@@ -82,13 +82,12 @@
        (query-fn  [this# keyseq# not-found# f#] (query-fn ~layer-sym keyseq# not-found# f#))
 
        Layer
-       (open       [this#] (open  ~layer-sym))
-       (close      [this#] (close ~layer-sym))
-       (sync!      [this#] (sync! ~layer-sym))
-       (optimize!  [this#] (optimize! ~layer-sym))
-       (truncate!  [this#] (truncate! ~layer-sym))
+       ~@(for [method `(open close truncate! sync! optimize!)]
+           `(~method [this#]
+                     (doseq [layer# ~all-layers]
+                       (~method layer#))))
        (same? [this# other#]
-         (flatland.jiraph.graph/same? ~layer-sym (~layer-key other#)))
+              (flatland.jiraph.graph/same? ~layer-sym (~layer-key other#)))
 
        Schema
        (schema      [this# id#]        (schema ~layer-sym id#))
@@ -99,20 +98,36 @@
        (get-changed-ids [this# rev#] (get-changed-ids ~layer-sym rev#))
 
        Transactional
-       (txn-begin!    [this#] (txn-begin! ~layer-sym))
-       (txn-commit!   [this#] (txn-commit! ~layer-sym))
-       (txn-rollback! [this#] (txn-rollback! ~layer-sym))
+       (txn-begin! [this#]
+                   (doseq [layer# ~all-layers]
+                     (txn-begin! layer#)))
+       (txn-commit! [this#]
+                    (doseq [layer# (reverse ~all-layers)]
+                      (txn-commit! layer#)))
+       (txn-rollback! [this#]
+                      (doseq [layer# (reverse ~all-layers)]
+                        (txn-rollback! layer#)))
 
        Revisioned
        (at-revision      [this# rev#] (assoc-record this# ~layer-key (at-revision ~layer-sym rev#)))
        (current-revision [this#]      (current-revision ~layer-sym))
 
        OrderedRevisions
-       (max-revision [this#] (max-revision ~layer-sym))
-       (touch        [this#] (touch ~layer-sym))))))
+       (max-revision [this#]
+                     (apply min (or (seq (remove #{Double/POSITIVE_INFINITY}
+                                                 (map max-revision ~all-layers)))
+                                    [0])))
+       (touch [this#]
+              (let [revision# (current-revision this#)]
+                (doseq [layer# ~all-layers]
+                  (touch (at-revision layer# revision#)))))))))
 
-(defmacro defwrapped [name [wrapped-layer-fieldname :as fields] & specs]
-  `(defrecord ~name [~@fields]
-     ~@(emit-deftype-specs
-         (merge-in (default-specs wrapped-layer-fieldname)
-                   (parse-deftype-specs specs)))))
+(defmacro defwrapped [name fields [wrapped-layer-fieldname all-layers] & specs]
+  (let [wrapped-layer-fieldname (or wrapped-layer-fieldname
+                                    (first fields))
+        all-layers (or all-layers
+                       [wrapped-layer-fieldname])]
+   `(defrecord ~name [~@fields]
+      ~@(emit-deftype-specs
+          (merge-in (default-specs wrapped-layer-fieldname all-layers)
+                    (parse-deftype-specs specs))))))

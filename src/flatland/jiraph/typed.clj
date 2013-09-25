@@ -41,7 +41,7 @@
 ;; function taking a node-id and returning (if the node's type is valid as a from-edge on this
 ;; layer) another function. That function takes in a node-id and returns truthy iff it is a valid
 ;; destination node for an edge from the first node-id.
-(defwrapped TypedLayer [layer type-multimap type-lookup]
+(defwrapped TypedLayer [layer type-multimap type-lookup] []
   Basic
   (get-node [this id not-found]
     (if (writable-area? this [id])
