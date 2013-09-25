@@ -23,21 +23,23 @@
   (ffirst (drop-while #(> (first %) revision)
                       id-list)))
 
+(def sentinel (Object.))
+
 ;; note layer will need a key codec that supports revision markers somewhere.  can we wrap the key
 ;; codec of the underlying layer to prepend an int64? probably, but then we are tied to masai.
 ;; probably better to do that in the client, since it's responsible for picking key codecs.
 (defwrapped ResettableLayer [layer revisioning-layer reset? add-revision-to-id]
   layer/Basic
   (get-node [this id not-found]
-    (let [current-counter (-> revisioning-layer
-                              (at-revision (current-revision this))
-                              (layer/get-node id not-found))]
-      (if (= not-found current-counter)
+    (let [revision (current-revision this)
+          current-edition (-> revisioning-layer
+                              (at-revision revision)
+                              (graph/get-in-node [id :current] sentinel))]
+      (if (= sentinel current-edition)
         not-found
         (-> layer
-            (at-revision (current-revision this))
-            (layer/get-node (add-revision-to-id id (:current current-counter))
-                            not-found)))))
+            (at-revision revision)
+            (layer/get-node (add-revision-to-id id current-edition) not-found)))))
 
   (update-in-node [this keyseq f args]
     (let [[id keyseq* f* args*] (dispatch-update keyseq f args
@@ -45,20 +47,32 @@
                                                  (fn dissoc* [id] [id nil dissoc nil])
                                                  (fn update* [id keys] [id keys f args]))
           revision (current-revision this)
-          old-counter (-> revisioning-layer
+          old-edition (-> revisioning-layer
                           (at-revision revision)
-                          (layer/get-node id 0))
-          old-id (add-revision-to-id id old-counter)]
+                          (graph/get-in-node [id :current] 0))
+          old-id (add-revision-to-id id old-edition)]
       (-> (if (reset? keyseq f)
             (graph/compose (layer/update-in-node (-> revisioning-layer (at-revision revision))
-                                                 [id :current] adjoin [(inc old-counter)])
+                                                 [id :current] adjoin [(inc old-edition)])
                            (fn [read]
                              ((layer/update-in-node (-> layer (at-revision revision))
                                                     [] ({dissoc dissoc} f* assoc)
-                                                    (cons (add-revision-to-id id (inc old-counter))
+                                                    (cons (add-revision-to-id id (inc old-edition))
                                                           (when-not (= dissoc f*)
                                                             (apply update-in* (read layer [old-id])
                                                                    keyseq* f* args*))))
                               read)))
             (layer/update-in-node layer (cons old-id keyseq*) f* args*))
-          (update-wrap-read (graph/read-wrapper this keyseq f args))))))
+          (update-wrap-read (graph/read-wrapper this keyseq f args)))))
+
+  layer/Optimized
+  (query-fn [this keyseq not-found f]
+    (when-let [[id & keys] (seq keyseq)]
+      (let [revision (current-revision this)
+            edition (-> revisioning-layer
+                        (at-revision revision)
+                        (graph/get-in-node [id :current] sentinel))]
+        (when (not= edition sentinel)
+          (layer/query-fn layer (cons (add-revision-to-id id edition)
+                                      keys)
+                          not-found f))))))
