@@ -3,9 +3,10 @@
         [flatland.useful.utils :only [adjoin]])
   (:require [flatland.retro.core :as retro]
             [flatland.jiraph.graph :as graph]
-            [flatland.jiraph.layer :as layer]            
+            [flatland.jiraph.layer :as layer]
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.wrapped-layer :as wrapped]
+            [flatland.jiraph.resettable :as resettable]
             [flatland.jiraph.layer.null :as null]
             [flatland.jiraph.layer.stm :as stm]
             [flatland.jiraph.layer.masai :as masai]
@@ -15,10 +16,15 @@
       sorted #(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]}
                                                             {:pattern []}])
                                                (sorted/wrap-default-formats)
-                                               (sorted/wrap-revisioned)))]
+                                               (sorted/wrap-revisioned)))
+      resettable (fn [layer]
+                   (resettable/make layer (masai) {}))]
   (defn make-graph []
     {:masai  (ruminate/incoming (masai) (masai))
-     :sorted (ruminate/incoming (sorted) (sorted))}))
+     :sorted (ruminate/incoming (sorted) (sorted))
+     :masai-resettable (ruminate/incoming (resettable (masai)) (resettable (masai)))
+     :sorted-resettable (ruminate/incoming (resettable (sorted)) (resettable (sorted)))
+     }))
 
 (defmacro each-layer [layers & forms]
   `(with-each-layer ~(vec (if (empty? layers)
