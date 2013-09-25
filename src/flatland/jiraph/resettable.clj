@@ -1,4 +1,4 @@
-(ns jiraph.layer.resettable
+(ns flatland.jiraph.resettable
   (:use flatland.jiraph.wrapped-layer
         flatland.useful.debug
         [flatland.useful.utils :only [returning adjoin verify]]
@@ -76,4 +76,4 @@
 
   Parent
   (children [this#] (children ~layer-sym))
-  (child    [this# kind#] (child ~layer-sym kind#))))))
+  (child    [this# kind#] (child ~layer-sym kind#)))
