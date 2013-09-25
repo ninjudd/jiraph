@@ -58,4 +58,22 @@
       (when-let [edition (get-edition revisioning-layer id (current-revision this))]
         (layer/query-fn layer (cons (add-edition-to-id id edition)
                                     keys)
-                        not-found f)))))
+                        not-found f))))
+
+  ChangeLog
+  (get-revisions   [this# id#]  (get-revisions ~layer-sym id#))
+  (get-changed-ids [this# rev#] (get-changed-ids ~layer-sym rev#))
+
+  Enumerate
+  (node-seq [this# opts#]
+    (filter #(keep-node? this# (first %))
+            (node-seq ~layer-sym opts#)))
+
+  EnumerateIds
+  (node-id-seq [this# opts#]
+    (filter #(keep-node? this# %)
+            (node-id-seq ~layer-sym opts#)))
+
+  Parent
+  (children [this#] (children ~layer-sym))
+  (child    [this# kind#] (child ~layer-sym kind#))))))
