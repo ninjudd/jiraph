@@ -183,3 +183,13 @@
                                                                 (fn update* [id keys]
                                                                   id))]
                                          adjoin {:exists true})))))
+
+(defn merged
+  "layers needs to be a list of pairs, [base-layer derived-layer]. The derived layer will be used
+   to store a merged view of tha data written to base-layer, as determined by merges written to the
+   merge-layer.
+
+   Will return a list, [new-merge-layer [layer1 layer2...]]; writes to these returned layers will
+   automatically update each other as needed to keep the merged views consistent. "
+  [merge-layer layers]
+  [(make merge-layer (fn [_] nil) merge-layer)])
