@@ -8,8 +8,6 @@
             [flatland.jiraph.graph :as graph :refer [update-in-node get-in-node simple-ioval]]
             [flatland.retro.core :as retro :refer [at-revision current-revision]]))
 
-(def sentinel (Object.))
-
 (defn- get-edition [revisioning-layer id revision]
   (-> revisioning-layer
       (at-revision revision)
