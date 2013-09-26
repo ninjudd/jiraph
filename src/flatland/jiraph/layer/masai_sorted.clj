@@ -6,7 +6,7 @@
         [flatland.jiraph.layer.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                                     txn-begin! txn-commit! txn-rollback!]]
-        [flatland.useful.utils :only [if-ns adjoin returning empty-coll? switch]]
+        [flatland.useful.utils :only [if-ns adjoin returning empty-coll? switch verify]]
         [flatland.useful.seq :only [prefix-of? single? remove-prefix glue take-until assert-length]]
         [flatland.useful.state :only [volatile put!]]
         [flatland.useful.map :only [update assoc-in* merge-in keyed into-map]]
@@ -314,7 +314,7 @@
   "Given a layer and a prefix, delete every key beneath that prefix."
   [layer prefix & {:keys [delete-exact?]}]
   (when (seq prefix)
-    (let [{:keys [key-codec append-only?]} layer
+    (let [{:keys [key-codec append?]} layer
           {:keys [start end]} (bounds key-codec prefix)
           reset-codec (codec-finder layer :write :reset)
           encode (memoize encode)]
@@ -322,29 +322,25 @@
         (when cur
           (when-let [^bytes key (cursor/key cur)]
             (when (neg? (compare-bytes key end))
-              (recur (if append-only?
-                       (let [keyseq (decode key-codec key)]
-                         (when (or delete-exact? (not= keyseq prefix))
-                           (cursor/append cur (->> {}
-                                                   (encode (reset-codec keyseq)))))
-                         (cursor/next cur))
-                       (cursor/delete cur))))))))))
+              (verify (not append?) "Can't delete/overwrite when in append mode")
+              (recur (cursor/delete cur)))))))))
 
 (defn- bounds-match? [{:keys [multi parent]} keyseq]
   (and multi
        (prefix-of? parent keyseq)))
 
 (defn- simple-writer [layer layout keyseq f args]
-  (let [{:keys [db append-only?]} layer
+  (let [{:keys [db append?]} layer
         [id & keys] keyseq
         key-codec (:key-codec layer)
-        write! (apply path-write-fn true
-                      (if append-only?
-                        [db/append! :reset]
-                        [db/put! :codec]))]
+        write! (path-write-fn true db/put! :codec)]
+    (when append?
+      (verify (= f ::assoc) "Can't overwrite in append mode"))
     (fn [layer']
       (let [old (get-in-node layer' keyseq nil)
-            new (apply f old args)]
+            new (if (= f ::assoc)
+                  (first args)
+                  (apply f old args))]
         (delete-range! layer' keyseq)
         (write! layer' keyseq new)))))
 
@@ -380,7 +376,7 @@
       (fn [layer']
         (write! layer' keyseq arg)))))
 
-(defrecord MasaiSortedLayer [db revision max-written-revision append-only? layout-fn key-codec]
+(defrecord MasaiSortedLayer [db revision max-written-revision append? layout-fn key-codec]
   Enumerate
   (node-seq [layer opts]
     (get-node-seq layer [] opts))
@@ -393,18 +389,21 @@
   (get-node [this id not-found]
     (get-in-node this [id] not-found))
   (update-in-node [this keyseq f args]
-    (let [ioval (graph/simple-ioval this keyseq f args)]
+    (let [ioval (graph/simple-ioval this keyseq f args)
+          update (fn [keyseq f args]
+                   (let [layout (subnode-layout :read this keyseq)]
+                     (assert (seq layout) "No codecs to write with")
+                     (ioval (some #(% this layout keyseq f args)
+                                  [specialized-writer optimized-writer simple-writer]))))]
       (dispatch-update keyseq f args
                        (fn assoc* [id value]
-                         (layer/update-in-node this [id] (constantly value) nil))
+                         (update [id] ::assoc [value]))
                        (fn dissoc* [id]
+                         (verify (not append?) "Can't dissoc in append mode")
                          (ioval (fn [layer']
                                   (delete-range! layer' [id] :delete-exact? true))))
                        (fn update* [id keys]
-                         (let [layout (subnode-layout :read this keyseq)]
-                           (assert (seq layout) "No codecs to write with")
-                           (ioval (some #(% this layout keyseq f args)
-                                        [specialized-writer optimized-writer simple-writer])))))))
+                         (update keyseq f args)))))
 
   Optimized
   (query-fn [this keyseq not-found f]
@@ -519,13 +518,13 @@
                          (constantly [{:pattern [:edges :*] :format default-format}
                                       {:pattern []          :format default-format}]))]
   (defn make [db & opts]
-    (let [{:keys [assoc-mode layout-fn key-codec]
-           :or {assoc-mode :append
+    (let [{:keys [write-mode layout-fn key-codec]
+           :or {write-mode :overwrite
                 layout-fn default-layout-fn
                 key-codec default-key-codec}}
           (into-map opts)]
       (MasaiSortedLayer. (make-db db) nil (volatile nil)
-                         (case assoc-mode
+                         (case write-mode
                            :append true
                            :overwrite false)
                          (as-fn layout-fn)

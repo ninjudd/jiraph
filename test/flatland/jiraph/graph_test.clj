@@ -105,16 +105,19 @@
           (is (nil?   (get-node (rev 6) "profile-6"))))))))
 
 (deftest layer-impls
-  ;; add more layers as they're implemented
-  (doseq [layer-fn [#(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]},
-                                                                   {:pattern []}])
-                                                      (sorted/wrap-default-formats)
-                                                      (sorted/wrap-revisioned)))
-                    #(resettable/make (masai/make-temp :write-mode :append)
-                                      (masai/make-temp :write-mode :append)
-                                      {})]]
-    (let [layer (ruminate/incoming (layer-fn) (layer-fn))]
-      (layer/open layer)
-      (try
-        (test-layer layer)
-        (finally (layer/close layer))))))
+  (let [masai #(masai/make-temp :write-mode :append)
+        sorted #(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]},
+                                                              {:pattern []}])
+                                                 (sorted/wrap-default-formats)
+                                                 (sorted/wrap-revisioned))
+                                  :write-mode :append)
+        resettable (fn [layer]
+                     (resettable/make layer (masai) {}))]
+    ;; add more layers as they're implemented
+    (doseq [layer-fn [#(resettable (sorted))
+                      #(resettable (masai))]]
+      (let [layer (ruminate/incoming (layer-fn) (layer-fn))]
+        (layer/open layer)
+        (try
+          (test-layer layer)
+          (finally (layer/close layer)))))))

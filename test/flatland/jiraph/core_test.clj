@@ -14,18 +14,19 @@
             [flatland.jiraph.layer.masai-sorted :as sorted]))
 
 (let [masai masai/make-temp
-      masai+ #(masai :write-mode :append)
       sorted (partial sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]}
                                                                    {:pattern []}])
                                                       (sorted/wrap-default-formats)
                                                       (sorted/wrap-revisioned)))
+      masai+ #(masai :write-mode :append)
+      sorted+ #(sorted :write-mode :append)
       resettable (fn [layer]
                    (resettable/make layer (masai+) {}))]
   (defn make-graph []
     {:masai  (ruminate/incoming (masai) (masai))
      :sorted (ruminate/incoming (sorted) (sorted))
      :masai-revisioned (ruminate/incoming (resettable (masai+)) (resettable (masai+)))
-     :sorted-revisioned (ruminate/incoming (resettable (sorted)) (resettable (sorted)))}))
+     :sorted-revisioned (ruminate/incoming (resettable (sorted+)) (resettable (sorted+)))}))
 
 (defmacro each-layer [layers & forms]
   `(with-each-layer ~(vec (if (empty? layers)
