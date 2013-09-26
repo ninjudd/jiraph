@@ -514,6 +514,14 @@
                                            (update-in keys [1] keyword)
                                            keys)))))
 
+(defn reset?
+  "Calling this function results in undefined behavior: we think it's the right implementation but
+  haven't tried using it."
+  [layer keyseq f]
+  (let [layout (subnode-layout :read layer keyseq)]
+    (not-any? #(% layer layout keyseq f ['arg])
+              [specialized-writer optimized-writer])))
+
 (let [default-layout-fn (wrap-revisioned
                          (constantly [{:pattern [:edges :*] :format default-format}
                                       {:pattern []          :format default-format}]))]
