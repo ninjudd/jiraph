@@ -86,5 +86,5 @@
   [layer revisioning-layer {:keys [reset? add-edition-to-id] :as opts
                             :or {reset? (fn [keyseq f] (not= f adjoin))
                                  add-edition-to-id (fn [id edition]
-                                                     (str edition ":" id))}}]
+                                                     (str edition "@" id))}}]
   (ResettableLayer. layer revisioning-layer reset? add-edition-to-id))
