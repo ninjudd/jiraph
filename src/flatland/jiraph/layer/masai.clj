@@ -5,7 +5,7 @@
         [flatland.jiraph.layer.masai-common :only [implement-ordered revision-to-read revision-key?]]
         [flatland.retro.core :only [Transactional Revisioned OrderedRevisions
                                     at-revision txn-begin! txn-commit! txn-rollback!]]
-        [flatland.useful.utils :only [if-ns adjoin returning map-entry]]
+        [flatland.useful.utils :only [if-ns adjoin returning map-entry verify]]
         [flatland.useful.map :only [update-in* assoc-in* into-map]]
         [flatland.useful.seq :only [find-with assert-length]]
         [flatland.useful.state :only [volatile put!]]
@@ -25,8 +25,6 @@
 ;;; - a Schematic :schema
 ;;; - the :reduce-fn the codec uses when combining revisions
 ;;;   - this is used to optimize updates
-;;; - a :reset codec, for writing data that should not use the reduce-fn
-;;;   - this codec need not be capable of reading - it will only be written with
 ;;; - a :revisions codec, for reading the list of revisions at which a node has been touched.
 
 (defn write-format [layer node-id]
@@ -34,6 +32,8 @@
 
 (defn read-format [layer node-id]
   ((:format-fn layer) {:id node-id :revision (revision-to-read layer)}))
+
+(declare reset?)
 
 (defn- revision-seq [format revision bytes]
   (when-let [rev-codec (:revisions format)]
@@ -44,16 +44,10 @@
          (take-while #(<= % revision) revs))))))
 
 (defn- overwrite [layer id attrs]
-  (let [{:keys [db append-only?]} layer]
-    (letfn [(bytes [data]
-              (let [format (write-format layer id)
-                    codec (or (and append-only?
-                                   (:reset format))
-                              (:codec format))]
-                (encode codec data)))]
-      ((if append-only?
-         db/append!, db/put!)
-       db (encode (:key-codec layer) id) (bytes attrs)))))
+  (let [{:keys [db append?]} layer
+        format (write-format layer id)]
+    (db/put! db (encode (:key-codec layer) id)
+             (encode (:codec format) attrs))))
 
 (defn- get-node* [layer id key not-found]
   (or (when-let [data (db/fetch (:db layer) key)]
@@ -61,7 +55,7 @@
                            data)))
       not-found))
 
-(defrecord MasaiLayer [db revision max-written-revision append-only? format-fn key-codec]
+(defrecord MasaiLayer [db revision max-written-revision append? format-fn key-codec]
   Object
   (toString [this]
     (pr-str this))
@@ -82,21 +76,24 @@
       (ioval (dispatch-update keyseq f args
                               (fn assoc* [id value]
                                 (fn [layer]
+                                  (when append?
+                                    (verify (not (db/exists? db (->> id
+                                                                     (encode (:key-codec layer)))))
+                                            "Can't overwrite in append mode"))
                                   (overwrite layer id value)))
                               (fn dissoc* [id]
-                                (if append-only?
-                                  (fn [layer]
-                                    (overwrite layer id {}))
-                                  (fn [layer]
-                                    (db/delete! db (encode key-codec id)))))
+                                (verify (not append?) "Can't dissoc nodes in append mode")
+                                (fn [layer]
+                                  (db/delete! db (encode key-codec id))))
                               (fn update* [id keys]
-                                (if (and append-only?
-                                         (= f (:reduce-fn (write-format this id))))
-                                  (let [[attrs] (assert-length 1 args)]
-                                    (fn [layer]
-                                      (->> (assoc-in* {} keys attrs)
-                                           (encode (:codec (write-format layer id)))
-                                           (db/append! db (encode key-codec id)))))
+                                (if append?
+                                  (do (verify (not (reset? this keyseq f))
+                                              "Can't overwrite in append mode")
+                                      (let [[attrs] (assert-length 1 args)]
+                                        (fn [layer]
+                                          (->> (assoc-in* {} keys attrs)
+                                               (encode (:codec (write-format layer id)))
+                                               (db/append! db (encode key-codec id))))))
                                   (fn [layer]
                                     (let [old (graph/get-node layer id)
                                           new (apply update-in* old keys f args)]
@@ -176,6 +173,10 @@
        (defn- make-db [db]
          db))
 
+(defn reset? [layer keyseq f]
+  (not (when-first [id keyseq]
+         (= f (:reduce-fn (write-format layer id))))))
+
 (let [default-format-fn (cereal/revisioned-clojure-format adjoin)
       default-key-codec {:read #(String. ^bytes %)
                          :write #(.getBytes ^String %)}]
@@ -183,13 +184,13 @@
   ;; - accept as arg: a map containing {revision and node-id}
   ;; - return: a format (see doc for formats at the top of this file)
   (defn make [db & opts]
-    (let [{:keys [assoc-mode format-fn key-codec]
-           :or {assoc-mode :append
+    (let [{:keys [write-mode format-fn key-codec]
+           :or {write-mode :overwrite
                 format-fn default-format-fn
                 key-codec default-key-codec}}
           (into-map opts)]
       (MasaiLayer. (make-db db) nil (volatile nil)
-                   (case assoc-mode
+                   (case write-mode
                      :append true
                      :overwrite false)
                    (as-fn format-fn)

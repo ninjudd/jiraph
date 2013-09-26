@@ -94,8 +94,7 @@
                           (throw (Exception. (format "Attempted to adjoin %s onto %s."
                                                      (pr-str b) (pr-str a)))))]
     (with-redefs [adjoin throwing-adjoin]
-      (let [master (masai/make (tokyo/make {:path "/tmp/jiraph-cached-walk-test-foo" :create true})
-                               :format-fn (proto/protobuf-format Test$Foo))
+      (let [master (masai/make-temp :write-mode :append :format-fn (proto/protobuf-format Test$Foo))
             rev (vec (for [r (range 5)]
                        (at-revision master r)))
             before {:bar 5, :tag-set #{"a" "b"}}

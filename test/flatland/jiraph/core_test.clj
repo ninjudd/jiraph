@@ -13,25 +13,19 @@
             [flatland.jiraph.layer.masai :as masai]
             [flatland.jiraph.layer.masai-sorted :as sorted]))
 
-(let [masai  masai/make-temp
-      sorted #(sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]}
-                                                            {:pattern []}])
-                                               (sorted/wrap-default-formats)
-                                               (sorted/wrap-revisioned)))
+(let [masai masai/make-temp
+      masai+ #(masai :write-mode :append)
+      sorted (partial sorted/make-temp :layout-fn (-> (constantly [{:pattern [:edges :*]}
+                                                                   {:pattern []}])
+                                                      (sorted/wrap-default-formats)
+                                                      (sorted/wrap-revisioned)))
       resettable (fn [layer]
-                   (resettable/make layer (masai) {}))]
+                   (resettable/make layer (masai+) {}))]
   (defn make-graph []
     {:masai  (ruminate/incoming (masai) (masai))
      :sorted (ruminate/incoming (sorted) (sorted))
-     :masai-resettable (ruminate/incoming (resettable (masai)) (resettable (masai)))
-     :sorted-resettable (ruminate/incoming (resettable (sorted)) (resettable (sorted)))
-     ;; :masai-resettable (ruminate/incoming (resettable (-> (masai)
-     ;;                                                      (debug/make masai update-in-node get-node query-fn)))
-     ;;                                      (resettable (masai)))
-     ;; :sorted-resettable (ruminate/incoming (resettable (-> (sorted)
-     ;;                                                       (debug/make sorted update-in-node get-node query-fn)))
-     ;;                                       (resettable (sorted)))
-     }))
+     :masai-revisioned (ruminate/incoming (resettable (masai+)) (resettable (masai+)))
+     :sorted-revisioned (ruminate/incoming (resettable (sorted)) (resettable (sorted)))}))
 
 (defmacro each-layer [layers & forms]
   `(with-each-layer ~(vec (if (empty? layers)
@@ -151,7 +145,7 @@
         (is (= #{"2" "3"} (set (get-edge-ids layer-name "4"))))))))
 
 (deftest non-transactional-revisions
-  (with-graph (make-graph)
+  (with-graph (select-keys (make-graph) [:masai-revisioned :sorted-revisioned])
     (test-each-layer []
       (truncate! layer-name)
 
@@ -193,7 +187,7 @@
 
 ;; have to explicitly use :exists for incoming to work
 (deftest revisioned-incoming
-  (with-graph (make-graph)
+  (with-graph (select-keys (make-graph) [:masai-revisioned :sorted-revisioned])
     (test-each-layer []
       (truncate! layer-name)
       (at-revision 100 (is (empty? (get-incoming layer-name "11"))))
@@ -317,7 +311,7 @@
 
     (is (= 100 (current-revision) (uncommitted-revision)))
 
-    (each-layer [:masai :sorted]
+    (each-layer [:masai :sorted :masai-revisioned :sorted-revisioned]
       (is (= {:blah 1} (get-node layer-name "foo"))))
 
     (is (= 432 (get-node :null "foo" 432)))))

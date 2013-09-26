@@ -4,6 +4,7 @@
   (:require ;[flatland.jiraph.stm-layer :as stm]
             [flatland.jiraph.layer :as layer]
             [flatland.jiraph.ruminate :as ruminate]
+            [flatland.jiraph.resettable :as resettable]
             [flatland.jiraph.layer.masai :as masai]
             [flatland.jiraph.layer.masai-sorted :as sorted]))
 
@@ -109,7 +110,9 @@
                                                                    {:pattern []}])
                                                       (sorted/wrap-default-formats)
                                                       (sorted/wrap-revisioned)))
-                    #(masai/make-temp)]]
+                    #(resettable/make (masai/make-temp :write-mode :append)
+                                      (masai/make-temp :write-mode :append)
+                                      {})]]
     (let [layer (ruminate/incoming (layer-fn) (layer-fn))]
       (layer/open layer)
       (try
