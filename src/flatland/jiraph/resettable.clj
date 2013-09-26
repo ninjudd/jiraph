@@ -84,13 +84,14 @@
       (map-entry id (layer/get-node this id nil))))
 
 
-  #_(
-
-
-
-     Parent
-     (children [this#] (children ~layer-sym))
-     (child    [this# kind#] (child ~layer-sym kind#))))
+  layer/Parent
+  (children [this]
+    [:base :revisioning])
+  (child [this kind]
+    (case kind
+      :base layer
+      :revisioning revisioning-layer
+      nil)))
 
 (defn make
   [layer revisioning-layer {:keys [reset? add-edition-to-id] :as opts
