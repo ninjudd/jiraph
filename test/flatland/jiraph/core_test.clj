@@ -3,6 +3,7 @@
         [flatland.useful.utils :only [adjoin]])
   (:require [flatland.retro.core :as retro]
             [flatland.jiraph.graph :as graph]
+            [flatland.jiraph.debug :as debug]
             [flatland.jiraph.layer :as layer]
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.wrapped-layer :as wrapped]
@@ -24,6 +25,12 @@
      :sorted (ruminate/incoming (sorted) (sorted))
      :masai-resettable (ruminate/incoming (resettable (masai)) (resettable (masai)))
      :sorted-resettable (ruminate/incoming (resettable (sorted)) (resettable (sorted)))
+     ;; :masai-resettable (ruminate/incoming (resettable (-> (masai)
+     ;;                                                      (debug/make masai update-in-node get-node query-fn)))
+     ;;                                      (resettable (masai)))
+     ;; :sorted-resettable (ruminate/incoming (resettable (-> (sorted)
+     ;;                                                       (debug/make sorted update-in-node get-node query-fn)))
+     ;;                                       (resettable (sorted)))
      }))
 
 (defmacro each-layer [layers & forms]
