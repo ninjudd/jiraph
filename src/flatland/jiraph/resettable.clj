@@ -65,11 +65,11 @@
 
   layer/ChangeLog
   (get-revisions [this id]
-    (seq (into (sorted-set)
-               (for [reset-revision (layer/get-revisions revisioning-layer id)
-                     :let [edition (get-edition revisioning-layer id reset-revision)]
-                     revision (layer/get-revisions layer (add-edition-to-id id edition))]
-                 revision))))
+    (seq (distinct
+          (for [reset-revision (layer/get-revisions revisioning-layer id)
+                :let [edition (get-edition revisioning-layer id reset-revision)]
+                revision (layer/get-revisions layer (add-edition-to-id id edition))]
+            revision))))
 
   (get-changed-ids [this rev]
     nil)

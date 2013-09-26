@@ -415,7 +415,10 @@
 (defn ^{:dynamic true} get-revisions
   "Return a seq of all revisions with data for this node."
   [layer id]
-  (layer/get-revisions layer id))
+  (let [revs (layer/get-revisions layer id)]
+    (if-let [current (retro/current-revision layer)]
+      (take-while #(<= % current) revs)
+      revs)))
 
 (defn node-history
   "Return a map from revision number to node data, for each revision that
