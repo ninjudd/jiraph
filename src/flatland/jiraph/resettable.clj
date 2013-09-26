@@ -14,8 +14,8 @@
      (get-edition graph/get-in-node revisioning-layer id revision))
   ([read revisioning-layer id revision]
      (-> revisioning-layer
-         (at-revision (? revision))
-         (read [(? id) :edition]))))
+         (at-revision revision)
+         (read [id :edition]))))
 
 ;; note layer will need a key codec that supports revision markers somewhere.  can we wrap the key
 ;; codec of the underlying layer to prepend an int64? probably, but then we are tied to masai.
@@ -57,11 +57,11 @@
 
   layer/Optimized
   (query-fn [this keyseq not-found f]
-    (when-let [[id & keys] (? (seq keyseq))]
-      (when-let [edition (? (get-edition revisioning-layer id (current-revision this)))]
-        (? (layer/query-fn layer (? (cons (add-edition-to-id id edition)
-                                          keys))
-                           not-found f)))))
+    (when-let [[id & keys] (seq keyseq)]
+      (when-let [edition (get-edition revisioning-layer id (current-revision this))]
+        (layer/query-fn layer (cons (add-edition-to-id id edition)
+                                    keys)
+                        not-found f))))
 
   #_ (
       ChangeLog
