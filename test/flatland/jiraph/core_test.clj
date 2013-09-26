@@ -266,7 +266,7 @@
     (is (zero? (current-revision)))))
 
 (deftest multi-layer-transactions
-  (with-graph (make-graph)
+  (with-graph (select-keys (make-graph) [:masai :sorted])
     (letfn [(write [break?]
               (at-revision 100
                 (let [ioval (graph/->retro-ioval

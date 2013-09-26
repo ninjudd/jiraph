@@ -1,7 +1,7 @@
 (ns flatland.jiraph.resettable
   (:use flatland.jiraph.wrapped-layer
         flatland.useful.debug
-        [flatland.useful.utils :only [returning adjoin verify invoke]]
+        [flatland.useful.utils :only [returning adjoin verify invoke map-entry]]
         [flatland.useful.seq :only [assert-length]]
         [flatland.useful.map :only [assoc-in* update-in*]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
@@ -63,24 +63,34 @@
                                     keys)
                         not-found f))))
 
-  #_ (
-      ChangeLog
-      (get-revisions   [this# id#]  (get-revisions ~layer-sym id#))
-      (get-changed-ids [this# rev#] (get-changed-ids ~layer-sym rev#))
+  layer/ChangeLog
+  (get-revisions [this id]
+    (seq (into (sorted-set)
+               (for [reset-revision (layer/get-revisions revisioning-layer id)
+                     :let [edition (get-edition revisioning-layer id reset-revision)]
+                     revision (layer/get-revisions layer (add-edition-to-id id edition))]
+                 revision))))
 
-      Enumerate
-      (node-seq [this# opts#]
-                (filter #(keep-node? this# (first %))
-                        (node-seq ~layer-sym opts#)))
+  (get-changed-ids [this rev]
+    nil)
 
-      EnumerateIds
-      (node-id-seq [this# opts#]
-                   (filter #(keep-node? this# %)
-                           (node-id-seq ~layer-sym opts#)))
+  layer/EnumerateIds
+  (node-id-seq [this opts]
+    (layer/node-id-seq revisioning-layer opts))
 
-      Parent
-      (children [this#] (children ~layer-sym))
-      (child    [this# kind#] (child ~layer-sym kind#))))
+  layer/Enumerate
+  (node-seq [this opts]
+    (for [id (layer/node-id-seq this opts)]
+      (map-entry id (layer/get-node this id nil))))
+
+
+  #_(
+
+
+
+     Parent
+     (children [this#] (children ~layer-sym))
+     (child    [this# kind#] (child ~layer-sym kind#))))
 
 (defn make
   [layer revisioning-layer {:keys [reset? add-edition-to-id] :as opts
