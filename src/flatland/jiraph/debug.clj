@@ -3,7 +3,7 @@
   (:require [flatland.retro.core :as retro :refer [Transactional txn-begin! txn-commit! txn-rollback!
                                           OrderedRevisions max-revision touch
                                           Revisioned current-revision at-revision]]
-            [flatland.jiraph.wrapped-layer :refer [Wrapped]]
+            [flatland.jiraph.wrapped-layer :refer [defwrapped update-wrap-read forward-reads]]
             [flatland.useful.datatypes :refer [assoc-record]]
             [clojure.string :as s]))
 
@@ -23,25 +23,15 @@
   `(log ~'this '~f '~f [~@args]
         #(~f ~'layer ~@args)))
 
-(defrecord DebugLayer [layer layer-name hooks]
-  Object
-  (toString [this] (pr-str this))
-
-  Wrapped
-  (unwrap [this] layer)
-
-  Enumerate
-  (node-id-seq [this] (logged (node-id-seq)))
-  (node-seq    [this] (logged (node-seq)))
-
-  SortedEnumerate
-  (node-id-subseq [this cmp start] (logged (node-id-subseq cmp start)))
-  (node-subseq    [this cmp start] (logged (node-subseq cmp start)))
-
+(defwrapped DebugLayer [layer layer-name hooks] []
   Basic
   (get-node     [this id not-found] (logged (get-node id not-found)))
-  (assoc-node!  [this id attrs]     (logged (assoc-node! id attrs)))
-  (dissoc-node! [this id]           (logged (dissoc-node! id)))
+  (update-in-node [this keyseq f args]
+    (-> (log this 'update-in-node 'update-in-node (list* (vec keyseq)
+                                                         (symbol (.getName (class f)))
+                                                         args)
+             #(update-in-node layer keyseq f args))
+        (update-wrap-read forward-reads this layer)))
 
   Optimized
   (query-fn [this keyseq not-found f]
@@ -52,13 +42,6 @@
                                              (symbol (.getName (class f)))
                                              args)
              #(apply q args)))))
-  (update-fn [this keyseq f]
-    (when-let [u (update-fn layer keyseq f)]
-      (fn [& args]
-        (log this 'update-fn 'update-in (list* (vec keyseq)
-                                               (symbol (.getName (class f)))
-                                               args)
-             #(apply u args)))))
 
   Layer
   (open       [this] (logged (open)))
@@ -80,18 +63,9 @@
   (txn-commit!   [this] (logged (txn-commit!)))
   (txn-rollback! [this] (logged (txn-rollback!)))
 
-  Revisioned
-  (at-revision      [this rev] (assoc-record this :layer (at-revision layer rev)))
-  (current-revision [this]     (current-revision layer))
-
   OrderedRevisions
   (max-revision [this] (logged (max-revision)))
-  (touch        [this] (logged (touch)))
-
-  Preferences
-  (manage-changelog? [this] (logged (manage-changelog?)))
-  (manage-incoming?  [this] (logged (manage-incoming?)))
-  (single-edge?      [this] (logged (single-edge?))))
+  (touch        [this] (logged (touch))))
 
 (defn make* [base-layer layer-name log-functions]
   (DebugLayer. base-layer layer-name log-functions))
