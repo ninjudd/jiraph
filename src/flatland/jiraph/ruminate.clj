@@ -13,16 +13,16 @@
 ;;; that this works, as well.
 
 (defwrapped RuminatingLayer
-  [input-layer output-layers ruminate]
-  [input-layer (cons input-layer (map second output-layers))]
+  [primary-layer secondary-layers ruminate]
+  [primary-layer (cons primary-layer (map second secondary-layers))]
   layer/Basic
   (update-in-node [this keyseq f args]
     (-> (let [rev (current-revision this)
-              revisioned-layers (cons (at-revision input-layer rev)
-                                      (for [[name layer] output-layers]
+              revisioned-layers (cons (at-revision primary-layer rev)
+                                      (for [[name layer] secondary-layers]
                                         (at-revision layer rev)))
-              ioval (ruminate (first revisioned-layers) ;; input layer
-                              (rest revisioned-layers)  ;; output layers
+              ioval (ruminate (first revisioned-layers) ;; primary layer
+                              (rest revisioned-layers)  ;; secondary layers
                               keyseq f args)]
           (fn [read]
             (let [actions (ioval read)
@@ -31,29 +31,29 @@
                     (for [layer revisioned-layers
                           :when (not (contains? written-layers layer))]
                       {:layer layer, :write (constantly nil), :wrap-read identity})))))
-        (update-wrap-read forward-reads this input-layer)))
+        (update-wrap-read forward-reads this primary-layer)))
 
   layer/Parent
   (children [this]
     (reduce into #{}
-            [(map first output-layers)
-             (layer/children input-layer)]))
+            [(map first secondary-layers)
+             (layer/children primary-layer)]))
   (child [this child-name]
-    (or (first (for [[name layer] output-layers
+    (or (first (for [[name layer] secondary-layers
                      :when (= name child-name)]
                  (at-revision layer (current-revision this))))
-        (layer/child (at-revision input-layer (current-revision this)) child-name)))
+        (layer/child (at-revision primary-layer (current-revision this)) child-name)))
 
   retro/OrderedRevisions
   (touch [this]
-    (doseq [layer (cons input-layer (map second output-layers))]
+    (doseq [layer (cons primary-layer (map second secondary-layers))]
       (retro/touch (at-revision layer (current-revision this))))))
 
-;; write will be called once per update, passed args like: (write input-layer [output1 output2...]
+;; write will be called once per update, passed args like: (write primary-layer [output1 output2...]
 ;; keyseq f args) It should return a jiraph io-value (a function of read; see update-in-node's
 ;; contract)
-(defn make [input outputs write]
-  (RuminatingLayer. input (vec outputs) write))
+(defn make [primary-layer secondary-layers write]
+  (RuminatingLayer. primary-layer (vec secondary-layers) write))
 
 (defn edges-map
   "Given a keyseq (not including a node-id, and possibly empty) and a value at that keyseq,
