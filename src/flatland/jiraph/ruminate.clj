@@ -1,7 +1,7 @@
 (ns flatland.jiraph.ruminate
   (:use flatland.jiraph.wrapped-layer
         flatland.useful.debug
-        [flatland.useful.utils :only [returning adjoin verify]]
+        [flatland.useful.utils :only [returning adjoin]]
         [flatland.useful.seq :only [assert-length]]
         [flatland.useful.map :only [assoc-in*]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
@@ -13,8 +13,8 @@
 ;;; that this works, as well.
 
 (defwrapped RuminatingLayer
-  [read-layer input-layer output-layers ruminate]
-  [read-layer (cons input-layer (map second output-layers))]
+  [input-layer output-layers ruminate]
+  [input-layer (cons input-layer (map second output-layers))]
   layer/Basic
   (update-in-node [this keyseq f args]
     (-> (let [rev (current-revision this)
@@ -37,16 +37,12 @@
   (children [this]
     (reduce into #{}
             [(map first output-layers)
-             (layer/children read-layer)]))
+             (layer/children input-layer)]))
   (child [this child-name]
     (or (first (for [[name layer] output-layers
                      :when (= name child-name)]
                  (at-revision layer (current-revision this))))
-        (layer/child (at-revision read-layer (current-revision this)) child-name)))
-
-  layer/Layer
-  (same? [this other]
-    (graph/same? input-layer (:input-layer other)))
+        (layer/child (at-revision input-layer (current-revision this)) child-name)))
 
   retro/OrderedRevisions
   (touch [this]
@@ -56,11 +52,8 @@
 ;; write will be called once per update, passed args like: (write input-layer [output1 output2...]
 ;; keyseq f args) It should return a jiraph io-value (a function of read; see update-in-node's
 ;; contract)
-(defn make [input outputs write & {:keys [read-from] :or {read-from input}}]
-  (verify (some #{read-from} (cons input (map second outputs)))
-          (format "Ruminating layer can only read-from an input or output layer, not %s."
-                  (pr-str read-from)))
-  (RuminatingLayer. read-from input (vec outputs) write))
+(defn make [input outputs write]
+  (RuminatingLayer. input (vec outputs) write))
 
 (defn edges-map
   "Given a keyseq (not including a node-id, and possibly empty) and a value at that keyseq,
