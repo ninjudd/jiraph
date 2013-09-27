@@ -2,9 +2,10 @@
   (:use flatland.jiraph.wrapped-layer
         flatland.useful.debug
         [flatland.useful.utils :only [returning adjoin]]
+        [flatland.useful.map :only [map-vals]]
         [flatland.useful.seq :only [assert-length]]
         [flatland.useful.map :only [assoc-in*]])
-  (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
+  (:require [flatland.jiraph.layer :as layer :refer [dispatch-update child]]
             [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.retro.core :as retro :refer [at-revision current-revision]]))
 
@@ -145,12 +146,33 @@
                                                                   id))]
                                          adjoin {:exists true})))))
 
-(defn merged
-  "layers needs to be a list of pairs, [base-layer derived-layer]. The derived layer will be used
-   to store a merged view of tha data written to base-layer, as determined by merges written to the
-   merge-layer.
+(defn- ruminate-merge [merge-layer base-layers keyseq f args]
+  ;; ...
+  )
 
-   Will return a list, [new-merge-layer [layer1 layer2...]]; writes to these returned layers will
-   automatically update each other as needed to keep the merged views consistent. "
+(defn- ruminate-merging [base-layer [phantom-layer merge-layer] keyseq f args]
+  ;; ...
+  )
+
+(defn merged
+  "layers needs to be a map of layer names to base layers. The base layer will be used to store a
+   merged view of tha data written to the merging layer, as determined by merges written to the
+   merge-layer. Each base layer must have a child named :phantom, which will be used to store
+   internal bookkeeping data, and should not be used by client code.
+
+   Will return a list, [new-merge-layer {layer-name1 merging-layer1
+                                         layer-name2 merging-layer2 ...}].
+
+   Writes to these returned layers will automatically update each other as needed to keep the merged
+   views consistent."
   [merge-layer layers]
-  [(make merge-layer (fn [_] nil) merge-layer)])
+  [(make merge-layer layers ruminate-merge)
+   (map-vals layers
+             (fn [base]
+               (make base [[:phantom (child base :phantom)]
+                           [:merge merge-layer]]
+                     ruminate-merging)))])
+
+
+#_(merged m {:tree (parent/make tree-base {:phantom tree-phantom})
+             :profile-data (parent/make data-base {:phantom data-phantom})})
