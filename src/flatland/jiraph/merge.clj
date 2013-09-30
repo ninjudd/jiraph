@@ -1,6 +1,32 @@
+(ns flatland.jiraph.merge
+  (:refer-clojure :exclude [merge])
+  (:require [clojure.core :as clojure]
+            [flatland.jiraph.ruminate :as ruminate]
+            [flatland.jiraph.layer :as layer]
+            [flatland.useful.map :refer [update]]
+            [flatland.useful.utils :refer [invoke verify]]))
+
+(defn merge [head tail-id]
+  (update-in head [:edges tail-id] adjoin {:exists true}))
+
+(defn unmerge [head tail-id]
+  (update-in head [:edges tail-id] adjoin {:exists false}))
+
+(defn merge-head [read merge-layer node-id]
+  ;; ...
+  )
+
 (defn- ruminate-merge [merge-layer base-layers keyseq f args]
   (fn [read]
-    ))
+    (verify (and (#{merge unmerge} f)
+                 (= 1 (count keyseq) (count args)))
+            "Merge layer only supports functions merge and unmerge, only at the top level.")
+    (let [[head-id] keyseq
+          [tail-id] args]
+      (apply compose (for [layer base-layers])
+           (condp = f
+             merge
+             unmerge ...)))))
 
 (defn- ruminate-merging [base-layer [phantom-layer merge-layer] keyseq f args]
   (fn [read]
