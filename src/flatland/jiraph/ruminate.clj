@@ -151,8 +151,13 @@
   )
 
 (defn- ruminate-merging [base-layer [phantom-layer merge-layer] keyseq f args]
-  ;; ...
-  )
+  (fn [read]
+    (-> (if-let [head (merge-head read merge-layer (get-id keyseq))]
+          (let [keyseq (update keyseq for head-id)]
+            (apply compose (for [layer [base-layer phantom-layer]]
+                             (update-in-node layer keyseq f args))))
+          (update-in-node base-layer keyseq f args))
+        (invoke read))))
 
 (defn merged
   "layers needs to be a map of layer names to base layers. The base layer will be used to store a
