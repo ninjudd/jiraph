@@ -46,7 +46,7 @@
   "Implement this to get automatic filtering of nodes and ids in node-[id-]seq."
   (keep-node? [layer id]))
 
-(defn default-specs [layer-sym all-layers]
+(defn default-specs [layer-sym owned-layers all-layers]
   (let [layer-key (keyword layer-sym)]
     (parse-deftype-specs
      `(Object
@@ -84,7 +84,7 @@
        Layer
        ~@(for [method `(open close truncate! sync! optimize!)]
            `(~method [this#]
-                     (doseq [layer# ~all-layers]
+                     (doseq [layer# ~owned-layers]
                        (~method layer#))))
        (same? [this# other#]
               (flatland.jiraph.graph/same? ~layer-sym (~layer-key other#)))
@@ -115,19 +115,30 @@
        OrderedRevisions
        (max-revision [this#]
                      (apply min (or (seq (remove #{Double/POSITIVE_INFINITY}
-                                                 (map max-revision ~all-layers)))
+                                                 (map max-revision ~owned-layers)))
                                     [0])))
        (touch [this#]
               (let [revision# (current-revision this#)]
-                (doseq [layer# ~all-layers]
+                (doseq [layer# ~owned-layers]
                   (touch (at-revision layer# revision#)))))))))
 
-(defmacro defwrapped [name fields [wrapped-layer-fieldname all-layers] & specs]
+(defmacro defwrapped
+  "Define a layer that wraps another layer, forwarding to it as appropriate. You may override
+   any protocol methods to do something different than the default forwarding.
+
+   Takes the same args as defrecord/deftype, but with an extra vector before the method specs. This
+   vector should contain:
+   - The name of the primary layer being wrapped
+   - An expression returning a seq of additional layers that this wrapper \"owns\";
+     these layers will be opened, closed, synced, etc. along with the wrapper.
+   - An expression returning a seq of extra layers that this wrapper refers to, but does not own;
+     these layers will be included in transactions on the wrapper, but will not be opened, etc."
+  [name fields [wrapped-layer-fieldname owned-layers extra-layers] & specs]
   (let [wrapped-layer-fieldname (or wrapped-layer-fieldname
                                     (first fields))
-        all-layers (or all-layers
-                       [wrapped-layer-fieldname])]
-   `(defrecord ~name [~@fields]
-      ~@(emit-deftype-specs
-          (merge-in (default-specs wrapped-layer-fieldname all-layers)
-                    (parse-deftype-specs specs))))))
+        owned-layers `(cons ~wrapped-layer-fieldname ~owned-layers)
+        extra-layers `(concat ~owned-layers ~extra-layers)]
+    `(defrecord ~name [~@fields]
+       ~@(emit-deftype-specs
+           (merge-in (default-specs wrapped-layer-fieldname extra-layers)
+                     (parse-deftype-specs specs))))))

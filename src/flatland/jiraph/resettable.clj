@@ -22,7 +22,7 @@
 ;; probably better to do that in the client, since it's responsible for picking key codecs.
 (defwrapped ResettableLayer
   [layer revisioning-layer reset? add-edition-to-id]
-  [layer [layer revisioning-layer]]
+  [layer [revisioning-layer]]
   layer/Basic
   (get-node [this id not-found]
     (let [revision (current-revision this)]

@@ -15,7 +15,7 @@
 
 (defwrapped RuminatingLayer
   [primary-layer secondary-layers ruminate]
-  [primary-layer (cons primary-layer (map second secondary-layers))]
+  [primary-layer nil (map second secondary-layers)]
   layer/Basic
   (update-in-node [this keyseq f args]
     (-> (let [rev (current-revision this)
