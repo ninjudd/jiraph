@@ -218,8 +218,7 @@
       (testing "update-in, get-in"
         (at-revision 202
           (dotxn layer-name
-            (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"})
-            (is (= 202 (uncommitted-revision)))))
+            (update-in-node! layer-name ["13" :edges "11"] adjoin {:a "1"})))
 
         (is (= "1" (get-in-node layer-name ["13" :edges "11" :a])))
         (at-revision 201
