@@ -173,12 +173,12 @@
         (at-revision 1
           (is (empty? (get-revisions layer-name "3")))))
 
-      (testing "max-revision"
+      (testing "revision-range"
         (at-revision 102
           (assoc-node! layer-name "8" {:foo 8})
           (touch layer-name)) ;; make sure ruminants get updated
         (is (= 8 (:foo (get-node layer-name "8"))))
-        (is (= 102 (retro/max-revision layer))))
+        (is (= 102 (apply max (retro/revision-range layer)))))
 
       (testing "past revisions are ignored inside of dotxn and txn->"
         (at-revision 101
@@ -284,7 +284,7 @@
         (is (thrown? Exception (write true)))
 
         (is (zero? (current-revision)))
-        (are [layer-name revision-id] (= revision-id (retro/max-revision (layer layer-name)))
+        (are [layer-name revision-id] (= revision-id (apply max (retro/revision-range (layer layer-name))))
              :sorted 101, :masai 0)
         (are [layer] (nil? (at-revision 0 (get-node layer "x")))
              :masai :sorted)

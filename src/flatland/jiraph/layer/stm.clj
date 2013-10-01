@@ -5,7 +5,7 @@
         [flatland.jiraph.graph :as graph :only [with-action get-node]]
         [flatland.jiraph.utils :only [meta-id meta-id? base-id]]
         [flatland.retro.core :only [WrappedTransactional Revisioned OrderedRevisions
-                                    max-revision at-revision current-revision]]
+                                    revision-range at-revision current-revision]]
         [flatland.useful.fn :only [given fix]]
         [flatland.useful.seq :only [assert-length]]
         [flatland.useful.utils :only [returning or-min]]
@@ -63,7 +63,7 @@
   (node-seq [this opts]
     (layer/deny-sorted-seq opts)
     (-> this nodes seq))
-  
+
   EnumerateIds
   (node-id-seq [this opts]
     (layer/deny-sorted-seq opts)
@@ -107,8 +107,8 @@
     revision)
 
   OrderedRevisions
-  (max-revision [this]
-    (-> @store ))
+  (revision-range [this]
+    nil)
   (touch [this]
     nil) ;; hopefully that works?
 

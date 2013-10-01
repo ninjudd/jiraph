@@ -76,9 +76,9 @@
                           (set (layer/get-changed-ids master 1))))
                    (is (= #{"profile-1" "profile-3"}
                           (set (layer/get-changed-ids (rev 2) 2))))))
-        (testing "max-revision"
-          (is (= 2 (retro/max-revision master)))
-          (is (= 2 (retro/max-revision (rev 1))))))
+        (testing "revision-range"
+          (is (= 2 (apply max (retro/revision-range master))))
+          (is (= 2 (apply max (retro/revision-range (rev 1)))))))
 
       (testing "Can't rewrite history"
         (txn (actions (rev 0)

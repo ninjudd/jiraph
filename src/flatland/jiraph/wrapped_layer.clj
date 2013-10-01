@@ -113,10 +113,9 @@
        (current-revision [this#]      (current-revision ~layer-sym))
 
        OrderedRevisions
-       (max-revision [this#]
-                     (apply min (or (seq (remove #{Double/POSITIVE_INFINITY}
-                                                 (map max-revision ~owned-layers)))
-                                    [0])))
+       (revision-range [this#]
+                       (or (seq (distinct (mapcat revision-range ~owned-layers)))
+                           [0]))
        (touch [this#]
               (let [revision# (current-revision this#)]
                 (doseq [layer# ~owned-layers]

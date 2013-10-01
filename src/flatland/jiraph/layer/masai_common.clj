@@ -29,11 +29,11 @@
   (defn implement-ordered [class]
     (extend class
       retro/OrderedRevisions
-      {:max-revision (fn [this]
-                       (let [cache (:max-written-revision this)]
-                         (or @cache
-                             (locking cache
-                               (freshen cache this)))))
+      {:revision-range (fn [this]
+                         (let [cache (:max-written-revision this)]
+                           [(or @cache
+                                (locking cache
+                                  (freshen cache this)))]))
        :touch (fn [this]
                 (when-let [revision (:revision this)]
                   (let [cache (:max-written-revision this)]
@@ -47,6 +47,6 @@
 (defn revision-to-read [layer]
   (let [revision (:revision layer)]
     (and revision
-         (let [max-written (retro/max-revision layer)]
+         (let [[max-written] (retro/revision-range layer)]
            (when (< revision max-written)
              revision)))))

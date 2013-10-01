@@ -10,7 +10,7 @@
                  [org.flatland/cereal "0.3.0"]
                  [org.flatland/ordered "1.4.0"]
                  [org.flatland/schematic "0.1.0"]
-                 [org.flatland/retro "0.8.0"]
+                 [org.flatland/retro "0.9.0"]
                  [org.flatland/io "0.3.0"]
                  [org.flatland/ego "0.2.0"]
                  [slingshot "0.10.3"]]

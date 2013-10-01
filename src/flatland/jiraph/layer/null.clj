@@ -35,8 +35,8 @@
   (query-fn [this keyseq not-found f] (constantly not-found))
 
   OrderedRevisions
-  (max-revision [this] Double/POSITIVE_INFINITY)
-  (touch        [this] nil))
+  (revision-range [this] nil)
+  (touch          [this] nil))
 
 (defn make []
   (NullLayer.))

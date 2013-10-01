@@ -434,11 +434,11 @@
     (get-in-node layer [(meta-id :changed-ids) rev]))
 
   retro/OrderedRevisions
-  (max-revision [layer]
-    (-> layer
-        (retro/at-revision nil)
-        (get-in-node [(meta-id :revision-id)])
-        (or 0))) ;; these guys want a default/permanent sentinel
+  (revision-range [layer]
+    [(-> layer
+         (retro/at-revision nil)
+         (get-in-node [(meta-id :revision-id)])
+         (or 0))]) ;; these guys want a default/permanent sentinel
 
   layer/Layer
   ;; default implementation is to not do anything, hoping you do it

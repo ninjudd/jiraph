@@ -156,19 +156,19 @@
           (finally (close)
                    (set-graph! graph#)))))
 
-(letfn [(all-revisions [layers]
-          (or (seq (remove #{Double/POSITIVE_INFINITY}
-                           (map retro/max-revision
-                                (vals (as-layer-map layers)))))
-              [0]))]
+(letfn [(all-revisions [combine layers]
+          (apply combine
+                 (or (seq (mapcat retro/revision-range
+                                  (vals (as-layer-map layers))))
+                     [0])))]
   (defn current-revision
     "The minimum revision on all specified layers, or all layers if none are specified."
     [& layers]
-    (apply min (all-revisions layers)))
+    (all-revisions min layers))
   (defn uncommitted-revision
     "The maximum revision on all specified layers, or all layers if none are specified."
     [& layers]
-    (apply max (all-revisions layers))))
+    (all-revisions max layers)))
 
 (defn layer-exists?
   "Does the named layer exist in the current graph?"

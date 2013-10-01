@@ -1,7 +1,7 @@
 (ns flatland.jiraph.debug
   (:use flatland.jiraph.layer)
   (:require [flatland.retro.core :as retro :refer [Transactional txn-begin! txn-commit! txn-rollback!
-                                          OrderedRevisions max-revision touch
+                                          OrderedRevisions revision-range touch
                                           Revisioned current-revision at-revision]]
             [flatland.jiraph.wrapped-layer :refer [defwrapped update-wrap-read forward-reads]]
             [flatland.useful.datatypes :refer [assoc-record]]
@@ -64,8 +64,8 @@
   (txn-rollback! [this] (logged (txn-rollback!)))
 
   OrderedRevisions
-  (max-revision [this] (logged (max-revision)))
-  (touch        [this] (logged (touch))))
+  (revision-range [this] (logged (revision-range)))
+  (touch          [this] (logged (touch))))
 
 (defn make* [base-layer layer-name log-functions]
   (DebugLayer. base-layer layer-name log-functions))
