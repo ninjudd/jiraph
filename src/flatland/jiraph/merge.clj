@@ -17,25 +17,25 @@
   ;; ...
   )
 
-(defn- ruminate-merge [merge-layer base-layers keyseq f args]
+(defn- ruminate-merge [merge-layer layers keyseq f args]
   (fn [read]
     (verify (and (#{merge unmerge} f)
                  (= 1 (count keyseq) (count args)))
             "Merge layer only supports functions merge and unmerge, only at the top level.")
     (let [[head-id] keyseq
           [tail-id] args]
-      #_(apply compose (for [layer base-layers])
+      #_(apply compose (for [layer layers])
                (condp = f
                  merge
                  unmerge ...)))))
 
-(defn- ruminate-merging [base-layer [phantom-layer merge-layer] keyseq f args]
+(defn- ruminate-merging [layer [merge-layer] keyseq f args]
   (fn [read]
     #_(-> (if-let [head (merge-head read merge-layer (get-id keyseq))]
           (let [keyseq (update keyseq for head-id)]
-            (apply compose (for [layer [base-layer phantom-layer]]
+            (apply compose (for [layer [layer (child layer :phantom)]]
                              (update-in-node layer keyseq f args))))
-          (update-in-node base-layer keyseq f args))
+          (update-in-node layer keyseq f args))
         (invoke read))))
 
 (defn merged
@@ -44,19 +44,15 @@
    merge-layer. Each base layer must have a child named :phantom, which will be used to store
    internal bookkeeping data, and should not be used by client code.
 
-   Will return a list, [new-merge-layer {layer-name1 merging-layer1
-                                         layer-name2 merging-layer2 ...}].
+   Will return a list, [new-merge-layer [merging-layer1 merging-layer2 ...]].
 
    Writes to these returned layers will automatically update each other as needed to keep the merged
    views consistent."
   [merge-layer layers]
   [(ruminate/make merge-layer layers ruminate-merge)
-   (map-vals layers
-             (fn [base]
-               (ruminate/make base [[:phantom (layer/child base :phantom)]
-                                    [:merge merge-layer]]
-                              ruminate-merging)))])
+   (for [layer layers]
+     (ruminate/make layer [merge-layer] ruminate-merging))])
 
 
-#_(merged m {:tree (parent/make tree-base {:phantom tree-phantom})
-             :profile-data (parent/make data-base {:phantom data-phantom})})
+#_(merged m [(parent/make tree-base {:phantom tree-phantom})
+             (parent/make data-base {:phantom data-phantom})])
