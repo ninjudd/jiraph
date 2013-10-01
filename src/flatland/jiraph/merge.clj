@@ -24,14 +24,14 @@
             "Merge layer only supports functions merge and unmerge, only at the top level.")
     (let [[head-id] keyseq
           [tail-id] args]
-      (apply compose (for [layer base-layers])
-           (condp = f
-             merge
-             unmerge ...)))))
+      #_(apply compose (for [layer base-layers])
+               (condp = f
+                 merge
+                 unmerge ...)))))
 
 (defn- ruminate-merging [base-layer [phantom-layer merge-layer] keyseq f args]
   (fn [read]
-    (-> (if-let [head (merge-head read merge-layer (get-id keyseq))]
+    #_(-> (if-let [head (merge-head read merge-layer (get-id keyseq))]
           (let [keyseq (update keyseq for head-id)]
             (apply compose (for [layer [base-layer phantom-layer]]
                              (update-in-node layer keyseq f args))))
