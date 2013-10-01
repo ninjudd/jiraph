@@ -140,5 +140,5 @@
         extra-layers `(concat ~owned-layers ~extra-layers)]
     `(defrecord ~name [~@fields]
        ~@(emit-deftype-specs
-           (merge-in (default-specs wrapped-layer-fieldname extra-layers)
+           (merge-in (default-specs wrapped-layer-fieldname owned-layers extra-layers)
                      (parse-deftype-specs specs))))))

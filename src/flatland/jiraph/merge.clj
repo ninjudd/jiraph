@@ -1,10 +1,11 @@
 (ns flatland.jiraph.merge
   (:refer-clojure :exclude [merge])
   (:require [clojure.core :as clojure]
+            [flatland.jiraph.graph :refer [compose]]
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.layer :as layer]
-            [flatland.useful.map :refer [update]]
-            [flatland.useful.utils :refer [invoke verify]]))
+            [flatland.useful.map :refer [update map-vals]]
+            [flatland.useful.utils :refer [adjoin invoke verify]]))
 
 (defn merge [head tail-id]
   (update-in head [:edges tail-id] adjoin {:exists true}))
@@ -49,12 +50,12 @@
    Writes to these returned layers will automatically update each other as needed to keep the merged
    views consistent."
   [merge-layer layers]
-  [(make merge-layer layers ruminate-merge)
+  [(ruminate/make merge-layer layers ruminate-merge)
    (map-vals layers
              (fn [base]
-               (make base [[:phantom (child base :phantom)]
-                           [:merge merge-layer]]
-                     ruminate-merging)))])
+               (ruminate/make base [[:phantom (layer/child base :phantom)]
+                                    [:merge merge-layer]]
+                              ruminate-merging)))])
 
 
 #_(merged m {:tree (parent/make tree-base {:phantom tree-phantom})
