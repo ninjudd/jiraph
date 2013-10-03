@@ -152,14 +152,21 @@
       [(update-in-node layer [id :edges root-id]
                        adjoin {:exists true, :position offset})])))
 
-(defn- child-adder [layer get-root]
+(defn root-or-self [get-root id]
+  (if-let [[root] (get-root id)]
+    root
+    id))
+
+(defn- root-builder
+  "Create new root, adding edges from it to the roots of the two supplied ids and setting its :head
+   to the first of them."
+  [layer get-root]
   (fn [root-id head-id tail-id]
     (update-in-node layer [root-id]
                     adjoin {:head head-id
                             :edges (into {}
                                          (for [id [head-id tail-id]]
-                                           [(if-let [[root] (get-root id)]
-                                              root, id)
+                                           [(root-or-self get-root id)
                                             {:exists true}]))})))
 
 (defn ruminate-merge [layer [] keyseq f args]
@@ -177,13 +184,13 @@
                         (format "Can't use %s as root of new merge, as it already exists"
                                 (pr-str root-id))))
                 (let [update-leaves (leaf-updater layer get-head get-root get-leaves)
-                      add-children (child-adder layer get-root)
+                      create-root (root-builder layer get-root)
                       head-leaf-updates (update-leaves head-id root-id 0)
                       tail-leaf-updates (update-leaves tail-id root-id (count head-leaf-updates))]
                   (compose-with read
-                    head-leaf-updates,
-                    tail-leaf-updates,
-                    (add-children root-id head-id tail-id))))
+                    head-leaf-updates, ;; point head's leaves at new root
+                    tail-leaf-updates, ;; point tail's leaves at new root
+                    (create-root root-id head-id tail-id)))) ;; create new root, above old roots
         unmerge (let [get-parent (parent-finder mread layer)
                       get-children (child-finder mread layer)
                       [root] (get-root tail-id)]
