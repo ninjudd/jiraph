@@ -136,38 +136,37 @@
                       '...
                       )))))))
 
-(defn- leaf-updater [layer get-head get-root get-leaves]
-  (fn [id root-id offset]
-    (if-let [[old-root] (get-root id)]
-      (do (verify (= id (get-head old-root))
-                  (format "%s is already a tail: cannot merge it with another node"
-                          (pr-str id)))
-          (->> (get-leaves old-root)
-               (sort-by (comp val :position))
-               (map-indexed (fn [i [leaf-id]]
-                              [(update-in-node layer [leaf-id :edges old-root]
-                                               adjoin {:exists false})
-                               (update-in-node layer [leaf-id :edges root-id]
-                                               adjoin {:exists true, :posiion (+ i offset)})]))))
-      [(update-in-node layer [id :edges root-id]
-                       adjoin {:exists true, :position offset})])))
+(defn- update-leaves [layer new-root leaves-with-old-roots]
+  (map-indexed (fn [i [leaf-id old-root]]
+                 (cons (update-in-node layer [leaf-id :edges new-root]
+                                       adjoin {:exists true, :posiion i})
+                       (when old-root
+                         [(update-in-node layer [leaf-id :edges old-root]
+                                          adjoin {:exists false})])))
+               leaves-with-old-roots))
+
+(defn leaves-with-roots [get-root get-leaves id]
+  (if-let [[old-root] (get-root id)]
+    (->> (get-leaves old-root)
+         (sort-by (comp val :position))
+         (map #(list (key %) old-root)))
+    [[id]]))
 
 (defn root-or-self [get-root id]
   (if-let [[root] (get-root id)]
     root
     id))
 
-(defn- root-builder
-  "Create new root, adding edges from it to the roots of the two supplied ids and setting its :head
-   to the first of them."
-  [layer get-root]
-  (fn [root-id head-id tail-id]
-    (update-in-node layer [root-id]
-                    adjoin {:head head-id
-                            :edges (into {}
-                                         (for [id [head-id tail-id]]
-                                           [(root-or-self get-root id)
-                                            {:exists true}]))})))
+(defn- create-root
+  "Create new root at [root-id], adding edges from it to the roots of [head-id] and [tail-id] and
+   setting its :head to the first of them."
+  [layer get-root root-id head-id tail-id]
+  (update-in-node layer [root-id]
+                  adjoin {:head head-id
+                          :edges (into {}
+                                       (for [id [head-id tail-id]]
+                                         [(root-or-self get-root id)
+                                          {:exists true}]))}))
 
 (defn ruminate-merge [layer [] keyseq f args]
   (verify-merge-args! keyseq f args)
@@ -183,14 +182,13 @@
                 (throw (IllegalStateException.
                         (format "Can't use %s as root of new merge, as it already exists"
                                 (pr-str root-id))))
-                (let [update-leaves (leaf-updater layer get-head get-root get-leaves)
-                      create-root (root-builder layer get-root)
-                      head-leaf-updates (update-leaves head-id root-id 0)
-                      tail-leaf-updates (update-leaves tail-id root-id (count head-leaf-updates))]
-                  (compose-with read
-                    head-leaf-updates, ;; point head's leaves at new root
-                    tail-leaf-updates, ;; point tail's leaves at new root
-                    (create-root root-id head-id tail-id)))) ;; create new root, above old roots
+                (compose-with read
+                  ;; point head's and tail's leaves at new root
+                  (update-leaves layer root-id
+                                 (mapcat (partial leaves-with-roots get-root get-leaves)
+                                         [head-id tail-id]))
+                  ;; create new root, above old roots
+                  (create-root layer get-root root-id head-id tail-id)))
         unmerge (let [get-parent (parent-finder mread layer)
                       get-children (child-finder mread layer)
                       [root] (get-root tail-id)]
