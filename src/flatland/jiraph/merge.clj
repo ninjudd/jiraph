@@ -6,6 +6,7 @@
             [flatland.jiraph.layer :as layer :refer [child dispatch-update]]
             [flatland.retro.core :refer [at-revision]]
             [flatland.useful.map :refer [update map-vals filter-vals]]
+            [flatland.useful.seq :refer [assert-length]]
             [flatland.useful.utils :refer [adjoin invoke verify]]))
 
 (defn M
@@ -226,22 +227,29 @@
 ;; - can unmerge by looking at a historical view of the "less-merged" layer above you, and
 ;;   then re-computing all the merges that aren't being undone
 
-(defn merge-head [read merge-layer id]
-  (when-let [[root-id] ((root-edge-finder read merge-layer) id)]
-    ((head-finder read merge-layer) root-id)))
+(defn merge-head-finder* [get-root get-head]
+  (fn [id]
+    (when-let [[root-id] (get-root id)]
+      (get-head root-id))))
 
-;; TODO: if there's a phantom layer, then we only allow adjoin - it's impossible to unmerge
-;; non-adjoin functions, and the phantom layer is only needed to support unmerging.
+(defn merge-head-finder [read layer]
+  (merge-head-finder* (root-edge-finder read merge-layer)
+                      (head-finder read merge-layer)))
+
+(defn merge-head [read merge-layer id]
+  ((merge-head-finder read merge-layer) id))
+
+(defn verify-adjoin! [f why]
+  (verify (= f adjoin)
+          (format "Can't apply non-adjoin function %s%s"
+                  (symbol (.getName (class f)))
+                  why)))
+
 (defn- ruminate-merging-nodes [layer [merge-layer] keyseq f args]
   (let [phantom (child layer :phantom)]
-    (when phantom
-      (verify (= f adjoin)
-              (format (str "Can't apply non-adjoin function %s to phantom layer,"
-                           " as it would not be unmergeable.")
-                      (symbol (.getName (class f))))))
     (fn [read]
       (compose-with read
-        (let [merge-head (partial merge-head read merge-layer)
+        (let [merge-head (merge-head-finder read merge-layer)
               [use-phantom? & update-args]
               ,,(dispatch-update keyseq f args
                                  (fn assoc* [id val]
@@ -256,11 +264,21 @@
                                    (if-let [head (merge-head id)]
                                      (list* true (cons head keys) f args)
                                      (list* false (cons id keys) f args))))]
-          (for [layer (cons layer (when (and phantom use-phantom?) [phantom]))]
+          (for [layer (cons layer (when (and phantom use-phantom?)
+                                    (verify-adjoin! f " to phantom layer, as it would not be unmergeable")
+                                    [phantom]))]
             (apply update-in-node layer update-args)))))))
 
 (defn- ruminate-merging-edges [layer [merge-layer] keyseq f args]
-  )
+  (let [phantom (child layer :phantom)]
+    (fn [read]
+      (compose-with read
+        (verify-adjoin! f " because handling it would be hard.")
+        (let [merge-head (merge-head-finder read merge-layer)
+              [from-id & keys] keyseq]
+          (update-in-node layer [from-id] adjoin
+                          (-> (assoc-in* {} keys (assert-length 1 args))
+                              (update :edges map-keys #(or (merge-head %) %)))))))))
 
 (defn merged
   "layers needs to be a map of layer names to base layers. The base layer will be used to store a
