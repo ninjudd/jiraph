@@ -3,7 +3,7 @@
   (:require [clojure.core :as clojure]
             [flatland.jiraph.graph :refer [compose update-in-node get-in-node assoc-node]]
             [flatland.jiraph.ruminate :as ruminate]
-            [flatland.jiraph.layer :as layer :refer [child]]
+            [flatland.jiraph.layer :as layer :refer [child dispatch-update]]
             [flatland.retro.core :refer [at-revision]]
             [flatland.useful.map :refer [update map-vals filter-vals]]
             [flatland.useful.utils :refer [adjoin invoke verify]]))
@@ -226,14 +226,31 @@
 ;; - can unmerge by looking at a historical view of the "less-merged" layer above you, and
 ;;   then re-computing all the merges that aren't being undone
 
+(defn merge-head [read merge-layer id]
+  (when-let [[root-id] ((root-edge-finder read merge-layer) id)]
+    ((head-finder read merge-layer) root-id)))
+
 (defn- ruminate-merging [layer [merge-layer] keyseq f args]
   (fn [read]
-    #_(-> (if-let [head (merge-head read merge-layer (get-id keyseq))]
-          (let [keyseq (update keyseq for head-id)]
-            (apply compose (for [layer [layer (child layer :phantom)]]
-                             (update-in-node layer keyseq f args))))
-          (update-in-node layer keyseq f args))
-        (invoke read))))
+    (compose-with read
+      (let [merge-head (partial merge-head read merge-layer)
+            [use-phantom? & update-args]
+            ,,(dispatch-update keyseq f args
+                               (fn assoc* [id val]
+                                 (if-let [head (merge-head read merge-layer id)]
+                                   [true [] assoc head val]
+                                   [false [] assoc id val]))
+                               (fn dissoc* [id]
+                                 (if-let [head (merge-head id)]
+                                   [true [] dissoc head]
+                                   [false [] dissoc id]))
+                               (fn update* [id keys]
+                                 (if-let [head (merge-head id)]
+                                   (list* true (cons head keys) f args)
+                                   (list* false (cons id keys) f args))))]
+        ;; TODO make sure the phantom layer gets a read function which reads from the base layer
+        (for [layer (cons layer (when use-phantom? [(child layer :phantom)]))]
+          (apply update-in-node layer update-args))))))
 
 (defn merged
   "layers needs to be a map of layer names to base layers. The base layer will be used to store a
