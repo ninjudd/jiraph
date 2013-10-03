@@ -230,27 +230,37 @@
   (when-let [[root-id] ((root-edge-finder read merge-layer) id)]
     ((head-finder read merge-layer) root-id)))
 
+;; TODO: if there's a phantom layer, then we only allow adjoin - it's impossible to unmerge
+;; non-adjoin functions, and the phantom layer is only needed to support unmerging.
 (defn- ruminate-merging-nodes [layer [merge-layer] keyseq f args]
-  (fn [read]
-    (compose-with read
-      (let [merge-head (partial merge-head read merge-layer)
-            [use-phantom? & update-args]
-            ,,(dispatch-update keyseq f args
-                               (fn assoc* [id val]
-                                 (if-let [head (merge-head read merge-layer id)]
-                                   [true [] assoc head val]
-                                   [false [] assoc id val]))
-                               (fn dissoc* [id]
-                                 (if-let [head (merge-head id)]
-                                   [true [] dissoc head]
-                                   [false [] dissoc id]))
-                               (fn update* [id keys]
-                                 (if-let [head (merge-head id)]
-                                   (list* true (cons head keys) f args)
-                                   (list* false (cons id keys) f args))))]
-        ;; TODO make sure the phantom layer gets a read function which reads from the base layer
-        (for [layer (cons layer (when use-phantom? [(child layer :phantom)]))]
-          (apply update-in-node layer update-args))))))
+  (let [phantom (child layer :phantom)]
+    (when phantom
+      (verify (= f adjoin)
+              (format (str "Can't apply non-adjoin function %s to phantom layer,"
+                           " as it would not be unmergeable.")
+                      (symbol (.getName (class f))))))
+    (fn [read]
+      (compose-with read
+        (let [merge-head (partial merge-head read merge-layer)
+              [use-phantom? & update-args]
+              ,,(dispatch-update keyseq f args
+                                 (fn assoc* [id val]
+                                   (if-let [head (merge-head read merge-layer id)]
+                                     [true [] assoc head val]
+                                     [false [] assoc id val]))
+                                 (fn dissoc* [id]
+                                   (if-let [head (merge-head id)]
+                                     [true [] dissoc head]
+                                     [false [] dissoc id]))
+                                 (fn update* [id keys]
+                                   (if-let [head (merge-head id)]
+                                     (list* true (cons head keys) f args)
+                                     (list* false (cons id keys) f args))))]
+          (for [layer (cons layer (when (and phantom use-phantom?) [phantom]))]
+            (apply update-in-node layer update-args)))))))
+
+(defn- ruminate-merging-edges [layer [merge-layer] keyseq f args]
+  )
 
 (defn merged
   "layers needs to be a map of layer names to base layers. The base layer will be used to store a
