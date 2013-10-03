@@ -88,18 +88,16 @@
 
 (defn merger [merge-layer layers keyseq f args & {merge-fn :merge unmerge-fn :unmerge}]
   (verify (and merge-fn unmerge-fn) "Gotta pass em all")
+  (verify-merge-args! keyseq f args)
   (fn [read]
     (let [[head-id] keyseq
-          [tail-id] args]
+          [tail-id] args
+          impl ({merge merge-fn, unmerge unmerge-fn} f)]
       (compose-with read
-        (apply update-in-node merge-layer keyseq f args
-               (for [layer layers]
-                 (letfn [(call [f]
-                           (fn [read]
-                             (compose-with read (f head-id tail-id layer read))))]
-                   (condp = f
-                     merge (call merge-fn)
-                     unmerge (call unmerge-fn)))))))))
+        (apply update-in-node merge-layer keyseq f args)
+        (for [layer layers]
+          (fn [read]
+            (compose-with read (impl head-id tail-id layer read))))))))
 
 (defn- ruminate-merge-node [merge-layer layers keyseq f args]
   (merger merge-layer layers keyseq f args
