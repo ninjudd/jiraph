@@ -120,18 +120,21 @@
         (for [layer layers]
           (condp = f
             merge (fn [read]
-                    ;; use incoming layer to find all edges to the tail, and point them at
-                    ;; the head instead
                     (when-let [incoming (child layer :incoming)]
+                      ;; use incoming layer to find all edges to the tail, and point them at the
+                      ;; head instead
                       (compose-with read
-                        (for [[from-id edge] (read incoming [tail-id :edges])
-                              :when (:exists edge)]
-                          (let [new-edge (apply adjoin ;; make sure head wins the adjoin
-                                                (for [to-id [tail-id head-id]]
-                                                  (read layer [from-id :edges to-id])))]
+                        (for [[from-id incoming-edge] (read incoming [tail-id :edges])
+                              :when (:exists incoming-edge)]
+                          ;; combine the edges to the head and tail together, letting head win and
+                          ;; ignoring deleted edges
+                          (let [new-edge (reduce adjoin
+                                                 (->> (for [to-id [tail-id head-id]]
+                                                        (read layer [from-id :edges to-id]))
+                                                      (filter :exists)))]
                             (update-in-node layer [from-id :edges] adjoin
-                                            {tail-id {:exists false}
-                                             head-id new-edge}))))))
+                                            {tail-id {:exists false} ;; delete the edge to the tail
+                                             head-id new-edge})))))) ;; and write it to the head
             unmerge (fn [read]
                       '...
                       )))))))
