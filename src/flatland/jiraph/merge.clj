@@ -199,17 +199,21 @@
                           (format "Can't unmerge %s from %s, as its head is actually %s"
                                   (pr-str tail-id) (pr-str head-id) (pr-str (get-head root))))
                   (let [parents (iterate get-parent tail-id)
-                        merge-child (last (cons tail-id
-                                                (take-while #(= tail-id (get-head %))
-                                                            parents)))
-                        merge-parent (get-parent merge-child)]
+                        ;; walk up parent chain until tail-id is no longer the head - this is where
+                        ;; tail-id first became a tail of the current merge
+                        tail-root (last (cons tail-id
+                                              (take-while #(= tail-id (get-head %))
+                                                          parents)))
+                        merge-point (get-parent tail-root)]
                     (compose-with read
-                      (update-in-node layer [merge-parent :edges merge-child]
+                      ;; disconnect tail's new root from the place where it was merged into head
+                      (update-in-node layer [merge-point :edges tail-root]
                                       adjoin {:exists false})
+                      ;; update each of tail's leaves to point at its new root
                       (for [leaf-id (leaf-seq get-children tail-id)]
                         (update-in-node layer [leaf-id :edges] adjoin
-                                        {root {:exists false}
-                                         merge-child (val (get-root leaf-id))})))))))))
+                                        {root {:exists false} ;; also disconnect from old root
+                                         tail-root (val (get-root leaf-id))})))))))))
 
 ;; - what revision tail was merged into head
 ;; - get versions of head/tail just prior to merge
