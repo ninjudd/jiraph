@@ -230,7 +230,7 @@
   (when-let [[root-id] ((root-edge-finder read merge-layer) id)]
     ((head-finder read merge-layer) root-id)))
 
-(defn- ruminate-merging [layer [merge-layer] keyseq f args]
+(defn- ruminate-merging-nodes [layer [merge-layer] keyseq f args]
   (fn [read]
     (compose-with read
       (let [merge-head (partial merge-head read merge-layer)
@@ -265,7 +265,7 @@
   [merge-layer layers]
   [(ruminate/make merge-layer layers ruminate-merge)
    (for [layer layers]
-     (ruminate/make layer [merge-layer] ruminate-merging))])
+     (ruminate/make layer [merge-layer] ruminate-merging-nodes))])
 
 
 #_(merged m [(parent/make tree-base {:phantom tree-phantom})
