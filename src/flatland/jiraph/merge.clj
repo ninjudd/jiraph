@@ -86,55 +86,56 @@
    (fn [root-id]
      (read merge-layer [root-id :head]))))
 
-(defmacro merge-impl [merge-layer layers keyseq f args [head-id tail-id layer read]
-                      & {:keys [merge unmerge]}]
-  (verify (and merge unmerge) "Gotta pass em all")
-  `(fn [read#]
-     (let ~[[head-id] keyseq
-            [tail-id] args]
-       (compose-with read#
-         (apply update-in-node ~merge-layer ~keyseq ~f ~args
-                (for ~[layer layers]
-                  (condp = ~f
-                    merge (fn [~read]
-                            (compose-with ~read ~merge))
-                    unmerge (fn [~read]
-                              (compose-with ~read ~unmerge)))))))))
+(defn merger [merge-layer layers keyseq f args & {merge-fn :merge unmerge-fn :unmerge}]
+  (verify (and merge-fn unmerge-fn) "Gotta pass em all")
+  (fn [read]
+    (let [[head-id] keyseq
+          [tail-id] args]
+      (compose-with read
+        (apply update-in-node merge-layer keyseq f args
+               (for [layer layers]
+                 (condp = f
+                   merge (fn [read]
+                           (compose-with read (merge-fn head-id tail-id layer read)))
+                   unmerge (fn [read]
+                             (compose-with read (unmerge-fn head-id tail-id layer read))))))))))
 
 (defn- ruminate-merge-node [merge-layer layers keyseq f args]
-  (merge-impl merge-layer layers keyseq f args
-    [head-id tail-id layer read]
-    :merge (let [head (read layer [head-id])
-                 tail (read layer [tail-id])]
-             ;; write (M head tail) to the head, and delete the tail
-             [(update-in-node layer [] assoc head-id (M head tail))
-              (update-in-node layer [] dissoc tail-id)])
-    :unmerge '(let [merge-rev '...
-                    before-merge (at-revision layer (dec merge-rev))
-                    [head tail] (for [id [head-id tail-id]]
-                                  (get-in-node before-merge [id]))]
-                (assoc-node layer tail-id (E* read tail))
-                ;; walk
-                )))
+  (merger merge-layer layers keyseq f args
+    :merge (fn [head-id tail-id layer read]
+             (let [head (read layer [head-id])
+                   tail (read layer [tail-id])]
+               ;; write (M head tail) to the head, and delete the tail
+               [(update-in-node layer [] assoc head-id (M head tail))
+                (update-in-node layer [] dissoc tail-id)]))
+    :unmerge (fn [head-id tail-id layer read]
+               '(let [merge-rev '...
+                      before-merge (at-revision layer (dec merge-rev))
+                      [head tail] (for [id [head-id tail-id]]
+                                    (get-in-node before-merge [id]))]
+                  (assoc-node layer tail-id (E* read tail))
+                  ;; walk
+                  ))))
 
 (defn ruminate-merge-edges [merge-layer layers keyseq f args]
-  (merge-impl merge-layer layers keyseq f args
-    [head-id tail-id layer read]
-    :merge (when-let [incoming (child layer :incoming)]
-             ;; use incoming layer to find all edges to the tail, and point them at the
-             ;; head instead
-             (for [[from-id incoming-edge] (read incoming [tail-id :edges])
-                   :when (:exists incoming-edge)]
-               ;; combine the edges to the head and tail together, letting head win and
-               ;; ignoring deleted edges
-               (let [new-edge (reduce adjoin
-                                      (->> (for [to-id [tail-id head-id]]
-                                             (read layer [from-id :edges to-id]))
-                                           (filter :exists)))]
-                 (update-in-node layer [from-id :edges] adjoin
-                                 {tail-id {:exists false} ;; delete the edge to the tail
-                                  head-id new-edge}))))  ;; and write it to the head
-    :unmerge '...))
+  (merger merge-layer layers keyseq f args
+    :merge (fn [head-id tail-id layer read]
+             (when-let [incoming (child layer :incoming)]
+              ;; use incoming layer to find all edges to the tail, and point them at the
+              ;; head instead
+              (for [[from-id incoming-edge] (read incoming [tail-id :edges])
+                    :when (:exists incoming-edge)]
+                ;; combine the edges to the head and tail together, letting head win and
+                ;; ignoring deleted edges
+                (let [new-edge (reduce adjoin
+                                       (->> (for [to-id [tail-id head-id]]
+                                              (read layer [from-id :edges to-id]))
+                                            (filter :exists)))]
+                  (update-in-node layer [from-id :edges] adjoin
+                                  {tail-id {:exists false} ;; delete the edge to the tail
+                                   head-id new-edge})))))  ;; and write it to the head
+    :unmerge (fn [head-id tail-id layer read]
+               '...)))
 
 (defn- update-leaves [layer new-root leaves-with-old-roots]
   (map-indexed (fn [i [leaf-id old-root]]
