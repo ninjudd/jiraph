@@ -94,11 +94,12 @@
       (compose-with read
         (apply update-in-node merge-layer keyseq f args
                (for [layer layers]
-                 (condp = f
-                   merge (fn [read]
-                           (compose-with read (merge-fn head-id tail-id layer read)))
-                   unmerge (fn [read]
-                             (compose-with read (unmerge-fn head-id tail-id layer read))))))))))
+                 (letfn [(call [f]
+                           (fn [read]
+                             (compose-with read (f head-id tail-id layer read))))]
+                   (condp = f
+                     merge (call merge-fn)
+                     unmerge (call unmerge-fn)))))))))
 
 (defn- ruminate-merge-node [merge-layer layers keyseq f args]
   (merger merge-layer layers keyseq f args
