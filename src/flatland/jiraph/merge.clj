@@ -169,6 +169,16 @@
                                          [(root-or-self get-root id)
                                           {:exists true}]))}))
 
+(defn merge-point [get-parent get-head tail-id]
+  (let [parents (iterate get-parent tail-id)
+        ;; walk up parent chain until tail-id is no longer the head - this is where
+        ;; tail-id first became a tail of the current merge
+        child-root (last (cons tail-id
+                               (take-while #(= tail-id (get-head %))
+                                           parents)))]
+    {:child child-root
+     :parent (get-parent child-root)}))
+
 (defn ruminate-merge [layer [] keyseq f args]
   (verify-merge-args! keyseq f args)
   (fn [read]
@@ -199,22 +209,16 @@
                   (verify (= head-id (get-head root))
                           (format "Can't unmerge %s from %s, as its head is actually %s"
                                   (pr-str tail-id) (pr-str head-id) (pr-str (get-head root))))
-                  (let [parents (iterate get-parent tail-id)
-                        ;; walk up parent chain until tail-id is no longer the head - this is where
-                        ;; tail-id first became a tail of the current merge
-                        tail-root (last (cons tail-id
-                                              (take-while #(= tail-id (get-head %))
-                                                          parents)))
-                        merge-point (get-parent tail-root)]
+                  (let [{:keys [child parent]} (merge-point get-parent get-head tail-id)]
                     (compose-with read
                       ;; disconnect tail's new root from the place where it was merged into head
-                      (update-in-node layer [merge-point :edges tail-root]
+                      (update-in-node layer [parent :edges child]
                                       adjoin {:exists false})
                       ;; update each of tail's leaves to point at its new root
                       (for [leaf-id (leaf-seq get-children tail-id)]
                         (update-in-node layer [leaf-id :edges] adjoin
                                         {root {:exists false} ;; also disconnect from old root
-                                         tail-root (val (get-root leaf-id))})))))))))
+                                         child (val (get-root leaf-id))})))))))))
 
 ;; - what revision tail was merged into head
 ;; - get versions of head/tail just prior to merge
