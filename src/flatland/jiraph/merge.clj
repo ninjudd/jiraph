@@ -5,7 +5,7 @@
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.layer :as layer :refer [child dispatch-update]]
             [flatland.retro.core :refer [at-revision]]
-            [flatland.useful.map :refer [update map-vals filter-vals]]
+            [flatland.useful.map :refer [update assoc-in* map-keys map-vals filter-vals]]
             [flatland.useful.seq :refer [assert-length]]
             [flatland.useful.utils :refer [adjoin invoke verify]]))
 
@@ -232,7 +232,7 @@
     (when-let [[root-id] (get-root id)]
       (get-head root-id))))
 
-(defn merge-head-finder [read layer]
+(defn merge-head-finder [read merge-layer]
   (merge-head-finder* (root-edge-finder read merge-layer)
                       (head-finder read merge-layer)))
 
