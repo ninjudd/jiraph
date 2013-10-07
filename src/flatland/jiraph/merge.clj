@@ -138,13 +138,13 @@
                '...)))
 
 (defn- update-leaves [layer new-root leaves-with-old-roots]
-  (map-indexed (fn [i [leaf-id old-root]]
-                 (cons (update-in-node layer [leaf-id :edges new-root]
-                                       adjoin {:exists true, :posiion i})
-                       (when old-root
-                         [(update-in-node layer [leaf-id :edges old-root]
-                                          adjoin {:exists false})])))
-               leaves-with-old-roots))
+  (->> leaves-with-old-roots
+       (map-indexed (fn [i [leaf-id old-root]]
+                      (cons (update-in-node layer [leaf-id :edges new-root]
+                                            adjoin {:exists true, :posiion i})
+                            (when old-root
+                              [(update-in-node layer [leaf-id :edges old-root]
+                                               adjoin {:exists false})]))))))
 
 (defn leaves-with-roots [get-root get-leaves id]
   (if-let [[old-root] (get-root id)]
