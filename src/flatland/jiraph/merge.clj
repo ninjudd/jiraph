@@ -100,7 +100,7 @@
           (fn [read]
             (compose-with read (impl head-id tail-id layer read))))))))
 
-(defn- ruminate-merge-node [merge-layer layers keyseq f args]
+(defn- ruminate-merge-nodes [merge-layer layers keyseq f args]
   (merger merge-layer layers keyseq f args
     :merge (fn [head-id tail-id layer read]
              (let [head (read layer [head-id])
