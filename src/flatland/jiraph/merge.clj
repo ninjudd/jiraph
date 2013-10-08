@@ -1,10 +1,10 @@
 (ns flatland.jiraph.merge
   (:refer-clojure :exclude [merge])
   (:require [clojure.core :as clojure]
-            [flatland.jiraph.graph :refer [compose update-in-node get-in-node assoc-node]]
+            [flatland.jiraph.graph :as graph :refer [compose update-in-node get-in-node assoc-node]]
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.layer :as layer :refer [child dispatch-update]]
-            [flatland.retro.core :refer [at-revision]]
+            [flatland.retro.core :as retro :refer [at-revision]]
             [flatland.useful.map :refer [update assoc-in* map-keys map-vals filter-vals]]
             [flatland.useful.seq :refer [assert-length]]
             [flatland.useful.utils :refer [adjoin invoke verify]]))
@@ -87,6 +87,47 @@
    (fn [root-id]
      (read merge-layer [root-id :head]))))
 
+(defn root-or-self [get-root id]
+  (if-let [[root] (get-root id)]
+    root
+    id))
+
+(defn edge-merger [read layer]
+  (let [get-root (root-edge-finder read layer)
+        get-head (head-finder read layer)]
+    (fn E [node]
+      (update node :edges
+              (fn [edges]
+                (->> edges
+                     (map (fn [[to-id edge]]
+                            (if-let [[root-id {:keys [position]}] (get-root to-id)]
+                              [position (get-head root-id) edge]
+                              [0 to-id edge])))
+                     (sort-by (comp - first))
+                     (reduce (fn [edges [position head-id edge]]
+                               (update edges head-id adjoin edge))
+                             nil)))))))
+
+(defn reassemble-merged-node [read merge-layer base-layer head-id]
+  (let [phantom-layer (child base-layer :phantom)
+        get-children (child-finder read merge-layer)
+        get-root (root-edge-finder read merge-layer)]
+    (letfn [(first-merged [id]
+              (first (layer/get-revisions merge-layer id)))
+            (get-revisioned [leaf-id revision]
+              (-> (at-revision base-layer revision)
+                  (graph/get-node leaf-id)))
+            (merged-node* [id]
+              (let [merge-revision (first-merged id)]
+                (if-let [children (seq (get-children id))]
+                  (let [E (edge-merger graph/get-in-node (at-revision merge-layer merge-revision))]
+                    (-> (reduce M (map (comp E merged-node*)
+                                       children))
+                        (adjoin (read phantom-layer [id]))))
+                  (get-revisioned id merge-revision))))]
+      (let [E (edge-merger read merge-layer)]
+        (E (merged-node* (root-or-self get-root head-id)))))))
+
 (defn merger [merge-layer layers keyseq f args & {merge-fn :merge unmerge-fn :unmerge}]
   (verify (and merge-fn unmerge-fn) "Gotta pass em all")
   (verify-merge-args! keyseq f args)
@@ -152,11 +193,6 @@
          (sort-by (comp val :position))
          (map #(list (key %) old-root)))
     [[id]]))
-
-(defn root-or-self [get-root id]
-  (if-let [[root] (get-root id)]
-    root
-    id))
 
 (defn- create-root
   "Create new root at [root-id], adding edges from it to the roots of [head-id] and [tail-id] and
