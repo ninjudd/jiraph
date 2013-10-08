@@ -92,21 +92,19 @@
     root
     id))
 
-(defn edge-merger [read layer]
-  (let [get-root (root-edge-finder read layer)
-        get-head (head-finder read layer)]
-    (fn E [node]
-      (update node :edges
-              (fn [edges]
-                (->> edges
-                     (map (fn [[to-id edge]]
-                            (if-let [[root-id {:keys [position]}] (get-root to-id)]
-                              [position (get-head root-id) edge]
-                              [0 to-id edge])))
-                     (sort-by (comp - first))
-                     (reduce (fn [edges [position head-id edge]]
-                               (update edges head-id adjoin edge))
-                             nil)))))))
+(defn edge-merger [read merge-layer]
+  (let [get-root (root-edge-finder read merge-layer)
+        get-head (head-finder read merge-layer)]
+    (fn E [edges]
+      (->> edges
+           (map (fn [[to-id edge]]
+                  (if-let [[root-id {:keys [position]}] (get-root to-id)]
+                    [position (get-head root-id) edge]
+                    [0 to-id edge])))
+           (sort-by (comp - first))
+           (reduce (fn [edges [position head-id edge]]
+                     (update edges head-id adjoin edge))
+                   nil)))))
 
 (defn reassemble-merged-node [read merge-layer base-layer head-id]
   (let [phantom-layer (child base-layer :phantom)
