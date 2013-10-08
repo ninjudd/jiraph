@@ -118,13 +118,10 @@
             (merged-node* [id]
               (let [merge-revision (first-merged id)]
                 (if-let [children (seq (get-children id))]
-                  (let [E (edge-merger graph/get-in-node (at-revision merge-layer merge-revision))]
-                    (-> (reduce M (map (comp E merged-node*)
-                                       children))
-                        (adjoin (read phantom-layer [id]))))
+                  (-> (reduce M (map merged-node* children))
+                      (adjoin (read phantom-layer [id])))
                   (get-revisioned id merge-revision))))]
-      (let [E (edge-merger read merge-layer)]
-        (E (merged-node* (root-or-self get-root head-id)))))))
+      (merged-node* (root-or-self get-root head-id)))))
 
 (defn merger [merge-layer layers keyseq f args & {merge-fn :merge unmerge-fn :unmerge}]
   (verify (and merge-fn unmerge-fn) "Gotta pass em all")
