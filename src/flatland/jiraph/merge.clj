@@ -167,7 +167,22 @@
                                    {tail-id {:exists false} ;; delete the edge to the tail
                                     head-id new-edge})))))  ;; and write it to the head
     :unmerge (fn [head-id tail-id layer read]
-               '...)))
+               (when-let [incoming (child layer :incoming)]
+                 ;; apply E to the head, the tail, and all nodes with an edge to tail-id.
+                 (let [E (edge-merger read merge-layer)]
+                   [(for [id [head-id tail-id]]
+                      ;; TODO make this read from node-merging-only layer and write to edge-merging
+                      (update-in-node layer [id :edges] E))
+                    (for [[from-id incoming-edge] (read incoming [head-id :edges])
+                          :when (:exists incoming-edge)]
+                      ;; TODO maybe optimize this - calling E on the whole node is extravagant, and
+                      ;; we reset where we could conceivably compute a diff and then rewrite it in
+                      ;; terms of adjoin. eg, because in protobuf edges disappear when set to
+                      ;; :exists false, we could rewrite to something like [(adjoin {:edges {foo
+                      ;; {:exists false}}}), (adjoin {:edges {foo {:exists true, :data
+                      ;; blah}}})]. since this "disappearing" feature only exists in protobuf, this
+                      ;; will require some more thought to get right.
+                      (update-in-node layer [from-id :edges] E))])))))
 
 ;; options:
 ;;
