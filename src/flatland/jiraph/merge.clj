@@ -150,31 +150,27 @@
                [(update-in-node layer [] assoc head-id (M head tail))
                 (update-in-node layer [] dissoc tail-id)]))
     :unmerge (fn [head-id tail-id layer read]
-               '(let [merge-rev '...
-                      before-merge (at-revision layer (dec merge-rev))
-                      [head tail] (for [id [head-id tail-id]]
-                                    (get-in-node before-merge [id]))]
-                  (assoc-node layer tail-id (E* read tail))
-                  ;; walk
-                  ))))
+               (for [id [head-id tail-id]]
+                 (update-in-node layer [] assoc id
+                                 (reassemble-merged-node read merge-layer layer id))))))
 
 (defn ruminate-merge-edges [merge-layer layers keyseq f args]
   (merger merge-layer layers keyseq f args
     :merge (fn [head-id tail-id layer read]
              (when-let [incoming (child layer :incoming)]
-              ;; use incoming layer to find all edges to the tail, and point them at the
-              ;; head instead
-              (for [[from-id incoming-edge] (read incoming [tail-id :edges])
-                    :when (:exists incoming-edge)]
-                ;; combine the edges to the head and tail together, letting head win and
-                ;; ignoring deleted edges
-                (let [new-edge (reduce adjoin
-                                       (->> (for [to-id [tail-id head-id]]
-                                              (read layer [from-id :edges to-id]))
-                                            (filter :exists)))]
-                  (update-in-node layer [from-id :edges] adjoin
-                                  {tail-id {:exists false} ;; delete the edge to the tail
-                                   head-id new-edge})))))  ;; and write it to the head
+               ;; use incoming layer to find all edges to the tail, and point them at the
+               ;; head instead
+               (for [[from-id incoming-edge] (read incoming [tail-id :edges])
+                     :when (:exists incoming-edge)]
+                 ;; combine the edges to the head and tail together, letting head win and
+                 ;; ignoring deleted edges
+                 (let [new-edge (reduce adjoin
+                                        (->> (for [to-id [tail-id head-id]]
+                                               (read layer [from-id :edges to-id]))
+                                             (filter :exists)))]
+                   (update-in-node layer [from-id :edges] adjoin
+                                   {tail-id {:exists false} ;; delete the edge to the tail
+                                    head-id new-edge})))))  ;; and write it to the head
     :unmerge (fn [head-id tail-id layer read]
                '...)))
 
