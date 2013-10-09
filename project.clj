@@ -1,4 +1,4 @@
-(defproject org.flatland/jiraph "0.12.1-SNAPSHOT"
+(defproject org.flatland/jiraph "0.12.1"
   :description "embedded graph db library for clojure"
   :url "https://github.com/flatland/jiraph"
   :license {:name "Eclipse Public License - v 1.0"
@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.clojure/core.match "0.2.0-alpha11"]
                  [org.flatland/masai "0.8.0"]
-                 [org.flatland/useful "0.9.2"]
+                 [org.flatland/useful "0.10.4"]
                  [org.flatland/cereal "0.3.0"]
                  [org.flatland/ordered "1.4.0"]
                  [org.flatland/schematic "0.1.0"]
