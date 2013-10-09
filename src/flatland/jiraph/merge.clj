@@ -349,9 +349,18 @@
    Writes to these returned layers will automatically update each other as needed to keep the merged
    views consistent."
   [merge-layer layers]
-  [(ruminate/make merge-layer layers ruminate-merge)
+  [(-> merge-layer
+       (ruminate/make [] ruminate-merge)  ;; M.r
+       (ruminate/make (for [layer layers] ;; M.n
+                        (child layer :without-edge-merging))
+                      ruminate-merge-nodes)
+       (ruminate/make layers ruminate-merge-edges)) ;; M.e
    (for [layer layers]
-     (ruminate/make layer [merge-layer] ruminate-merging-nodes))])
+     (let [node-merging-only (ruminate/make (child layer :without-edge-merging) ;; A.n
+                                            [merge-layer]
+                                            ruminate-merging-nodes)]
+       (ruminate/make layer [node-merging-only merge-layer] ;; A.e
+                      ruminate-merging-edges)))])
 
 
 #_(merged m [(parent/make tree-base {:phantom tree-phantom})
