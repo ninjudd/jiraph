@@ -9,7 +9,7 @@
             [flatland.jiraph.resettable :as resettable]
             [flatland.retro.core :as retro]
             [flatland.useful.utils :refer [adjoin]]
-            [flatland.useful.map :refer [update]])
+            [flatland.useful.map :refer [update filter-vals]])
   (:use flatland.useful.debug)
   (:use flatland.useful.debug))
 
@@ -61,6 +61,47 @@
              (graph/get-node n "a"))))
 
     (graph/close m e)))
+
+(deftest crisscross-edges
+  (testing "merge from-ids first"
+    (let [[m [e]] (make-merged)
+          n (graph/child e :without-edge-merging)]
+      (graph/open m e)
+      (graph/txn (graph/update-node e "a" adjoin {:edges {"b'" {:type "head->tail" :exists true}}}))
+      (graph/txn (graph/update-node e "a'" adjoin {:edges {"b" {:type "tail->head" :exists true}}}))
+      (testing "merge from-ids"
+        (graph/txn (graph/update-node m "a" merge/merge "a'" "p1"))
+        (is (= {:edges {"b'" {:exists true, :type "head->tail"}
+                        "b" {:exists true, :type "tail->head"}}}
+               (graph/get-node e "a")))
+        (is (not (graph/get-node e "a'"))))
+      (testing "merge to-ids"
+        (graph/txn (graph/update-node m "b" merge/merge "b'" "p2"))
+        (is (= {:edges {"b" {:exists true, :type "tail->head"}}}
+               (-> (graph/get-node e "a")
+                   (update :edges filter-vals :exists)))))
+      (graph/close m e)))
+
+  (testing "merge to-ids first"
+    (let [[m [e]] (make-merged)
+          n (graph/child e :without-edge-merging)]
+      (graph/open m e)
+      (graph/txn (graph/update-node e "a" adjoin {:edges {"b'" {:type "head->tail" :exists true}}}))
+      (graph/txn (graph/update-node e "a'" adjoin {:edges {"b" {:type "tail->head" :exists true}}}))
+      (testing "merge to-ids"
+        (graph/txn (graph/update-node m "b" merge/merge "b'" "p2"))
+        (is (= {:edges {"b" {:exists true :type "head->tail"}}}
+               (-> (graph/get-node e "a")
+                   (update :edges filter-vals :exists))))
+        (is (= {:edges {"b" {:exists true :type "tail->head"}}}
+               (graph/get-node e "a'"))))
+      (testing "merge from-ids"
+        (graph/txn (graph/update-node m "a" merge/merge "a'" "p1"))
+        (is (= {:edges {"b" {:exists true, :type "tail->head"}}}
+               (-> (graph/get-node e "a")
+                   (update :edges filter-vals :exists))))
+        (is (not (graph/get-node e "a'"))))
+      (graph/close m e))))
 
 (comment
   (defn empty-graph [f]
