@@ -15,7 +15,7 @@
   ([read revisioning-layer id revision]
      (-> revisioning-layer
          (at-revision revision)
-         (read [id :edition]))))
+         (read [id :edition] 0))))
 
 ;; note layer will need a key codec that supports revision markers somewhere.  can we wrap the key
 ;; codec of the underlying layer to prepend an int64? probably, but then we are tied to masai.
@@ -25,12 +25,11 @@
   [layer [revisioning-layer]]
   layer/Basic
   (get-node [this id not-found]
-    (let [revision (current-revision this)]
-      (if-let [current-edition (get-edition revisioning-layer id revision)]
-        (-> layer
-            (at-revision revision)
-            (layer/get-node (add-edition-to-id id current-edition) not-found))
-        not-found)))
+    (let [revision (current-revision this)
+          current-edition (get-edition revisioning-layer id revision)]
+      (-> layer
+          (at-revision revision)
+          (layer/get-node (add-edition-to-id id current-edition) not-found))))
 
   (update-in-node [this keyseq f args]
     (fn [read]
@@ -39,7 +38,7 @@
                                                    (fn dissoc* [id] [id nil ::dissoc nil])
                                                    (fn update* [id keys] [id keys f args]))
             revision (current-revision this)
-            old-edition (or (get-edition read revisioning-layer id revision) 0)
+            old-edition (get-edition read revisioning-layer id revision)
             old-id (add-edition-to-id id old-edition)]
         (-> (if (reset? keyseq f)
               (let [new-id (add-edition-to-id id (inc old-edition))]
@@ -58,7 +57,7 @@
   layer/Optimized
   (query-fn [this keyseq not-found f]
     (when-let [[id & keys] (seq keyseq)]
-      (when-let [edition (get-edition revisioning-layer id (current-revision this))]
+      (let [edition (get-edition revisioning-layer id (current-revision this))]
         (layer/query-fn layer (cons (add-edition-to-id id edition)
                                     keys)
                         not-found f))))
