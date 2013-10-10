@@ -312,25 +312,26 @@
   (let [phantom (child layer :phantom)]
     (fn [read]
       (compose-with read
-        (let [merge-head (merge-head-finder read merge-layer)
-              [use-phantom? & update-args]
-              ,,(dispatch-update keyseq f args
-                                 (fn assoc* [id val]
-                                   (if-let [head (merge-head read merge-layer id)]
-                                     [true [] assoc head val]
-                                     [false [] assoc id val]))
-                                 (fn dissoc* [id]
-                                   (if-let [head (merge-head id)]
-                                     [true [] dissoc head]
-                                     [false [] dissoc id]))
-                                 (fn update* [id keys]
-                                   (if-let [head (merge-head id)]
-                                     (list* true (cons head keys) f args)
-                                     (list* false (cons id keys) f args))))]
-          (for [layer (cons layer (when (and phantom use-phantom?)
-                                    (verify-adjoin! f " to phantom layer, as it would not be unmergeable")
-                                    [phantom]))]
-            (apply update-in-node layer update-args)))))))
+        (let [find-root (root-edge-finder read merge-layer)
+              get-head (head-finder read merge-layer)
+              head+root (fn [id]
+                          (if-let [[root] (find-root id)]
+                            [(get-head root) root]
+                            [id]))
+              [layer-args phantom-args] (dispatch-update keyseq f args
+                                                         (fn assoc* [id val]
+                                                           (for [id (head+root id)]
+                                                             [[] assoc id val]))
+                                                         (fn dissoc* [id]
+                                                           (for [id (head+root id)]
+                                                             [[] dissoc id]))
+                                                         (fn update* [id keys]
+                                                           (for [id (head+root id)]
+                                                             (list* (cons id keys) f args))))]
+          [(apply update-in-node layer layer-args)
+           (when (and phantom phantom-args)
+             (verify-adjoin! f " to phantom layer, as it would not be unmergeable")
+             (apply update-in-node phantom phantom-args))])))))
 
 (defn- ruminate-merging-edges [layer [node-merging-only merge-layer] keyseq f args]
   (fn [read]
