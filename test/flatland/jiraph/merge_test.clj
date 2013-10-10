@@ -49,17 +49,30 @@
                                            "b" {:x 1 :foo 1 :exists true}}}
              (graph/get-node n "a")))
       (is (not (graph/get-node e "a1"))))
+    (testing "write after merge"
+      (graph/txn (graph/update-in-node e ["a"] adjoin {:data "blah"}))
+      (is (= {:size 10 :data "blah" :edges {"c" {:x 8 :bar "win" :exists true}
+                                            "b" {:x 1 :foo 1 :exists true}}}
+             (graph/get-node e "a")))
+      (is (= {:size 10 :data "blah" :edges {"c" {:x 8 :bar "win" :exists true}
+                                            "b" {:x 1 :foo 1 :exists true}}}
+             (graph/get-node n "a")))
+      (is (not (graph/get-node e "a1"))))
     (testing "merge edges"
       (graph/txn (graph/update-in-node m ["b"] merge/merge "c" "p2"))
       (let [{:keys [edges] :as node} (graph/get-node e "a")]
-        (is (= {:size 10 :data "sam"} (dissoc node :edges)))
+        (is (= {:size 10 :data "blah"} (dissoc node :edges)))
         (is (not (:exists (get edges "c"))))
         (is (= {:x 1 :foo 1 :bar "win" :exists true}
                (get edges "b"))))
-      (is (= {:size 10 :data "sam" :edges {"b" {:x 1 :foo 1 :exists true}
-                                           "c" {:bar "win" :x 8 :exists true}}}
+      (is (= {:size 10 :data "blah" :edges {"b" {:x 1 :foo 1 :exists true}
+                                            "c" {:bar "win" :x 8 :exists true}}}
              (graph/get-node n "a"))))
-
+    (testing "write edges after merge"
+      (graph/txn (graph/update-in-node e ["a" :edges "b"] adjoin {:x 30}))
+      (is (= {:size 10 :data "blah" :edges {"b" {:bar "win" :foo 1 :x 30 :exists true}}}
+             (-> (graph/get-node e "a")
+                 (update :edges filter-vals :exists)))))
     (graph/close m e)))
 
 (deftest crisscross-edges
@@ -109,10 +122,37 @@
     (graph/open m e)
     (graph/txn (graph/update-in-node (at-revision e 0) ["a"] adjoin {:size 10}))
     (graph/txn (graph/update-in-node (at-revision e 1) ["b"] adjoin {:size 5 :foo 1}))
-    (graph/txn (graph/update-in-node (at-revision m 2) ["a"] merge/merge "b" "p1"))
-    (graph/txn (graph/update-in-node (at-revision m 3) ["a"] merge/unmerge "b"))
-    (is (= {:size 10} (graph/get-node e "a")))
+    (graph/txn (graph/update-in-node (at-revision e 2) ["a"] adjoin {:size 100}))
+    (graph/txn (graph/update-in-node (at-revision m 3) ["a"] merge/merge "b" "p1"))
+    (graph/txn (graph/update-in-node (at-revision m 4) ["a"] merge/unmerge "b"))
+    (is (= {:size 100} (graph/get-node e "a")))
     (is (= {:size 5 :foo 1} (graph/get-node e "b")))
+    (graph/close m e)))
+
+(deftest edge-unmerging
+  (let [[m [e]] (make-merged)
+        n (graph/child e :without-edge-merging)]
+    (graph/open m e)
+    (graph/txn (graph/update-in-node (at-revision e 0) ["a" :edges]
+                                     adjoin {"x" {:foo 1 :exists true}
+                                             "y" {:foo 2 :exists true}}))
+    (graph/txn (graph/update-in-node (at-revision e 1) ["b" :edges]
+                                     adjoin {"z" {:foo 10 :exists true}
+                                             "y" {:foo 20 :exists true}}))
+    (graph/txn (graph/update-in-node (at-revision m 2) ["y"] merge/merge "x" "p1"))
+    (graph/txn (graph/update-in-node (at-revision m 3) ["a"] merge/merge "b" "p2"))
+    (is (= {"y" {:foo 2 :exists true}
+            "z" {:foo 10 :exists true}}
+           (graph/get-in-node e ["a" :edges])))
+    (graph/txn (graph/update-in-node (at-revision e 4) ["a" :edges "y"] adjoin {:exists false}))
+    (graph/txn (graph/update-in-node (at-revision m 5) ["y"] merge/unmerge "x"))
+    (graph/txn (graph/update-in-node (at-revision m 6) ["a"] merge/unmerge "b"))
+    (is (= {"x" {:foo 1 :exists true}
+            "y" {:foo 2 :exists false}}
+           (graph/get-in-node e ["a" :edges])))
+    (is (= {"z" {:foo 10 :exists true}
+            "y" {:foo 20 :exists true}}
+           (graph/get-in-node e ["b" :edges])))
     (graph/close m e)))
 
 (comment
