@@ -243,7 +243,7 @@
       (apply f (query-fn) args)
       (let [[id & keys] keyseq
             node (get-node layer id nil)]
-        (apply f (get-in node keys) args)))))
+        (apply f (get-in node keys not-found) args)))))
 
 (defn query-in-node
   "Fetch data from inside a node and immediately call a function on it."
