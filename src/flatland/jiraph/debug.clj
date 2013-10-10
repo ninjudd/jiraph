@@ -3,8 +3,12 @@
   (:require [flatland.retro.core :as retro :refer [Transactional txn-begin! txn-commit! txn-rollback!
                                           OrderedRevisions revision-range touch
                                           Revisioned current-revision at-revision]]
+            [flatland.jiraph.graph :as graph]
+            [flatland.useful.debug :refer [?]]
+            [flatland.useful.map :refer [update]]
             [flatland.jiraph.wrapped-layer :refer [defwrapped update-wrap-read forward-reads]]
             [flatland.useful.datatypes :refer [assoc-record]]
+            [clojure.pprint :refer [pprint]]
             [clojure.string :as s]))
 
 (defn- log [layer f-name display-name args thunk]
@@ -72,3 +76,15 @@
 
 (defmacro make [base-layer layer-name & log-functions]
   `(make* ~base-layer '~layer-name '~(set log-functions)))
+
+(defmacro ?rev
+  ([ioval]
+     `(?rev graph/get-in-node ~ioval))
+  ([read ioval]
+     `(let [io# ~ioval
+            actions# (map #(-> (select-keys % [:layer :keyseq :f :args])
+                               (update :layer get-in [:db :opts :path]))
+                          (io# ~read))]
+        (printf "%s is:%n" ~(pr-str ioval))
+        (pprint actions#)
+        io#)))

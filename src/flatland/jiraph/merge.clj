@@ -3,6 +3,7 @@
   (:require [clojure.core :as clojure]
             [flatland.jiraph.graph :as graph :refer [compose update-in-node get-in-node assoc-node]]
             [flatland.jiraph.ruminate :as ruminate]
+            [flatland.jiraph.debug :refer [?rev]]
             [flatland.jiraph.layer :as layer :refer [child dispatch-update]]
             [flatland.retro.core :as retro :refer [at-revision]]
             [flatland.useful.map :refer [update assoc-in* filter-keys-by-val map-keys map-vals filter-vals]]
