@@ -204,7 +204,7 @@
   (->> leaves-with-old-roots
        (map-indexed (fn [i [leaf-id old-root]]
                       (cons (update-in-node layer [leaf-id :edges new-root]
-                                            adjoin {:exists true, :posiion i})
+                                            adjoin {:exists true, :position i})
                             (when old-root
                               [(update-in-node layer [leaf-id :edges old-root]
                                                adjoin {:exists false})]))))))
