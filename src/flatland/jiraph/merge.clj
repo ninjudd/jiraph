@@ -237,29 +237,29 @@
     {:child child-root
      :parent (get-parent child-root)}))
 
-(defn ruminate-merge [layer [] keyseq f args]
+(defn ruminate-merge [merge-layer [] keyseq f args]
   (verify-merge-args! keyseq f args)
   (fn [read]
     (let [mread (memoize read)
           [head-id] keyseq
           [tail-id root-id] args
-          get-head (head-finder mread layer)
-          get-root (root-edge-finder mread layer)
-          get-leaves (leaf-finder mread layer)]
+          get-head (head-finder mread merge-layer)
+          get-root (root-edge-finder mread merge-layer)
+          get-leaves (leaf-finder mread merge-layer)]
       (condp = f
-        merge (if (seq (read layer [root-id]))
+        merge (if (seq (read merge-layer [root-id]))
                 (throw (IllegalStateException.
                         (format "Can't use %s as root of new merge, as it already exists"
                                 (pr-str root-id))))
                 (compose-with read
                   ;; point head's and tail's leaves at new root
-                  (update-leaves layer root-id
+                  (update-leaves merge-layer root-id
                                  (mapcat (partial leaves-with-roots get-root get-leaves)
                                          [head-id tail-id]))
                   ;; create new root, above old roots
-                  (create-root layer get-root root-id head-id tail-id)))
-        unmerge (let [get-parent (parent-finder mread layer)
-                      get-children (child-finder mread layer)
+                  (create-root merge-layer get-root root-id head-id tail-id)))
+        unmerge (let [get-parent (parent-finder mread merge-layer)
+                      get-children (child-finder mread merge-layer)
                       [root] (get-root tail-id)]
                   (verify root
                           (format "Can't unmerge %s from %s, as it is not merged into anything"
@@ -270,11 +270,11 @@
                   (let [{:keys [child parent]} (merge-point get-parent get-head tail-id)]
                     (compose-with read
                       ;; disconnect tail's new root from the place where it was merged into head
-                      (update-in-node layer [parent :edges child]
+                      (update-in-node merge-layer [parent :edges child]
                                       adjoin {:exists false})
                       ;; update each of tail's leaves to point at its new root
                       (for [leaf-id (leaf-seq get-children tail-id)]
-                        (update-in-node layer [leaf-id :edges] adjoin
+                        (update-in-node merge-layer [leaf-id :edges] adjoin
                                         {root {:exists false} ;; also disconnect from old root
                                          child (val (get-root leaf-id))})))))))))
 
