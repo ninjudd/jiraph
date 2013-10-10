@@ -332,16 +332,15 @@
             (apply update-in-node layer update-args)))))))
 
 (defn- ruminate-merging-edges [layer [node-merging-only merge-layer] keyseq f args]
-  (let [phantom (child layer :phantom)]
-    (fn [read]
-      (compose-with read
-        (verify-adjoin! f " because handling it would be hard.")
-        (apply update-in-node node-merging-only keyseq f args)
-        (let [merge-head (merge-head-finder read merge-layer)
-              [from-id & keys] keyseq]
-          (update-in-node layer [from-id] adjoin
-                          (-> (apply assoc-in* {} keys (assert-length 1 args))
-                              (update :edges map-keys #(or (merge-head %) %)))))))))
+  (fn [read]
+    (compose-with read
+      (verify-adjoin! f " because handling it would be hard.")
+      (apply update-in-node node-merging-only keyseq f args)
+      (let [merge-head (merge-head-finder read merge-layer)
+            [from-id & keys] keyseq]
+        (update-in-node layer [from-id] adjoin
+                        (-> (apply assoc-in* {} keys (assert-length 1 args))
+                            (update :edges map-keys #(or (merge-head %) %))))))))
 
 (defn make
   "layers needs to be a map of layer names to base layers. The base layer will be used to store a
