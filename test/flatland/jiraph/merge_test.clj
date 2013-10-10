@@ -7,7 +7,7 @@
             [flatland.jiraph.parent :as parent]
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.resettable :as resettable]
-            [flatland.retro.core :as retro]
+            [flatland.retro.core :as retro :refer [at-revision]]
             [flatland.useful.utils :refer [adjoin]]
             [flatland.useful.map :refer [update filter-vals]])
   (:use flatland.useful.debug)
@@ -102,6 +102,18 @@
                    (update :edges filter-vals :exists))))
         (is (not (graph/get-node e "a'"))))
       (graph/close m e))))
+
+(deftest basic-unmerging
+  (let [[m [e]] (make-merged)
+        n (graph/child e :without-edge-merging)]
+    (graph/open m e)
+    (graph/txn (graph/update-in-node (at-revision e 0) ["a"] adjoin {:size 10}))
+    (graph/txn (graph/update-in-node (at-revision e 1) ["b"] adjoin {:size 5 :foo 1}))
+    (graph/txn (graph/update-in-node (at-revision m 2) ["a"] merge/merge "b" "p1"))
+    (graph/txn (graph/update-in-node (at-revision m 3) ["a"] merge/unmerge "b"))
+    (is (= {:size 10} (graph/get-node e "a")))
+    (is (= {:size 5 :foo 1} (graph/get-node e "b")))
+    (graph/close m e)))
 
 (comment
   (defn empty-graph [f]
