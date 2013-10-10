@@ -113,15 +113,15 @@
         get-root (root-edge-finder read merge-layer)]
     (letfn [(first-merged [id]
               (first (layer/get-revisions merge-layer id)))
-            (get-revisioned [leaf-id revision]
-              (-> (at-revision base-layer revision)
+            (get-before [leaf-id revision]
+              (-> (at-revision base-layer (dec revision))
                   (graph/get-node leaf-id)))
             (merged-node* [id]
               (let [merge-revision (first-merged id)]
                 (if-let [children (seq (get-children id))]
                   (-> (reduce M (map merged-node* children))
                       (adjoin (read phantom-layer [id])))
-                  (get-revisioned id merge-revision))))]
+                  (get-before id merge-revision))))]
       (merged-node* (root-or-self get-root head-id)))))
 
 (defn merger [merge-layer layers keyseq f args & {merge-fn :merge unmerge-fn :unmerge}]
