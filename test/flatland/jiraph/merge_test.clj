@@ -3,11 +3,14 @@
   (:require [flatland.jiraph.layer.masai :as masai]
             [flatland.jiraph.graph :as graph]
             [flatland.jiraph.merge :as merge]
+            [flatland.jiraph.debug :refer [?rev]]
             [flatland.jiraph.parent :as parent]
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.resettable :as resettable]
             [flatland.retro.core :as retro]
-            [flatland.useful.utils :refer [adjoin]])
+            [flatland.useful.utils :refer [adjoin]]
+            [flatland.useful.map :refer [update]])
+  (:use flatland.useful.debug)
   (:use flatland.useful.debug))
 
 (defn make-merged []
@@ -20,17 +23,44 @@
                   [(-> (ruminate/incoming E (layer))
                        (parent/make {:without-edge-merging (parent/make N {:phantom P})}))]))))
 
-
 (deftest basic-writing
-  (let [[m [n]] (make-merged)]
+  (let [[m [e]] (make-merged)
+        n (graph/child e :without-edge-merging)]
     (is m)
-    (is n)
-    (graph/open m n)
+    (is e)
+    (graph/open m e)
     (testing "writing a node"
-      (graph/txn (graph/update-in-node n ["a"] adjoin {:size 10}))
-      (is (= {:size 10} (graph/get-node n "a")))
-      (is (= {:size 10} (graph/get-node (graph/child n :without-edge-merging) "a"))))
-    (graph/close m n)))
+      (graph/txn (graph/update-in-node e ["a"] adjoin {:size 10}))
+      (is (= {:size 10} (graph/get-node e "a")))
+      (is (= {:size 10} (graph/get-node n "a"))))
+    (testing "writing some edges"
+      (graph/txn (graph/update-in-node e ["a" :edges] adjoin {"b" {:exists true :foo 1}}))
+      (is (= {:foo 1 :exists true} (graph/get-in-node e ["a" :edges "b"])))
+      (is (= {:foo 1 :exists true} (graph/get-in-node n ["a" :edges "b"]))))
+    (testing "merge node data"
+      (graph/txn (graph/update-in-node e ["a1"] adjoin {:edges {"c" {:x 8 :bar "win" :exists true}
+                                                                "b" {:x 1 :foo "lose" :exists true}}
+                                                        :size 5, :data "sam"}))
+      (graph/txn (graph/update-node m "a" merge/merge "a1" "p1"))
+      (is (= {:size 10 :data "sam" :edges {"c" {:x 8 :bar "win" :exists true}
+                                           "b" {:x 1 :foo 1 :exists true}}}
+             (graph/get-node e "a")))
+      (is (= {:size 10 :data "sam" :edges {"c" {:x 8 :bar "win" :exists true}
+                                           "b" {:x 1 :foo 1 :exists true}}}
+             (graph/get-node n "a")))
+      (is (not (graph/get-node e "a1"))))
+    (testing "merge edges"
+      (graph/txn (graph/update-in-node m ["b"] merge/merge "c" "p2"))
+      (let [{:keys [edges] :as node} (graph/get-node e "a")]
+        (is (= {:size 10 :data "sam"} (dissoc node :edges)))
+        (is (not (:exists (get edges "c"))))
+        (is (= {:x 1 :foo 1 :bar "win" :exists true}
+               (get edges "b"))))
+      (is (= {:size 10 :data "sam" :edges {"b" {:x 1 :foo 1 :exists true}
+                                           "c" {:bar "win" :x 8 :exists true}}}
+             (graph/get-node n "a"))))
+
+    (graph/close m e)))
 
 (comment
   (defn empty-graph [f]
