@@ -26,9 +26,10 @@
     (is m)
     (is n)
     (graph/open m n)
-    (graph/txn (graph/update-in-node (retro/at-revision n 0) ["a"] adjoin {:size 10}))
-    (is (= {:size 10} (graph/get-node n "a")))
-    (is (= {:size 10} (graph/get-node (graph/child n :without-edge-merging) "a")))
+    (testing "writing a node"
+      (graph/txn (graph/update-in-node n ["a"] adjoin {:size 10}))
+      (is (= {:size 10} (graph/get-node n "a")))
+      (is (= {:size 10} (graph/get-node (graph/child n :without-edge-merging) "a"))))
     (graph/close m n)))
 
 (comment
