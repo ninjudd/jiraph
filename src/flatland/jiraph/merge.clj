@@ -338,7 +338,7 @@
                           (-> (assoc-in* {} keys (assert-length 1 args))
                               (update :edges map-keys #(or (merge-head %) %)))))))))
 
-(defn merged
+(defn make
   "layers needs to be a map of layer names to base layers. The base layer will be used to store a
    merged view of tha data written to the merging layer, as determined by merges written to the
    merge-layer. Each base layer must have a child named :phantom, which will be used to store
