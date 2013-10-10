@@ -275,8 +275,9 @@
                       ;; update each of tail's leaves to point at its new root
                       (for [leaf-id (leaf-seq get-children tail-id)]
                         (update-in-node merge-layer [leaf-id :edges] adjoin
-                                        {root {:exists false} ;; also disconnect from old root
-                                         child (val (get-root leaf-id))})))))))))
+                                        (into {root {:exists false}} ;; disconnect from old root
+                                              (when (not= child leaf-id)
+                                                {child (val (get-root leaf-id))})))))))))))
 
 ;; - what revision tail was merged into head
 ;; - get versions of head/tail just prior to merge
