@@ -335,11 +335,11 @@
     (fn [read]
       (compose-with read
         (verify-adjoin! f " because handling it would be hard.")
-        (update-in-node node-merging-only keyseq f args)
+        (apply update-in-node node-merging-only keyseq f args)
         (let [merge-head (merge-head-finder read merge-layer)
               [from-id & keys] keyseq]
           (update-in-node layer [from-id] adjoin
-                          (-> (assoc-in* {} keys (assert-length 1 args))
+                          (-> (apply assoc-in* {} keys (assert-length 1 args))
                               (update :edges map-keys #(or (merge-head %) %)))))))))
 
 (defn make
