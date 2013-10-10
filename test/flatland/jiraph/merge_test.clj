@@ -1,8 +1,36 @@
 (ns flatland.jiraph.merge-test
-  (:use clojure.test flatland.jiraph.core flatland.jiraph.merge)
+  (:use clojure.test)
   (:require [flatland.jiraph.layer.masai :as masai]
+            [flatland.jiraph.graph :as graph]
+            [flatland.jiraph.merge :as merge]
+            [flatland.jiraph.parent :as parent]
             [flatland.jiraph.ruminate :as ruminate]
-            [flatland.useful.utils :refer [adjoin]]))
+            [flatland.jiraph.resettable :as resettable]
+            [flatland.retro.core :as retro]
+            [flatland.useful.utils :refer [adjoin]])
+  (:use flatland.useful.debug))
+
+(defn make-merged []
+  (letfn [(layer []
+            (resettable/make (masai/make-temp)
+                             (masai/make-temp)
+                             {}))]
+    (let [[P E N M] (repeatedly layer)]
+      (merge/make (ruminate/incoming M (layer))
+                  [(-> (ruminate/incoming E (layer))
+                       (parent/make {:without-edge-merging (parent/make N {:phantom P})}))]))))
+
+
+(deftest basic-writing
+  (let [[m [n]] (make-merged)]
+    (is m)
+    (is n)
+    (graph/open m n)
+    (graph/txn (graph/update-in-node (retro/at-revision n 0) ["a"] adjoin {:size 10}))
+    (is (= {:size 10} (graph/get-node n "a")))
+    (is (= {:size 10} (graph/get-node (graph/child n :without-edge-merging) "a")))
+    (graph/close m n)))
+
 (comment
   (defn empty-graph [f]
     (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)
