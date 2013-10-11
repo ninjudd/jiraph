@@ -25,10 +25,6 @@
   (defn unmerge [head tail-id]
     (throw-up!)))
 
-(defn merge-head [read merge-layer node-id]
-  ;; ...
-  )
-
 (defn- verify-merge-args! [keyseq f args]
   (verify (and (#{merge unmerge} f)
                (= 1 (count keyseq))
