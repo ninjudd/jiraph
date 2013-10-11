@@ -178,10 +178,15 @@
             (edges [ids]
               (into {}
                     (for [c ids :let [id (str c)]]
-                      [id {:exists true :data id}])))]
+                      [id {:exists true :data id}])))
+            (get-z []
+              (-> (get-node e "z")
+                  (update :edges filter-vals :exists)))]
       (let [r (apply* 0
                       (writes "abcdef" (fn [id]
                                          {:node id :edges (edges (.toUpperCase id))}))
+                      (writes "z" (constantly {:node "z"
+                                               :edges (edges "abcdef")}))
                       (merges ["ab1" "cd2" "ef4"])
                       (writes "ace" (fn [id]
                                       {:node (.toUpperCase id)}))
@@ -189,20 +194,26 @@
                       (writes "a" (constantly {:node "QQ"}))
                       (merges ["ae5"])
                       (writes "a" (constantly {:node "God"})))
-            _ (is (= {:node "God" :edges (edges "ABCDEF")}
-                     (get-node e "a")))
+            _ (do (is (= {:node "God" :edges (edges "ABCDEF")}
+                         (get-node e "a")))
+                  (is (= {:node "z" :edges (edges "a")}
+                         (get-z))))
             r (apply* r
                       (unmerges ["af"]))
             _ (do (is (= {:node "God" :edges (edges "ABCDE")}
                          (get-node e "a")))
                   (is (= {:node "f" :edges (edges "F")}
-                         (get-node e "f"))))
+                         (get-node e "f")))
+                  (is (= {:node "z" :edges (edges "af")}
+                         (get-z))))
             r (apply* r
                       (unmerges ["ac"]))
             _ (do (is (= {:node "God" :edges (edges "ABE")}
                          (get-node e "a")))
                   (is (= {:node "C" :edges (edges "CD")}
-                         (get-node e "c"))))
+                         (get-node e "c")))
+                  (is (= {:node "z" :edges (edges "acf")}
+                         (get-z))))
             r (apply* r
                       (unmerges ["cd"]))
             _ (do (is (= {:node "God" :edges (edges "ABE")}
@@ -210,19 +221,25 @@
                   (is (= {:node "C" :edges (edges "C")}
                          (get-node e "c")))
                   (is (= {:node "d" :edges (edges "D")}
-                         (get-node e "d"))))
+                         (get-node e "d")))
+                  (is (= {:node "z" :edges (edges "acdf")}
+                         (get-z))))
             r (apply* r
                       (unmerges ["ab"]))
             _ (do (is (= {:node "God" :edges (edges "AE")}
                          (get-node e "a")))
                   (is (= {:node "b" :edges (edges "B")}
-                         (get-node e "b"))))
+                         (get-node e "b")))
+                  (is (= {:node "z" :edges (edges "abcdf")}
+                         (get-z))))
             r (apply* r
                       (unmerges ["ae"]))
             _ (do (is (= {:node "God" :edges (edges "A")}
                          (get-node e "a")))
                   (is (= {:node "E" :edges (edges "E")}
-                         (get-node e "e"))))]))
+                         (get-node e "e")))
+                  (is (= {:node "z" :edges (edges "abcdef")}
+                         (get-z))))]))
     (close m e)))
 
 (comment
