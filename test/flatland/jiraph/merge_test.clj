@@ -20,7 +20,7 @@
                              (masai)
                              {}))]
     (let [[P E N M] (repeatedly layer)]
-      (merge/make (ruminate/incoming M (layer))
+      (merge/make M (layer)
                   [(-> (ruminate/incoming E (layer))
                        (parent/make {:without-edge-merging (parent/make N {:phantom P})}))]))))
 
