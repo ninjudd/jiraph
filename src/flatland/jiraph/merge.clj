@@ -208,7 +208,7 @@
 (defn leaves-with-roots [get-root get-leaves id]
   (if-let [[old-root] (get-root id)]
     (->> (get-leaves old-root)
-         (sort-by (comp val :position))
+         (sort-by (comp :position val))
          (map #(list (key %) old-root)))
     [[id]]))
 
