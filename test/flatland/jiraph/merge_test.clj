@@ -193,7 +193,36 @@
                      (get-node e "a")))
             r (apply* r
                       (unmerges ["af"]))
-            _ (is (= {:node "God" :edges (edges "ABCDE")}))]))
+            _ (do (is (= {:node "God" :edges (edges "ABCDE")}
+                         (get-node e "a")))
+                  (is (= {:node "f" :edges (edges "F")}
+                         (get-node e "f"))))
+            r (apply* r
+                      (unmerges ["ac"]))
+            _ (do (is (= {:node "God" :edges (edges "ABE")}
+                         (get-node e "a")))
+                  (is (= {:node "C" :edges (edges "CD")}
+                         (get-node e "c"))))
+            r (apply* r
+                      (unmerges ["cd"]))
+            _ (do (is (= {:node "God" :edges (edges "ABE")}
+                         (get-node e "a")))
+                  (is (= {:node "C" :edges (edges "C")}
+                         (get-node e "c")))
+                  (is (= {:node "d" :edges (edges "D")}
+                         (get-node e "d"))))
+            r (apply* r
+                      (unmerges ["ab"]))
+            _ (do (is (= {:node "God" :edges (edges "AE")}
+                         (get-node e "a")))
+                  (is (= {:node "b" :edges (edges "B")}
+                         (get-node e "b"))))
+            r (apply* r
+                      (unmerges ["ae"]))
+            _ (do (is (= {:node "God" :edges (edges "A")}
+                         (get-node e "a")))
+                  (is (= {:node "E" :edges (edges "E")}
+                         (get-node e "e"))))]))
     (close m e)))
 
 (comment
