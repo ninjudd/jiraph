@@ -13,9 +13,11 @@
             [flatland.useful.map :refer [update filter-vals]]))
 
 (defn make-merged []
-  (letfn [(layer []
-            (resettable/make (masai/make-temp)
-                             (masai/make-temp)
+  (letfn [(masai []
+            (masai/make-temp {:write-mode :append}))
+          (layer []
+            (resettable/make (masai)
+                             (masai)
                              {}))]
     (let [[P E N M] (repeatedly layer)]
       (merge/make (ruminate/incoming M (layer))
