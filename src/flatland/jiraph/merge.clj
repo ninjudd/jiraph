@@ -224,7 +224,7 @@
                                           {:exists true}]))}))
 
 (defn merge-point [get-parent get-head tail-id]
-  (let [parents (iterate get-parent tail-id)
+  (let [parents (rest (iterate get-parent tail-id))
         ;; walk up parent chain until tail-id is no longer the head - this is where
         ;; tail-id first became a tail of the current merge
         child-root (last (cons tail-id
