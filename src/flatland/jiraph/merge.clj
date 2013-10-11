@@ -113,10 +113,10 @@
               (-> (at-revision base-layer (dec revision))
                   (graph/get-node leaf-id)))
             (merged-node* [id]
-              (let [merge-revision (first-merged id)]
-                (if-let [children (seq (get-children id))]
-                  (-> (reduce M (map merged-node* children))
-                      (adjoin (read phantom-layer [id])))
+              (if-let [children (seq (get-children id))]
+                (-> (reduce M (map merged-node* children))
+                    (adjoin (read phantom-layer [id])))
+                (let [merge-revision (first-merged id)]
                   (get-before id merge-revision))))]
       (merged-node* (root-or-self get-root head-id)))))
 
