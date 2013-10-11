@@ -181,9 +181,7 @@
                       [id {:exists true :data id}])))]
       (let [r (apply* 0
                       (writes "abcdef" (fn [id]
-                                         (let [upper-id (.toUpperCase id)]
-                                           {:node id
-                                            :edges {upper-id {:exists true :data upper-id}}})))
+                                         {:node id :edges (edges (.toUpperCase id))}))
                       (merges ["ab1" "cd2" "ef4"])
                       (writes "ace" (fn [id]
                                       {:node (.toUpperCase id)}))
