@@ -21,7 +21,7 @@
                              {}))]
     (let [[P E N M] (repeatedly layer)]
       (merge/make M (layer)
-                  [(-> (ruminate/incoming E (layer))
+                  [(-> (ruminate/incoming E (layer) #(select-keys % [:exists :type]))
                        (parent/make {:without-edge-merging (parent/make N {:phantom P})}))]))))
 
 (deftest basic-writing
@@ -93,6 +93,9 @@
         (txn (update-node m "b" merge "b'" "p2"))
         (is (= {:edges {"b" {:exists true, :type "tail->head"}}}
                (-> (get-node e "a")
+                   (update :edges filter-vals :exists))))
+        (is (= {:edges {"a" {:exists true, :type "tail->head"}}}
+               (-> (get-node (child e :incoming) "b")
                    (update :edges filter-vals :exists)))))
       (close m e)))
 
@@ -113,6 +116,9 @@
         (txn (update-node m "a" merge "a'" "p1"))
         (is (= {:edges {"b" {:exists true, :type "tail->head"}}}
                (-> (get-node e "a")
+                   (update :edges filter-vals :exists))))
+        (is (= {:edges {"a" {:exists true, :type "tail->head"}}}
+               (-> (get-node (child e :incoming) "b")
                    (update :edges filter-vals :exists))))
         (is (not (get-node e "a'"))))
       (close m e))))
