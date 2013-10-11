@@ -76,7 +76,7 @@
 
 (defn leaf-seq [children id]
   (if-let [cs (seq (children id))]
-    (mapcat (partial leaf-seq children) id)
+    (mapcat (partial leaf-seq children) cs)
     [id]))
 
 (defn head-finder [read merge-layer]
