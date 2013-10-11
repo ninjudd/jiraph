@@ -269,7 +269,7 @@
                       (update-in-node merge-layer [parent :edges child]
                                       adjoin {:exists false})
                       ;; update each of tail's leaves to point at its new root
-                      (for [leaf-id (leaf-seq get-children tail-id)]
+                      (for [leaf-id (leaf-seq get-children child)]
                         (update-in-node merge-layer [leaf-id :edges] adjoin
                                         (into {root {:exists false}} ;; disconnect from old root
                                               (when (not= child leaf-id)
