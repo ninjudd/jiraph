@@ -154,6 +154,48 @@
            (get-in-node e ["b" :edges])))
     (close m e)))
 
+(defn apply* [start-at & revisions]
+  (reduce (fn [revision [layer keyseq f & args]]
+            (do (txn (apply update-in-node (at-revision layer revision) keyseq f args))
+                (inc revision)))
+          start-at, (apply concat revisions)))
+
+(deftest multiple-merges
+  (let [[m [e]] (make-merged)
+        n (child e :without-edge-merging)]
+    (open m e)
+    (letfn [(writes [ids f]
+              (for [c ids :let [id (str c)]]
+                [e [id] adjoin (f id)]))
+            (merges [pairs]
+              (for [[head tail phantom] pairs]
+                [m [(str head)] merge (str tail) (str phantom)]))
+            (unmerges [pairs]
+              (for [[head tail] pairs]
+                [m [(str head)] unmerge (str tail)]))
+            (edges [ids]
+              (into {}
+                    (for [c ids :let [id (str c)]]
+                      [id {:exists true :data id}])))]
+      (let [r (apply* 0
+                      (writes "abcdef" (fn [id]
+                                         (let [upper-id (.toUpperCase id)]
+                                           {:node id
+                                            :edges {upper-id {:exists true :data upper-id}}})))
+                      (merges ["ab1" "cd2" "ef4"])
+                      (writes "ace" (fn [id]
+                                      {:node (.toUpperCase id)}))
+                      (merges ["ac3"])
+                      (writes "a" (constantly {:node "QQ"}))
+                      (merges ["ae5"])
+                      (writes "a" (constantly {:node "God"})))
+            _ (is (= {:node "God" :edges (edges "ABCDEF")}
+                     (get-node e "a")))
+            r (apply* r
+                      (unmerges ["af"]))
+            _ (is (= {:node "God" :edges (edges "ABCDE")}))]))
+    (close m e)))
+
 (comment
   (defn empty-graph [f]
     (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)
