@@ -248,6 +248,133 @@
                          (get-z))))]))
     (close m e)))
 
+(deftest deleted-edge-merging-opposite-direction
+  (let [[m [e]] (make-merged)
+        n (child e :without-edge-merging)
+        incoming (child e :incoming)]
+    (open m e)
+    (let [r (apply* 0
+                    [[e ["A" :edges "C" :exists] adjoin false]
+                     [e ["B" :edges "D" :exists] adjoin true]
+                     [m ["A"] merge "B" "1"]
+                     [m ["D"] merge "C" "2"]])]
+      (testing "edges before unmerge"
+        (is (= {:edges {"D" {:exists true}}}
+               (-> (get-node e "A")
+                   (update :edges filter-vals :exists))))
+        (is (empty? (get-node e "B"))))
+      (testing "incoming before unmerge"
+        (is (= {:edges {"A" {:exists true}}}
+               (-> (get-node incoming "D")
+                   (update :edges filter-vals :exists))))
+        (is (empty? (-> (get-in-node incoming ["C" :edges])
+                        (filter-vals :exists)))))
+      (apply* r
+              [[m ["A"] unmerge "B"]
+               [m ["D"] unmerge "C"]])
+      (testing "edges after unmerge"
+        (is (empty? (-> (get-in-node e ["A" :edges])
+                        (filter-vals :exists))))
+        (is (= {"D" {:exists true}}
+               (-> (get-in-node e ["B" :edges])
+                   (filter-vals :exists)))))
+      (testing "incoming after unmerge"
+        (is (empty? (-> (get-in-node incoming ["C" :edges])
+                        (filter-vals :exists))))
+        (is (= {"B" {:exists true}}
+               (-> (get-in-node incoming ["D" :edges])
+                   (filter-vals :exists)))))
+      (close m e))))
+
+(deftest deleted-edge-merging-same-direction
+  (let [[m [e]] (make-merged)
+        n (child e :without-edge-merging)
+        incoming (child e :incoming)]
+    (open m e)
+    (let [r (apply* 0
+                    [[e ["A" :edges "C" :exists] adjoin false]
+                     [e ["B" :edges "D" :exists] adjoin true]
+                     [m ["A"] merge "B" "1"]
+                     [m ["C"] merge "D" "2"]])]
+      (testing "edges before unmerge"
+        (is (= {:edges {"C" {:exists true}}}
+               (-> (get-node e "A")
+                   (update :edges filter-vals :exists))))
+        (is (empty? (get-node e "B"))))
+      (testing "incoming before unmerge"
+        (is (= {:edges {"A" {:exists true}}}
+               (-> (get-node incoming "C")
+                   (update :edges filter-vals :exists))))
+        (is (empty? (-> (get-in-node incoming ["D" :edges])
+                        (filter-vals :exists)))))
+      (apply* r
+              [[m ["A"] unmerge "B"]
+               [m ["C"] unmerge "D"]])
+      (testing "edges after unmerge"
+        (is (empty? (-> (get-in-node e ["A" :edges])
+                        (filter-vals :exists))))
+        (is (= {"D" {:exists true}}
+               (-> (get-in-node e ["B" :edges])
+                   (filter-vals :exists)))))
+      (testing "incoming after unmerge"
+        (is (empty? (-> (get-in-node incoming ["C" :edges])
+                        (filter-vals :exists))))
+        (is (= {"B" {:exists true}}
+               (-> (get-in-node incoming ["D" :edges])
+                   (filter-vals :exists)))))
+      (close m e))))
+
+(deftest delete-edges-on-all-merged-nodes
+  (let [[m [e]] (make-merged)
+        n (child e :without-edge-merging)
+        incoming (child e :incoming)]
+    (open m e)
+    (let [r (apply* 0
+                    (for [[from to exists] [["A" "B1" false]
+                                            ["A1" "B" true]
+                                            ["A2" "B2" true]]]
+                      [e [from :edges to :exists] adjoin exists])
+                    (for [[head tail] [["A" "A1"]
+                                       ["A" "A2"]
+                                       ["B" "B1"]
+                                       ["B" "B2"]]]
+                      [m [head] merge tail (name (gensym))]))]
+      (is (= {"B" {:exists true}}
+             (-> (get-in-node e ["A" :edges])
+                 (filter-vals :exists))))
+      (are [id] (empty? (-> (get-in-node e [id :edges])
+                            (filter-vals :exists)))
+           "A1", "A2")
+      (is (= {"A" {:exists true}}
+             (-> (get-in-node incoming ["B" :edges])
+                 (filter-vals :exists))))
+      (are [id] (empty? (-> (get-in-node incoming [id :edges])
+                            (filter-vals :exists)))
+           "B1", "B2")
+      (let [r (apply* r [[e ["A" :edges "B" :exists] adjoin false]])]
+        (is (empty? (-> (get-in-node e ["A" :edges])
+                        (filter-vals :exists))))
+        (is (empty? (-> (get-in-node incoming ["B" :edges])
+                        (filter-vals :exists))))
+        (apply* r (for [[head tail] [["A" "A1"]
+                                     ["A" "A2"]
+                                     ["B" "B1"]
+                                     ["B" "B2"]]]
+                    [m [head] unmerge tail]))
+        (is (empty? (-> (get-in-node e ["A" :edges])
+                        (filter-vals :exists))))
+        (are [from to] (= {to {:exists true}}
+                          (-> (get-in-node e [from :edges])
+                              (filter-vals :exists)))
+             "A1" "B", "A2" "B2")
+
+        (is (empty? (-> (get-in-node incoming ["B1" :edges])
+                        (filter-vals :exists))))
+        (are [from to] (= {to {:exists true}}
+                          (-> (get-in-node incoming [from :edges])
+                              (filter-vals :exists)))
+             "B" "A1", "B2" "A2")))))
+
 (comment
   (defn empty-graph [f]
     (let [[id-base id-incoming people-base people-incoming] (repeatedly masai/make-temp)
@@ -423,47 +550,4 @@
     (is (= {:a 1 :edges {"F" {:foo 3 :exists true :baz nil}}}      (get-node :people "D")))
     (is (= {:a 2 :edges {"G" {:foo 1 :exists true :bar 2 :baz 3}}} (get-node :people "E")))
     (is (= #{"E"} (get-incoming :people "G")))
-    (is (= #{"D"} (get-incoming :people "F"))))
-
-  (deftest deleted-edge-merging-opposite-direction
-    (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:exists false}}}))
-    (at-revision 2 (assoc-node! :people "B" {:edges {"D" {:exists true}}}))
-    (at-revision 3 (merge-node! "A" "B"))
-    (at-revision 4 (merge-node! "D" "C"))
-
-    (is (= {:edges {"D" {:exists true}}} (get-node :people "A")))
-    (is (= {:edges {"D" {:exists true}}} (get-node :people "B")))
-    (is (= {"A" true} (get-incoming-map :people "C")))
-    (is (= {"A" true} (get-incoming-map :people "D"))))
-
-  (deftest deleted-edge-merging-same-direction
-    (at-revision 1 (assoc-node! :people "A" {:edges {"C" {:exists false}}}))
-    (at-revision 2 (assoc-node! :people "B" {:edges {"D" {:exists true}}}))
-    (at-revision 3 (merge-node! "A" "B"))
-    (at-revision 4 (merge-node! "C" "D"))
-
-    (is (= {:edges {"C" {:exists true}}} (get-node :people "A")))
-    (is (= {:edges {"C" {:exists true}}} (get-node :people "B")))
-    (is (= {"A" true} (get-incoming-map :people "C")))
-    (is (= {"A" true} (get-incoming-map :people "D"))))
-
-  (deftest delete-edges-on-all-merged-nodes
-    (at-revision 1 (assoc-node! :people "A"  {:edges {"B1" {:exists false}}}))
-    (at-revision 2 (assoc-node! :people "A1" {:edges {"B"  {:exists true}}}))
-    (at-revision 2 (assoc-node! :people "A2" {:edges {"B2" {:exists true}}}))
-    (at-revision 3 (merge-node! "A" "A1"))
-    (at-revision 4 (merge-node! "A" "A2"))
-    (at-revision 5 (merge-node! "B" "B1"))
-    (at-revision 6 (merge-node! "B" "B2"))
-
-    (is (= {:edges {"B" {:exists true}}} (get-node :people "A")))
-    (is (= {:edges {"B" {:exists true}}} (get-node :people "A1")))
-    (is (= {:edges {"B" {:exists true}}} (get-node :people "A2")))
-    (is (= {"A" true} (get-incoming-map :people "B")))
-    (is (= {"A" true} (get-incoming-map :people "B1")))
-    (is (= {"A" true} (get-incoming-map :people "B2")))
-
-    (at-revision 7 (assoc-node! :people "A"  {:edges {"B" {:exists false}}}))
-
-    (is (= {:edges {"B" {:exists false}}} (get-node :people "A")))
-    (is (= {"A" false} (get-incoming-map :people "B")))))
+    (is (= #{"D"} (get-incoming :people "F")))))
