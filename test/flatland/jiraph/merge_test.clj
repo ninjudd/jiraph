@@ -407,10 +407,12 @@
       (is (= 0 (merge-position "A")))
       (is (= 1 (merge-position "B"))))
 
+    ;; TODO port
     (testing "cannot re-merge tail"
       (is (thrown-with-msg? Exception #"already merged"
             (merge-node! "C" "B"))))
 
+    ;; TODO port
     (testing "cannot merge into non-head"
       (is (thrown-with-msg? Exception #"already merged"
             (merge-node! "B" "C"))))
@@ -426,6 +428,7 @@
       (is (= 2 (merge-position "C")))
       (is (= 3 (merge-position "D"))))
 
+    ;; TODO port
     (testing "can view previous merge data with at-revision"
       (at-revision 1
         (is (= #{"B"} (merged-into "A")))
