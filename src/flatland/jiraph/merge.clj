@@ -354,7 +354,11 @@
    Will return a list, [new-merge-layer [merging-layer1 merging-layer2 ...]].
 
    Writes to these returned layers will automatically update each other as needed to keep the merged
-   views consistent."
+   views consistent.
+
+   Note that, because the unmerging strategy relies on being able to read a historical view of a
+   node immediately before it was merged, if you want unmerging you cannot have a single revision
+   which writes data to a node as well as merging or unmerging it."
   [merge-layer merge-incoming layers]
   (let [merge-layer (ruminate/incoming merge-layer merge-incoming
                                        #(select-keys % [:exists :position]))]
