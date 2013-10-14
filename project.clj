@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [org.clojure/core.match "0.2.0-alpha11"]
                  [org.flatland/masai "0.8.0"]
-                 [org.flatland/useful "0.10.4"]
+                 [org.flatland/useful "0.10.5"]
                  [org.flatland/cereal "0.3.0"]
                  [org.flatland/ordered "1.4.0"]
                  [org.flatland/schematic "0.1.0"]
