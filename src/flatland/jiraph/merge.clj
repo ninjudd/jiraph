@@ -184,18 +184,6 @@
                    (update-in-node layer [] assoc
                                    id (update (read read-layer [id]) :edges E)))))))
 
-;; options:
-;;
-;; a) commit to this big chronology tree, and live with the fact that, when unmerging node X, we
-;; have to reconstruct the history of all nodes that have edges to X, to ensure that their edges
-;; point to where they did before the merge happened.
-;;
-;; b) store a copy of every node without edge merging applied, so that when X is unmerged we can
-;; just take the stored copy of each node with an edge to X, apply E to it, and write that.  - one
-;; detail with this is that whenever a node is merged, we have to apply E to it again, so that
-;; merges can always happen in a consistent reproducible order (from-id before to-id). otherwise, it
-;; will be impossible for an unmerge to reconstruct the merge history in a consistent way.
-
 (defn- update-leaves [layer new-root leaves-with-old-roots]
   (->> leaves-with-old-roots
        (map-indexed (fn [i [leaf-id old-root]]
@@ -274,17 +262,6 @@
                                         (into {root {:exists false}} ;; disconnect from old root
                                               (when (not= child leaf-id)
                                                 {child (val (get-root leaf-id))})))))))))))
-
-;; - what revision tail was merged into head
-;; - get versions of head/tail just prior to merge
-;;
-
-;; what about:
-;; - two layers of merging ruminants:
-;;   - one that doesn't merge edge destination ids at all, just merging node data (including edges)
-;;   - one that ruminates on the above, and does just edge-destination merging
-;; - can unmerge by looking at a historical view of the "less-merged" layer above you, and
-;;   then re-computing all the merges that aren't being undone
 
 (defn merge-head-finder* [get-root get-head]
   (fn [id]
