@@ -4,8 +4,9 @@
             [flatland.jiraph.graph :as graph :refer [compose update-in-node get-in-node assoc-node]]
             [flatland.jiraph.ruminate :as ruminate]
             [flatland.jiraph.debug :refer [?rev]]
+            [flatland.jiraph.forward :as forward]
             [flatland.jiraph.layer :as layer :refer [child dispatch-update]]
-            [flatland.retro.core :as retro :refer [at-revision]]
+            [flatland.retro.core :as retro :refer [at-revision current-revision]]
             [flatland.useful.map :refer [update assoc-in* filter-keys-by-val map-keys map-vals filter-vals]]
             [flatland.useful.seq :refer [assert-length]]
             [flatland.useful.utils :refer [adjoin invoke verify]]))
@@ -313,9 +314,9 @@
       (apply update-in-node node-merging-only keyseq f args)
       (let [merge-head (merge-head-finder read merge-layer)
             [from-id & keys] keyseq]
-        (update-in-node layer [from-id] adjoin
-                        (-> (apply assoc-in* {} keys (assert-length 1 args))
-                            (update :edges map-keys #(or (merge-head %) %))))))))
+        (update-in-node layer (cons from-id keys) adjoin
+                        (ruminate/update-edge-ids keys (first (assert-length 1 args))
+                                                  #(or (merge-head %) %)))))))
 
 (defn make
   "layers needs to be a map of layer names to base layers. The base layer will be used to store a

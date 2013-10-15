@@ -2,9 +2,10 @@
   (:use flatland.jiraph.wrapped-layer
         flatland.useful.debug
         [flatland.useful.utils :only [returning adjoin]]
+        [flatland.useful.fn :only [applied]]
         [flatland.useful.map :only [map-vals]]
         [flatland.useful.seq :only [assert-length]]
-        [flatland.useful.map :only [assoc-in*]])
+        [flatland.useful.map :only [assoc-in* update map-keys]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update child]]
             [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.jiraph.parent :as parent]
@@ -40,6 +41,14 @@
   (cond (empty? keys)           (get val :edges {})
         (= :edges (first keys)) (assoc-in* {} (rest keys) val)
         :else                   {}))
+
+(defn update-edge-ids [keys val f & args]
+  (if (or (empty? keys)
+          (= keys [:edges]))
+    (-> (assoc-in* {} keys val)
+        (update :edges map-keys (applied f) args)
+        (get-in keys))
+    val))
 
 (defn incoming
   "Wrap outgoing-layer with a ruminating layer that stores incoming edges on incoming-layer. If
