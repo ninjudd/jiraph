@@ -25,7 +25,8 @@
                        (parent/make {:without-edge-merging (parent/make N {:phantom P})}))]))))
 
 (deftest basic-writing
-  (let [[m [e]] (make-merged)
+  (let [[m [e] :as layers] (make-merged)
+        [_ [e']] (merge/with-head-forwarding layers)
         n (child e :without-edge-merging)]
     (is m)
     (is e)
@@ -49,7 +50,8 @@
       (is (= {:size 10 :data "sam" :edges {"c" {:x 8 :bar "win" :exists true}
                                            "b" {:x 1 :foo 1 :exists true}}}
              (get-node n "a")))
-      (is (not (get-node e "a1"))))
+      (is (not (get-node e "a1")))
+      (is (= (get-node e "a") (get-node e' "a1"))))
     (testing "write after merge"
       (txn (update-in-node e ["a"] adjoin {:data "blah"}))
       (is (= {:size 10 :data "blah" :edges {"c" {:x 8 :bar "win" :exists true}
@@ -58,7 +60,8 @@
       (is (= {:size 10 :data "blah" :edges {"c" {:x 8 :bar "win" :exists true}
                                             "b" {:x 1 :foo 1 :exists true}}}
              (get-node n "a")))
-      (is (not (get-node e "a1"))))
+      (is (not (get-node e "a1")))
+      (is (= (get-node e "a") (get-node e' "a1"))))
     (testing "merge edges"
       (txn (update-in-node m ["b"] merge "c" "p2"))
       (let [{:keys [edges] :as node} (get-node e "a")]
@@ -73,7 +76,8 @@
       (txn (update-in-node e ["a" :edges "b"] adjoin {:x 30}))
       (is (= {:size 10 :data "blah" :edges {"b" {:bar "win" :foo 1 :x 30 :exists true}}}
              (-> (get-node e "a")
-                 (update :edges filter-vals :exists)))))
+                 (update :edges filter-vals :exists))))
+      (is (= (get-node e "a") (get-node e' "a1"))))
     (close m e)))
 
 (deftest crisscross-edges

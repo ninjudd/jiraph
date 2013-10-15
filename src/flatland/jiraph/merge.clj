@@ -353,6 +353,18 @@
          (ruminate/make layer [node-merging-only merge-layer] ;; A.e
                         ruminate-merging-edges)))]))
 
+(defn forward-reads-to-head [merge-layer layer]
+  (forward/make layer (fn [layer read]
+                        (fn [id]
+                          (-> (merge-head read
+                                          (at-revision merge-layer (current-revision layer))
+                                          id)
+                              (or id))))
+                #{:incoming}))
+
+(defn with-head-forwarding [[merge-layer layers]]
+  [merge-layer (for [layer layers]
+                 (forward-reads-to-head merge-layer layer))])
 
 #_(merged m [(parent/make tree-base {:phantom tree-phantom})
              (parent/make data-base {:phantom data-phantom})])
