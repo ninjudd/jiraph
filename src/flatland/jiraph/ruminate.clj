@@ -117,18 +117,21 @@
     (-> (make source [index] ruminate-index)
         (parent/make {field index}))))
 
-(defn changelog [source dest]
-  (letfn [(ruminate-changelog [source [dest] keyseq f args]
-            (graph/compose (apply update-in-node source keyseq f args)
-                           (update-in-node dest [(str "revision-" (inc (current-revision dest)))
-                                                 :edges
-                                                 (dispatch-update keyseq f args
-                                                                  (fn assoc* [id value]
-                                                                    id)
-                                                                  (fn dissoc* [id]
-                                                                    id)
-                                                                  (fn update* [id keys]
-                                                                    id))]
-                                           adjoin {:exists true})))]
-    (-> (make source [dest] ruminate-changelog)
-        (parent/make {:changelog dest}))))
+(defn changelog
+  ([source dest]
+     (changelog source dest (partial str "revision-")))
+  ([source dest make-revision-id]
+     (letfn [(ruminate-changelog [source [dest] keyseq f args]
+               (graph/compose (apply update-in-node source keyseq f args)
+                              (update-in-node dest [(make-revision-id (inc (current-revision dest)))
+                                                    :edges
+                                                    (dispatch-update keyseq f args
+                                                                     (fn assoc* [id value]
+                                                                       id)
+                                                                     (fn dissoc* [id]
+                                                                       id)
+                                                                     (fn update* [id keys]
+                                                                       id))]
+                                              adjoin {:exists true})))]
+       (-> (make source [dest] ruminate-changelog)
+           (parent/make {:changelog dest})))))
