@@ -82,10 +82,22 @@
       (schema layer node-id))))
 
 (defn typed-layer [base-layer types]
-  (TypedLayer. base-layer types
-               (prefix-lookup (for [[from-type to-types] types]
-                                [from-type (prefix-lookup (for [to-type to-types]
-                                                            [to-type true]))]))))
+  (let [string-lookup (prefix-lookup (for [[from-type to-types] types]
+                                       [from-type (prefix-lookup (for [to-type to-types]
+                                                                   [to-type true]))]))]
+    (TypedLayer. base-layer types
+                 (fn [node-id]
+                   (when (and (string? node-id)
+                              (.contains node-id ":label"))
+                     (try (throw (Exception. (format "Got string id %s" (pr-str node-id))))
+                          (catch Exception e
+                            (.printStackTrace e))))
+                   (if (vector? node-id)
+                     (when-let [to-types (get types (first node-id))]
+                       (fn [id]
+                         (let [[to-type to-id] id]
+                           (contains? to-types to-type))))
+                     (string-lookup node-id))))))
 
 (defn without-typing [^TypedLayer typed-layer]
   (.layer typed-layer))
