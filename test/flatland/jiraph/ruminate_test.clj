@@ -8,11 +8,13 @@
 (deftest indexing-works
   (let [base (masai/make-temp)
         index (masai/make-temp)
-        indexed (ruminate/top-level-indexer base index :name :named-this)]
+        indexed (ruminate/top-level-indexer base index :name)]
     (open indexed)
-    (txn (update-node indexed "profile-1" adjoin {:name "steve"}))
-    (is (= "steve" (get-in-node base ["profile-1" :name])))
-    (is (= {"profile-1" true} (get-in-node index ["steve" :named-this])))))
+    (txn (update-node indexed "profile-1" adjoin {:name "steve", :sign "gemini"}))
+    (is (= "steve" (get-in-node indexed ["profile-1" :name])))
+    (is (= ["profile-1"] (ruminate/lookup-indexed indexed :name "steve")))
+    (is (thrown-with-msg? IllegalArgumentException #"could not find index layer"
+         (ruminate/lookup-indexed indexed :sign "gemini")))))
 
 (deftest changelog-works
   (let [base (masai/make-temp)
