@@ -1,7 +1,7 @@
 (ns flatland.jiraph.typed
   (:use [flatland.jiraph.core :only [layer]]
-        [flatland.jiraph.layer :only [Basic Optimized Schema
-                                      get-node schema update-in-node query-fn]]
+        [flatland.jiraph.layer :only [Basic Optimized Schema ChangeLog
+                                      get-node schema update-in-node query-fn get-revisions]]
         [flatland.jiraph.wrapped-layer :only [defwrapped update-wrap-read forward-reads]]
         [clojure.core.match :only [match]]
         [flatland.useful.map :only [map-vals-with-keys update update-in*]]
@@ -70,10 +70,15 @@
 
   Optimized
   (query-fn [this keyseq not-found f]
-    (if (writable-area? this keyseq)
+            (if (writable-area? this keyseq)
       (query-fn layer keyseq not-found f)
       (fn [& args]
         (apply f not-found args))))
+  
+  ChangeLog
+  (get-revisions [this id]
+    (when (writable-area? this [id])
+      (get-revisions layer id)))
 
   Schema
   (schema [this node-id]
