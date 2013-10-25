@@ -3,7 +3,7 @@
         flatland.useful.debug
         [flatland.useful.utils :only [returning adjoin]]
         [flatland.useful.seq :only [assert-length]]
-        [flatland.useful.map :only [assoc-in*]])
+        [flatland.useful.map :only [assoc-in* filter-keys-by-val]])
   (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
             [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.retro.core :as retro :refer [at-revision current-revision]]))
@@ -137,26 +137,36 @@
                         (apply concat)
                         (into source-actions)))))))))
 
-(defn top-level-indexer [source index field index-fieldname]
-  (make source [[field index]]
-        (fn [source [index] keyseq f args]
-          (fn [read]
-            (let [source-update ((apply update-in-node source keyseq f args) read)
-                  read' (graph/advance-reader read source-update)]
-              (into source-update
-                    (when-let [id (first (if (seq keyseq)
-                                           (when (or (not (next keyseq))
-                                                     (= field (second keyseq)))
-                                             keyseq)
-                                           args))]
-                      (let [[old-idx new-idx] ((juxt read read') source [id field])]
-                        (when (not= old-idx new-idx)
-                          (letfn [(record [idx exists]
-                                    (when idx
-                                      ((update-in-node index [idx index-fieldname]
-                                                       adjoin {id exists}) read)))]
-                            (concat (record new-idx true)
-                                    (record old-idx false))))))))))))
+(defn top-level-indexer
+  ([source index field]
+     (top-level-indexer source index field :ids))
+  ([source index field ids-field]
+     (make source [[field index]]
+           (fn [source [index] keyseq f args]
+             (fn [read]
+               (let [source-update ((apply update-in-node source keyseq f args) read)
+                     read' (graph/advance-reader read source-update)]
+                 (into source-update
+                       (when-let [id (first (if (seq keyseq)
+                                              (when (or (not (next keyseq))
+                                                        (= field (second keyseq)))
+                                                keyseq)
+                                              args))]
+                         (let [[old-idx new-idx] ((juxt read read') source [id field])]
+                           (when (not= old-idx new-idx)
+                             (letfn [(record [idx exists]
+                                       (when idx
+                                         ((update-in-node index [idx ids-field]
+                                                          adjoin {id exists}) read)))]
+                               (concat (record new-idx true)
+                                       (record old-idx false)))))))))))))
+
+(defn lookup-indexed
+  ([layer field value]
+     (lookup-indexed layer field value :ids))
+  ([layer field value ids-field]
+     (let [index-layer (graph/child layer field)]
+       (filter-keys-by-val identity (graph/get-in-node index-layer [value ids-field])))))
 
 (defn changelog [source dest]
   (make source [[:changelog dest]]
