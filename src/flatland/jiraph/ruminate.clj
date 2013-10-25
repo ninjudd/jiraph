@@ -165,8 +165,10 @@
   ([layer field value]
      (lookup-indexed layer field value :ids))
   ([layer field value ids-field]
-     (let [index-layer (graph/child layer field)]
-       (filter-keys-by-val identity (graph/get-in-node index-layer [value ids-field])))))
+     (if-let [index-layer (graph/child layer field)]
+       (filter-keys-by-val identity (graph/get-in-node index-layer [value ids-field]))
+       (throw (IllegalArgumentException.
+               (format "could not find index layer for field %s on layer %s" field layer))))))
 
 (defn changelog [source dest]
   (make source [[:changelog dest]]
