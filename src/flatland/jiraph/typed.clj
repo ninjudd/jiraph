@@ -70,11 +70,11 @@
 
   Optimized
   (query-fn [this keyseq not-found f]
-            (if (writable-area? this keyseq)
+    (if (writable-area? this keyseq)
       (query-fn layer keyseq not-found f)
       (fn [& args]
         (apply f not-found args))))
-  
+
   ChangeLog
   (get-revisions [this id]
     (when (writable-area? this [id])
