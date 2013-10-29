@@ -92,11 +92,6 @@
                                                                    [to-type true]))]))]
     (TypedLayer. base-layer types
                  (fn [node-id]
-                   (when (and (string? node-id)
-                              (.contains node-id ":label"))
-                     (try (throw (Exception. (format "Got string id %s" (pr-str node-id))))
-                          (catch Exception e
-                            (.printStackTrace e))))
                    (if (vector? node-id)
                      (when-let [to-types (get types (first node-id))]
                        (fn [id]
