@@ -5,8 +5,8 @@
         [flatland.useful.fn :only [applied]]
         [flatland.useful.map :only [map-vals]]
         [flatland.useful.seq :only [assert-length]]
-        [flatland.useful.map :only [assoc-in* update map-keys]])
-  (:require [flatland.jiraph.layer :as layer :refer [dispatch-update child]]
+        [flatland.useful.map :only [assoc-in* update map-keys filter-keys-by-val]])
+  (:require [flatland.jiraph.layer :as layer :refer [dispatch-update]]
             [flatland.jiraph.graph :as graph :refer [update-in-node]]
             [flatland.jiraph.parent :as parent]
             [flatland.retro.core :as retro :refer [at-revision current-revision]]))
@@ -95,27 +95,39 @@
        (-> (make outgoing-layer [incoming-layer] ruminate-incoming)
            (parent/make {:incoming incoming-layer})))))
 
-(defn top-level-indexer [source index field index-fieldname]
-  (letfn [(ruminate-index [source [index] keyseq f args]
-            (fn [read]
-              (let [source-update ((apply update-in-node source keyseq f args) read)
-                    read' (graph/advance-reader read source-update)]
-                (into source-update
-                      (when-let [id (first (if (seq keyseq)
-                                             (when (or (not (next keyseq))
-                                                       (= field (second keyseq)))
-                                               keyseq)
-                                             args))]
-                        (let [[old-idx new-idx] ((juxt read read') source [id field])]
-                          (when (not= old-idx new-idx)
-                            (letfn [(record [idx exists]
-                                      (when idx
-                                        ((update-in-node index [idx index-fieldname]
-                                                         adjoin {id exists}) read)))]
-                              (concat (record new-idx true)
-                                      (record old-idx false))))))))))]
-    (-> (make source [index] ruminate-index)
-        (parent/make {field index}))))
+(defn top-level-indexer
+  ([source index field]
+     (top-level-indexer source index field :ids))
+  ([source index field index-fieldname]
+     (letfn [(ruminate-index [source [index] keyseq f args]
+               (fn [read]
+                 (let [source-update ((apply update-in-node source keyseq f args) read)
+                       read' (graph/advance-reader read source-update)]
+                   (into source-update
+                         (when-let [id (first (if (seq keyseq)
+                                                (when (or (not (next keyseq))
+                                                          (= field (second keyseq)))
+                                                  keyseq)
+                                                args))]
+                           (let [[old-idx new-idx] ((juxt read read') source [id field])]
+                             (when (not= old-idx new-idx)
+                               (letfn [(record [idx exists]
+                                         (when idx
+                                           ((update-in-node index [idx index-fieldname]
+                                                            adjoin {id exists}) read)))]
+                                 (concat (record new-idx true)
+                                         (record old-idx false))))))))))]
+       (-> (make source [index] ruminate-index)
+           (parent/make {field index})))))
+
+(defn lookup-indexed
+  ([layer field value]
+     (lookup-indexed layer field value :ids))
+  ([layer field value ids-field]
+     (if-let [index-layer (graph/child layer field)]
+       (filter-keys-by-val identity (graph/get-in-node index-layer [value ids-field]))
+       (throw (IllegalArgumentException.
+               (format "could not find index layer for field %s on layer %s" field layer))))))
 
 (defn changelog
   ([source dest]
