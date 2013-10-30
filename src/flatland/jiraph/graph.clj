@@ -390,11 +390,16 @@
   [layer child-name]
   (layer/child layer child-name))
 
+(defn as-id [id-or-type]
+  (fix id-or-type
+    keyword? #(str (name %) "-1")))
+
+(defn schema* [layer id]
+  (layer/schema layer id))
+
 (defn schema
   [layer id-or-type]
-  (let [id (fix id-or-type
-                keyword? #(str (name %) "-1"))]
-    (layer/schema layer id)))
+  (schema* layer (as-id id-or-type)))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."

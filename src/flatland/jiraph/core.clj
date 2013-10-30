@@ -175,6 +175,15 @@
   [layer-spec]
   (not (nil? (get-layer layer-spec))))
 
+(defn id-schema-by-layer
+  ([id] (id-schema-by-layer id *graph*))
+  ([id graph]
+     (into {}
+           (for [[layer-name layer] graph
+                 :let [schema (graph/schema* layer id)]
+                 :when (seq schema)]
+             [layer-name (:fields schema)]))))
+
 (defn schema-by-layer
   "Get the schema for a node-type across all layers, indexed by layer.
 
@@ -182,11 +191,15 @@
    things like filtering which layers are included in the schema."
   ([type] (schema-by-layer type *graph*))
   ([type graph]
-     (into {}
-           (for [[layer-name layer] graph
-                 :let [schema (graph/schema layer type)]
-                 :when (seq schema)]
-             [layer-name (:fields schema)]))))
+     (id-schema-by-layer (graph/as-id type) graph)))
+
+(defn id-schema-by-attr
+  ([id] (id-schema-by-attr id *graph*))
+  ([id graph]
+     (apply merge-with conj {}
+            (for [[layer-name attrs] (schema-by-layer id graph)
+                  [attr type] attrs]
+              {attr {layer-name type}}))))
 
 (defn schema-by-attr
   "Get the schema for a node-type across all layers, indexed by attribute name.
@@ -195,7 +208,4 @@
    things like filtering which layers are included in the schema."
   ([type] (schema-by-attr type *graph*))
   ([type graph]
-     (apply merge-with conj {}
-            (for [[layer-name attrs] (schema-by-layer type graph)
-                  [attr type] attrs]
-              {attr {layer-name type}}))))
+     (id-schema-by-attr (graph/as-id type) graph)))
