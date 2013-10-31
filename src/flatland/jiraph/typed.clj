@@ -86,18 +86,19 @@
               (type-lookup node-id))
       (schema layer node-id))))
 
-(defn typed-layer [base-layer types]
-  (let [string-lookup (prefix-lookup (for [[from-type to-types] types]
-                                       [from-type (prefix-lookup (for [to-type to-types]
-                                                                   [to-type true]))]))]
-    (TypedLayer. base-layer types
-                 (fn [node-id]
-                   (if (vector? node-id)
-                     (when-let [to-types (get types (first node-id))]
-                       (fn [id]
-                         (let [[to-type to-id] id]
-                           (contains? to-types to-type))))
-                     (string-lookup node-id))))))
+(defn typed-layer
+  ([base-layer types]
+     (TypedLayer. base-layer types
+                  (prefix-lookup (for [[from-type to-types] types]
+                                   [from-type (prefix-lookup (for [to-type to-types]
+                                                               [to-type true]))]))))
+  ([base-layer types get-type]
+     (TypedLayer. base-layer types
+                  (let [lookup (into {} (for [[from-type to-types] types]
+                                          [from-type (fn [id]
+                                                       (contains? to-types (get-type id)))]))]
+                    (fn [id]
+                      (lookup (get-type id)))))))
 
 (defn without-typing [^TypedLayer typed-layer]
   (.layer typed-layer))
