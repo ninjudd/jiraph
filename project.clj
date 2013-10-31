@@ -14,9 +14,9 @@
                  [org.flatland/io "0.3.0"]
                  [org.flatland/ego "0.2.0"]
                  [slingshot "0.10.3"]]
-  :plugins [[lein-protobuf "0.3.1"]]
+  :plugins [[lein-protobuf "0.4.1"]]
   :profiles {:1.5 {:dependencies [[org.clojure/clojure "1.5.0"]]}
-             :dev {:dependencies [[org.flatland/protobuf "0.7.2"]
+             :dev {:dependencies [[org.flatland/protobuf "0.8.1"]
                                   [org.flatland/tokyocabinet "1.24.6"]
                                   [criterium "0.4.2"]
                                   [org.clojure/core.memoize "0.5.2"]]}}
