@@ -31,19 +31,19 @@
 
 (defn layer-entries
   ([] *graph*)
-  ([type] (for [[name layer] *graph*
-                :when (seq (graph/schema layer type))]
-            (map-entry name (retro/at-revision layer *revision*)))))
+  ([id] (for [[name layer] *graph*
+              :when (seq (graph/schema layer id))]
+          (map-entry name (retro/at-revision layer *revision*)))))
 
 (defn layer-names
   "Return the names of all layers in the current graph."
-  ([]     (keys *graph*))
-  ([type] (map key (layer-entries type))))
+  ([]   (keys *graph*))
+  ([id] (map key (layer-entries id))))
 
 (defn layers
   "Return all layers in the current graph."
-  ([]     (map layer (layer-names)))
-  ([type] (map val (layer-entries type))))
+  ([]   (map layer (layer-names)))
+  ([id] (map val (layer-entries id))))
 
 (defn as-layer-map
   "Create a map of {layer-name, layer} pairs from the input. A keyword yields a
@@ -175,37 +175,27 @@
   [layer-spec]
   (not (nil? (get-layer layer-spec))))
 
-(defn id-schema-by-layer
-  ([id] (id-schema-by-layer id *graph*))
+(defn schema-by-layer
+  "Get the schema for an id across all layers, indexed by layer.
+
+   Optionally you may pass in a graph to use instead of *graph*, to allow
+   things like filtering which layers are included in the schema."
+  ([id] (schema-by-layer id *graph*))
   ([id graph]
      (into {}
            (for [[layer-name layer] graph
-                 :let [schema (graph/schema* layer id)]
+                 :let [schema (graph/schema layer id)]
                  :when (seq schema)]
              [layer-name (:fields schema)]))))
 
-(defn schema-by-layer
-  "Get the schema for a node-type across all layers, indexed by layer.
+(defn schema-by-attr
+  "Get the schema for an id across all layers, indexed by attribute name.
 
    Optionally you may pass in a graph to use instead of *graph*, to allow
    things like filtering which layers are included in the schema."
-  ([type] (schema-by-layer type *graph*))
-  ([type graph]
-     (id-schema-by-layer (graph/as-id type) graph)))
-
-(defn id-schema-by-attr
-  ([id] (id-schema-by-attr id *graph*))
+  ([id] (schema-by-attr id *graph*))
   ([id graph]
      (apply merge-with conj {}
             (for [[layer-name attrs] (schema-by-layer id graph)
-                  [attr type] attrs]
-              {attr {layer-name type}}))))
-
-(defn schema-by-attr
-  "Get the schema for a node-type across all layers, indexed by attribute name.
-
-   Optionally you may pass in a graph to use instead of *graph*, to allow
-   things like filtering which layers are included in the schema."
-  ([type] (schema-by-attr type *graph*))
-  ([type graph]
-     (id-schema-by-attr (graph/as-id type) graph)))
+                  [attr field-schema] attrs]
+              {attr {layer-name field-schema}}))))

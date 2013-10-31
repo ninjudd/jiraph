@@ -4,7 +4,6 @@
         [flatland.useful.map :only [filter-keys-by-val assoc-in* update-in* keyed]]
         [flatland.useful.utils :only [memoize-deref adjoin into-set map-entry verify]]
         [flatland.useful.fn :only [fix]]
-        [flatland.ego.core :only [type-key]]
         [flatland.ordered.set :only [ordered-set]]
         [flatland.ordered.map :only [ordered-map]]
         flatland.useful.debug)
@@ -390,21 +389,14 @@
   [layer child-name]
   (layer/child layer child-name))
 
-(defn as-id [id-or-type]
-  (fix id-or-type
-    keyword? #(str (name %) "-1")))
-
-(defn schema* [layer id]
-  (layer/schema layer id))
-
 (defn schema
-  [layer id-or-type]
-  (schema* layer (as-id id-or-type)))
+  [layer id]
+  (layer/schema layer id))
 
 (defn fields
   "Return a map of fields to their metadata for the given layer."
-  ([layer id-or-type]
-     (keys (:fields (schema layer id-or-type)))))
+  ([layer id]
+     (keys (:fields (schema layer id)))))
 
 (defn node-valid?
   "Check if the given node is valid for the specified layer."
